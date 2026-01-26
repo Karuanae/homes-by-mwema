@@ -3,6 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import MetaData
 from werkzeug.security import generate_password_hash, check_password_hash
 
+
 metadata = MetaData()
 db = SQLAlchemy(metadata=metadata)
 
@@ -46,6 +47,7 @@ class Property(db.Model):
     bathrooms = db.Column(db.Integer, default=1)
     area = db.Column(db.String(50))  # e.g., "1200 sq ft"
     max_guests = db.Column(db.Integer, default=2)
+    host_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     specs = db.Column(db.JSON)  # {'guests': 2, 'bedrooms': 1, 'beds': 1, 'bathrooms': 1}
     amenities = db.Column(db.JSON)  # List of amenities
     images = db.Column(db.JSON)  # List of image URLs
@@ -59,6 +61,7 @@ class Property(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
+    host = db.relationship('User', backref='properties', foreign_keys=[host_id])
     bookings = db.relationship('Booking', backref='property', lazy=True)
     payments = db.relationship('Payment', backref='property', lazy=True)
     chats = db.relationship('Chat', backref='property', lazy=True)
@@ -104,6 +107,14 @@ class Payment(db.Model):
     mpesa_number = db.Column(db.String(20))
     card_last_four = db.Column(db.String(4))
     status = db.Column(db.String(20), default='pending')  # 'pending', 'completed', 'failed', 'refunded'
+    
+    # M-PESA specific fields
+    mpesa_receipt_number = db.Column(db.String(100))  # M-PESA receipt number (e.g., QBR31H5YZX)
+    merchant_request_id = db.Column(db.String(100))  # Merchant request ID from STK push
+    checkout_request_id = db.Column(db.String(100))  # Checkout request ID from STK push
+    mpesa_response_code = db.Column(db.String(10))  # Response code from M-PESA
+    mpesa_response_description = db.Column(db.String(255))  # Response description
+    
     payment_date = db.Column(db.DateTime, default=datetime.utcnow)
     completed_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

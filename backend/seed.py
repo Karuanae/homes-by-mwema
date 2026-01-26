@@ -1,87 +1,49 @@
+# quick_seed.py - Minimal version
 from app import app, db
 from models import User, Property
 
-def seed_database():
+def quick_seed():
     with app.app_context():
-        # Create admin user
-        admin = User.query.filter_by(email='admin@homes.com').first()
+        print("Running quick seed...")
+        
+        # Check if admin exists
+        admin = User.query.filter_by(email='admin@luxurystays.com').first()
         if not admin:
+            print("Creating admin user...")
             admin = User(
-                username='admin',
-                email='admin@homes.com',
+                name='Administrator',
+                email='admin@luxurystays.com',
+                phone='+254700000000',
                 role='admin'
             )
-            admin.set_password('admin123')
+            admin.set_password('Admin@123456')
             db.session.add(admin)
         
-        # Create sample properties
+        # Check if any properties exist
         if Property.query.count() == 0:
-            properties_data = [
-                {
-                    'name': 'Eva Studio',
-                    'title': 'Located along Lumumba Drive',
-                    'price': 5000,
-                    'location': 'Lumumba Drive, Nairobi',
-                    'rooms': 1,
-                    'category': 'Studio Apartment',
-                    'rating': 4.9,
-                    'review_count': 1,
-                    'images': ['/EvaStudio.jpg', '/EvaStudio1.jpg', '/EvaStudio2.jpg'],
-                    'amenities': ['WiFi', 'Kitchen', 'Air Conditioning', 'Parking'],
-                    'description': 'Modern studio apartment in the heart of Nairobi.',
-                    'host_name': 'Ann Mwema',
-                    'is_superhost': True
-                },
-                {
-                    'name': 'Langata 2 bedroom',
-                    'price': 8500,
-                    'location': 'Lang\'ata, Nairobi',
-                    'rooms': 2,
-                    'category': '2 Bedroom Apartment',
-                    'rating': 4.8,
-                    'review_count': 1,
-                    'images': ['/Langata2.jpg'],
-                    'amenities': ['WiFi', 'Kitchen', 'Air Conditioning', 'Parking', 'Gym'],
-                    'description': 'Spacious 2 bedroom apartment in Lang\'ata.',
-                    'host_name': 'John Doe',
-                    'is_superhost': False
-                },
-                {
-                    'name': 'Capital 2 bedroom',
-                    'price': 5000,
-                    'location': 'Kilimani, Nairobi',
-                    'rooms': 2,
-                    'category': '2 Bedroom Apartment',
-                    'rating': 4.7,
-                    'review_count': 1,
-                    'images': ['/Capital2.jpeg'],
-                    'amenities': ['WiFi', 'Kitchen', 'Air Conditioning'],
-                    'description': 'Comfortable 2 bedroom apartment in Kilimani.',
-                    'host_name': 'Jane Smith',
-                    'is_superhost': False
-                },
-                {
-                    'name': 'Capital 3 bedroom',
-                    'price': 4000,
-                    'location': 'Kilimani, Nairobi',
-                    'rooms': 3,
-                    'category': '3 Bedroom Apartment',
-                    'rating': 5.0,
-                    'review_count': 1,
-                    'images': ['/Capital3.jpg'],
-                    'amenities': ['WiFi', 'Kitchen', 'Air Conditioning', 'Parking', 'Pool'],
-                    'description': 'Luxurious 3 bedroom apartment with pool access.',
-                    'host_name': 'Mike Johnson',
-                    'is_superhost': True
-                }
-            ]
-            
-            for prop_data in properties_data:
-                property = Property(**prop_data)
-                db.session.add(property)
+            print("Creating sample property...")
+            property = Property(
+                name='Eva Studio',
+                title='Luxury Studio Apartment',
+                description='Modern studio in prime location',
+                type='studio',
+                price=8500,
+                location='Westlands, Nairobi',
+                rooms=1,
+                bathrooms=1,
+                max_guests=2,
+                amenities=['WiFi', 'Kitchen', 'AC'],
+                images=['https://images.unsplash.com/photo-1545324418-cc1a3fa10c00'],
+                status='active',
+                is_featured=True,
+                host_id=admin.id
+            )
+            db.session.add(property)
         
         db.session.commit()
-        print("Database seeded successfully!")
+        print("✅ Quick seed completed!")
+        print(f"Total users: {User.query.count()}")
+        print(f"Total properties: {Property.query.count()}")
 
 if __name__ == '__main__':
-    seed_database()
+    quick_seed()

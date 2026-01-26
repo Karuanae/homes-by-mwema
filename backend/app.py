@@ -5,7 +5,10 @@ from models import db, TokenBlocklist, User
 import os
 from datetime import timedelta
 from flask_migrate import Migrate
+from dotenv import load_dotenv
 
+# Load environment variables from .env file
+load_dotenv()
 
 # Create the Flask application
 app = Flask(__name__)
@@ -35,6 +38,21 @@ app.config['JWT_SECRET_KEY'] = "akerywaeiyff\jk632423746"
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=24)
 app.config['JWT_VERIFY_SUB'] = False
 
+# M-PESA Daraja API Configuration
+# For production, use environment variables instead of hardcoding
+app.config['MPESA_ENVIRONMENT'] = os.environ.get('MPESA_ENVIRONMENT', 'sandbox')  # 'sandbox' or 'production'
+app.config['MPESA_CONSUMER_KEY'] = os.environ.get('MPESA_CONSUMER_KEY', 'YOUR_CONSUMER_KEY_HERE')
+app.config['MPESA_CONSUMER_SECRET'] = os.environ.get('MPESA_CONSUMER_SECRET', 'YOUR_CONSUMER_SECRET_HERE')
+app.config['MPESA_BUSINESS_SHORT_CODE'] = os.environ.get('MPESA_BUSINESS_SHORT_CODE', '174379')  # Use 174379 for sandbox
+app.config['MPESA_PASSKEY'] = os.environ.get('MPESA_PASSKEY', 'YOUR_PASSKEY_HERE')
+app.config['MPESA_CALLBACK_URL'] = os.environ.get('MPESA_CALLBACK_URL', 'https://yourdomain.com/api/payments/mpesa/callback')
+
+# M-PESA B2C Configuration (for refunds)
+app.config['MPESA_INITIATOR_NAME'] = os.environ.get('MPESA_INITIATOR_NAME', 'testapi')
+app.config['MPESA_SECURITY_CREDENTIAL'] = os.environ.get('MPESA_SECURITY_CREDENTIAL', 'YOUR_SECURITY_CREDENTIAL')
+app.config['MPESA_B2C_TIMEOUT_URL'] = os.environ.get('MPESA_B2C_TIMEOUT_URL', 'https://yourdomain.com/api/payments/mpesa/b2c/timeout')
+app.config['MPESA_B2C_RESULT_URL'] = os.environ.get('MPESA_B2C_RESULT_URL', 'https://yourdomain.com/api/payments/mpesa/b2c/result')
+
 # Initialize extensions
 
 jwt = JWTManager(app)
@@ -49,6 +67,7 @@ from views.booking import booking_bp
 from views.payment import payment_bp
 from views.user import user_bp
 from views.chat import chat_bp
+from views.main import bp as main_bp
 
 
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
@@ -58,6 +77,7 @@ app.register_blueprint(booking_bp, url_prefix='/api/bookings')
 app.register_blueprint(payment_bp, url_prefix='/api/payments')
 app.register_blueprint(user_bp, url_prefix='/api/users')
 app.register_blueprint(chat_bp, url_prefix='/api/chats')
+app.register_blueprint(main_bp, url_prefix='/api')
 
 
 if __name__ == '__main__':

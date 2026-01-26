@@ -15,7 +15,7 @@ const api = axios.create({
 // Request interceptor to add auth token
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('auth_token');
+    const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -30,7 +30,7 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       // Handle unauthorized - redirect to login
-      localStorage.removeItem('auth_token');
+      localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
     }
@@ -44,7 +44,7 @@ export const authAPI = {
   login: async (email, password) => {
     const response = await api.post('/auth/login', { email, password });
     if (response.data.token) {
-      localStorage.setItem('auth_token', response.data.token);
+      localStorage.setItem('token', response.data.token);
       localStorage.setItem('user', JSON.stringify(response.data.user));
     }
     return response;
@@ -54,7 +54,7 @@ export const authAPI = {
   register: async (userData) => {
     const response = await api.post('/auth/register', userData);
     if (response.data.token) {
-      localStorage.setItem('auth_token', response.data.token);
+      localStorage.setItem('token', response.data.token);
       localStorage.setItem('user', JSON.stringify(response.data.user));
     }
     return response;
@@ -71,7 +71,7 @@ export const authAPI = {
   // Logout
   logout: async () => {
     await api.post('/auth/logout');
-    localStorage.removeItem('auth_token');
+    localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem('guest_token');
     localStorage.removeItem('guest');
@@ -161,13 +161,8 @@ export const bookingsAPI = {
   },
 
   // Get user bookings
-  getUserBookings: async (userId) => {
-    if (!userId) {
-      const u = getCurrentUser();
-      userId = u?.id;
-      if (!userId) throw new Error('User ID is required');
-    }
-    const response = await api.get(`/users/${userId}/bookings`);
+  getUserBookings: async () => {
+    const response = await api.get('/bookings/my-bookings');
     return response;
   },
 
@@ -212,10 +207,38 @@ export const paymentsAPI = {
     return response;
   },
 
-  // M-Pesa payment
+  // M-Pesa STK Push payment (NEW)
+  initiateMpesa: async (bookingId, phoneNumber, amount) => {
+    const response = await api.post('/payments/mpesa/initiate', {
+      booking_id: bookingId,
+      phone_number: phoneNumber,
+      amount: amount
+    });
+    return response.data;
+  },
+
+  // Check M-Pesa payment status (NEW)
+  checkMpesaStatus: async (checkoutRequestId) => {
+    const response = await api.get(`/payments/mpesa/query/${checkoutRequestId}`);
+    return response.data;
+  },
+
+  // Get payments for a booking (NEW)
+  getBookingPayments: async (bookingId) => {
+    const response = await api.get(`/payments/booking/${bookingId}`);
+    return response.data;
+  },
+
+  // Legacy M-Pesa payment (kept for backward compatibility)
   mpesaPayment: async (data) => {
     const response = await api.post('/payments/mpesa', data);
     return response;
+  },
+
+  // Process payment (non-M-PESA methods)
+  processPayment: async (paymentData) => {
+    const response = await api.post('/payments/process', paymentData);
+    return response.data;
   },
 
   // Card payment
@@ -422,6 +445,57 @@ export const reportsAPI = {
   },
 };
 
+// ==================== ADMIN API ====================
+export const adminAPI = {
+  // Get all properties (including inactive)
+  getProperties: async () => {
+    const response = await api.get('/admin/properties');
+    return response;
+  },
+
+  // Create property
+  createProperty: async (propertyData) => {
+    const response = await api.post('/admin/properties', propertyData);
+    return response;
+  },
+
+  // Update property
+  updateProperty: async (id, propertyData) => {
+    const response = await api.put(`/admin/properties/${id}`, propertyData);
+    return response;
+  },
+
+  // Delete property
+  deleteProperty: async (id) => {
+    const response = await api.delete(`/admin/properties/${id}`);
+    return response;
+  },
+
+  // Get dashboard stats
+  getStats: async () => {
+    const response = await api.get('/admin/stats');
+    return response;
+  },
+
+  // Get all users
+  getUsers: async () => {
+    const response = await api.get('/admin/users');
+    return response;
+  },
+
+  // Get all bookings
+  getBookings: async () => {
+    const response = await api.get('/admin/bookings');
+    return response;
+  },
+
+  // Get all payments
+  getPayments: async () => {
+    const response = await api.get('/admin/payments');
+    return response;
+  },
+};
+
 // ==================== USER PROFILE API ====================
 export const userAPI = {
   // Get user profile
@@ -543,7 +617,7 @@ export const miscAPI = {
 
 // Helper function to check if user is authenticated
 export const isAuthenticated = () => {
-  return !!localStorage.getItem('auth_token') || !!localStorage.getItem('guest_token');
+  return !!localStorage.getItem('token') || !!localStorage.getItem('guest_token');
 };
 
 // Helper function to get current user
@@ -555,7 +629,39 @@ export const getCurrentUser = () => {
 
 // Helper function to get auth token
 export const getAuthToken = () => {
-  return localStorage.getItem('auth_token') || localStorage.getItem('guest_token');
+  return localStorage.getItem('token') || localStorage.getItem('guest_token');
+};
+
+// ==================== M-PESA HELPER FUNCTIONS ====================
+// Convenient wrapper functions for M-PESA operations
+
+/**
+ * Initiate M-PESA payment
+ * @param {number} bookingId - The booking ID
+ * @param {string} phoneNumber - M-PESA phone number
+ * @param {number} amount - Amount to pay
+ * @returns {Promise} Payment initiation result
+ */
+export const initiateMpesaPayment = async (bookingId, phoneNumber, amount) => {
+  return await paymentsAPI.initiateMpesa(bookingId, phoneNumber, amount);
+};
+
+/**
+ * Check M-PESA payment status
+ * @param {string} checkoutRequestId - The checkout request ID from payment initiation
+ * @returns {Promise} Payment status
+ */
+export const checkPaymentStatus = async (checkoutRequestId) => {
+  return await paymentsAPI.checkMpesaStatus(checkoutRequestId);
+};
+
+/**
+ * Get all payments for a booking
+ * @param {number} bookingId - The booking ID
+ * @returns {Promise} List of payments
+ */
+export const getBookingPayments = async (bookingId) => {
+  return await paymentsAPI.getBookingPayments(bookingId);
 };
 
 export default {
@@ -567,6 +673,7 @@ export default {
   leads: leadsAPI,
   homepage: homepageAPI,
   reports: reportsAPI,
+  admin: adminAPI,
   user: userAPI,
   communications: communicationsAPI,
   settings: settingsAPI,
@@ -574,4 +681,8 @@ export default {
   isAuthenticated,
   getCurrentUser,
   getAuthToken,
+  // M-PESA helpers
+  initiateMpesaPayment,
+  checkPaymentStatus,
+  getBookingPayments,
 };

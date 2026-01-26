@@ -10,6 +10,17 @@ def get_all_properties():
     
     result = []
     for prop in properties:
+        host_data = None
+        if prop.host:
+            host_data = {
+                'id': prop.host.id,
+                'name': prop.host.name,
+                'avatar': prop.host.avatar_url or 'https://via.placeholder.com/100',
+                'isSuperhost': False,
+                'responseTime': '1 hour',
+                'responseRate': 98
+            }
+        
         result.append({
             'id': prop.id,
             'name': prop.name,
@@ -36,6 +47,7 @@ def get_all_properties():
             'review_count': prop.review_count,
             'bookings': prop.bookings_count,
             'is_featured': prop.is_featured,
+            'host': host_data,
             'created_at': prop.created_at.isoformat() if prop.created_at else None
         })
     
@@ -47,6 +59,17 @@ def get_property(property_id):
     property = Property.query.get(property_id)
     if not property:
         return jsonify({'error': 'Property not found'}), 404
+    
+    host_data = None
+    if property.host:
+        host_data = {
+            'id': property.host.id,
+            'name': property.host.name,
+            'avatar': property.host.avatar_url or 'https://via.placeholder.com/100',
+            'isSuperhost': False,
+            'responseTime': '1 hour',
+            'responseRate': 98
+        }
     
     return jsonify({
         'id': property.id,
@@ -74,5 +97,6 @@ def get_property(property_id):
         'review_count': property.review_count,
         'bookings': property.bookings_count,
         'is_featured': property.is_featured,
+        'host': host_data,
         'created_at': property.created_at.isoformat() if property.created_at else None
     })

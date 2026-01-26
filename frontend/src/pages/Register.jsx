@@ -1,234 +1,174 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  FaUser, 
-  FaEnvelope, 
-  FaLock, 
-  FaEye, 
-  FaEyeSlash, 
-  FaGoogle, 
-  FaFacebook, 
-  FaApple,
-  FaArrowRight
-} from 'react-icons/fa';
+import { FaEye, FaEyeSlash, FaSpinner } from 'react-icons/fa';
+import api from '../services/api';
 
 export default function Register() {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
+    name: '', email: '', password: '', confirmPassword: '', phone: ''
   });
 
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+    setError('');
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (formData.password !== formData.confirmPassword) {
-      alert('Passwords do not match!');
-      return;
+  const validateForm = () => {
+    if (!formData.name.trim() || !formData.email.trim() || !formData.password) {
+      setError('All marked fields are required.');
+      return false;
     }
+    if (formData.password.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return false;
+    }
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match.');
+      return false;
+    }
+    return true;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!validateForm()) return;
     
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-        console.log('Register:', formData);
-        setIsLoading(false);
-    }, 2000);
+    try {
+      const response = await api.auth.register({
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+        phone: formData.phone || ''
+      });
+      
+      setSuccess('Account created.');
+      if (response.data.token) {
+        localStorage.setItem('token', response.data.token);
+        localStorage.setItem('user', JSON.stringify(response.data.user));
+      }
+      setTimeout(() => navigate('/login'), 1500);
+    } catch (error) {
+      const msg = error.response?.data?.error || 'Registration failed.';
+      setError(msg);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
-    <div className="min-h-screen relative flex items-center justify-center bg-stone-900 overflow-hidden font-sans">
+    <div className="min-h-screen flex items-center justify-center bg-stone-50 font-sans text-stone-900 p-6">
       
-      {/* Background Image with Overlay */}
-      <div 
-        className="absolute inset-0 z-0 bg-cover bg-center opacity-40"
-        style={{ backgroundImage: "url('https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?q=80&w=2000&auto=format&fit=crop')" }}
-      />
-      <div className="absolute inset-0 z-0 bg-gradient-to-br from-teal-950/90 via-teal-900/80 to-stone-900/90" />
-
-      {/* Decorative Blur Orbs */}
-      <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-teal-500/20 rounded-full blur-[100px]" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-amber-500/10 rounded-full blur-[100px]" />
-
       <motion.div 
-        initial={{ opacity: 0, y: 30 }}
+        initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: "easeOut" }}
-        className="relative z-10 w-full max-w-md px-6"
+        transition={{ duration: 0.8, ease: "easeOut" }}
+        className="w-full max-w-lg bg-white border border-stone-200 shadow-2xl shadow-stone-200/50 p-12 relative"
       >
-        <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl shadow-black/20 overflow-hidden border border-white/20">
+        <div className="absolute top-0 left-0 right-0 h-1 bg-stone-900 w-full" />
+
+        <div className="text-center mb-10">
+          <h2 className="text-3xl font-serif italic text-stone-900 mb-3">Create Account</h2>
+          <p className="text-xs uppercase tracking-widest text-stone-400">Join the Collective</p>
+        </div>
+
+        {error && <div className="mb-6 text-red-900 text-xs tracking-wide text-center">{error}</div>}
+        {success && <div className="mb-6 text-stone-900 text-xs tracking-wide text-center font-bold">{success}</div>}
+
+        <form onSubmit={handleSubmit} className="space-y-8">
           
-          {/* Header */}
-          <div className="px-8 pt-8 pb-6 text-center">
-            <h2 className="text-3xl font-serif font-bold text-teal-950 mb-2">Create Account</h2>
-            <p className="text-stone-500 text-sm">Join our exclusive community of travelers</p>
-          </div>
-
-          <div className="px-8 pb-8">
-            <form onSubmit={handleSubmit} className="space-y-5">
-              
-              {/* Name Input */}
-              <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <FaUser className="text-stone-400 group-focus-within:text-teal-600 transition-colors" />
-                </div>
+          <div className="space-y-8">
+             <div className="group">
+                <label className="block text-[10px] uppercase tracking-widest text-stone-500 mb-2">Full Name</label>
                 <input
-                  type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  className="w-full pl-11 pr-4 py-3.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-all text-stone-800 placeholder-stone-400"
-                  placeholder="Full Name"
-                  required
+                  type="text" name="name"
+                  value={formData.name} onChange={handleChange}
+                  className="w-full border-b border-stone-300 py-2 font-serif text-lg bg-transparent focus:border-stone-900 outline-none transition-colors placeholder-stone-300"
+                  placeholder="John Doe"
                 />
-              </div>
+             </div>
 
-              {/* Email Input */}
-              <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <FaEnvelope className="text-stone-400 group-focus-within:text-teal-600 transition-colors" />
-                </div>
+             <div className="group">
+                <label className="block text-[10px] uppercase tracking-widest text-stone-500 mb-2">Email Address</label>
                 <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  className="w-full pl-11 pr-4 py-3.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-all text-stone-800 placeholder-stone-400"
-                  placeholder="Email Address"
-                  required
+                  type="email" name="email"
+                  value={formData.email} onChange={handleChange}
+                  className="w-full border-b border-stone-300 py-2 font-serif text-lg bg-transparent focus:border-stone-900 outline-none transition-colors placeholder-stone-300"
+                  placeholder="name@example.com"
                 />
-              </div>
+             </div>
 
-              {/* Password Input */}
-              <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <FaLock className="text-stone-400 group-focus-within:text-teal-600 transition-colors" />
-                </div>
+             <div className="group">
+                <label className="block text-[10px] uppercase tracking-widest text-stone-500 mb-2">Phone (Optional)</label>
                 <input
-                  type={showPassword ? "text" : "password"}
-                  name="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  className="w-full pl-11 pr-11 py-3.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-all text-stone-800 placeholder-stone-400"
-                  placeholder="Password"
-                  required
+                  type="tel" name="phone"
+                  value={formData.phone} onChange={handleChange}
+                  className="w-full border-b border-stone-300 py-2 font-serif text-lg bg-transparent focus:border-stone-900 outline-none transition-colors placeholder-stone-300"
+                  placeholder="+254..."
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-4 flex items-center text-stone-400 hover:text-stone-600 transition-colors cursor-pointer"
-                >
-                  {showPassword ? <FaEyeSlash /> : <FaEye />}
-                </button>
-              </div>
+             </div>
 
-              {/* Confirm Password Input */}
-              <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <FaLock className="text-stone-400 group-focus-within:text-teal-600 transition-colors" />
-                </div>
-                <input
-                  type={showConfirmPassword ? "text" : "password"}
-                  name="confirmPassword"
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  className="w-full pl-11 pr-11 py-3.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-all text-stone-800 placeholder-stone-400"
-                  placeholder="Confirm Password"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute inset-y-0 right-0 pr-4 flex items-center text-stone-400 hover:text-stone-600 transition-colors cursor-pointer"
-                >
-                  {showConfirmPassword ? <FaEyeSlash /> : <FaEye />}
-                </button>
-              </div>
-
-              {/* Terms Checkbox */}
-              <div className="flex items-start pl-1">
-                <div className="flex items-center h-5">
+             <div className="grid grid-cols-2 gap-8">
+                <div className="group relative">
+                  <label className="block text-[10px] uppercase tracking-widest text-stone-500 mb-2">Password</label>
                   <input
-                    id="terms"
-                    name="terms"
-                    type="checkbox"
-                    required
-                    className="w-4 h-4 text-teal-600 border-stone-300 rounded focus:ring-teal-500 cursor-pointer"
+                    type={showPassword ? "text" : "password"}
+                    name="password"
+                    value={formData.password} onChange={handleChange}
+                    className="w-full border-b border-stone-300 py-2 font-serif text-lg bg-transparent focus:border-stone-900 outline-none"
+                    placeholder="••••••"
                   />
                 </div>
-                <div className="ml-3 text-sm">
-                  <label htmlFor="terms" className="font-light text-stone-600">
-                    I agree to the{' '}
-                    <Link to="/terms" className="font-medium text-teal-700 hover:text-teal-900 underline decoration-teal-700/30">
-                      Terms of Service
-                    </Link>{' '}
-                    and{' '}
-                    <Link to="/privacy" className="font-medium text-teal-700 hover:text-teal-900 underline decoration-teal-700/30">
-                      Privacy Policy
-                    </Link>
-                  </label>
+                <div className="group relative">
+                  <label className="block text-[10px] uppercase tracking-widest text-stone-500 mb-2">Confirm</label>
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    name="confirmPassword"
+                    value={formData.confirmPassword} onChange={handleChange}
+                    className="w-full border-b border-stone-300 py-2 font-serif text-lg bg-transparent focus:border-stone-900 outline-none"
+                    placeholder="••••••"
+                  />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-0 bottom-3 text-stone-400 hover:text-stone-900">
+                    {showPassword ? <FaEyeSlash size={14}/> : <FaEye size={14}/>}
+                  </button>
                 </div>
-              </div>
-
-              {/* Submit Button */}
-              <motion.button
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.99 }}
-                type="submit"
-                disabled={isLoading}
-                className="w-full bg-gradient-to-r from-teal-700 to-teal-900 text-white py-3.5 rounded-xl font-bold uppercase tracking-widest text-sm shadow-lg hover:shadow-xl shadow-teal-900/20 hover:from-teal-800 hover:to-teal-950 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-              >
-                {isLoading ? (
-                    <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
-                    <>
-                        Sign Up <FaArrowRight />
-                    </>
-                )}
-              </motion.button>
-            </form>
-
-            {/* Divider */}
-            <div className="relative my-8">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-stone-200"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-white text-stone-400 font-light">or register with</span>
-              </div>
-            </div>
-
-            {/* Social Buttons */}
-            <div className="grid grid-cols-1 gap-3">
-              <button className="flex items-center justify-center py-3 border border-stone-200 rounded-xl hover:bg-stone-50 hover:border-stone-300 transition-all text-stone-600">
-                <FaGoogle className="text-xl" />
-              </button>
-          
-
-            </div>
-
-            {/* Login Link */}
-            <div className="mt-8 text-center">
-              <p className="text-stone-600">
-                Already a member?{' '}
-                <Link to="/login" className="font-bold text-teal-800 hover:text-teal-600 transition-colors">
-                  Sign In
-                </Link>
-              </p>
-            </div>
+             </div>
           </div>
+
+          <div className="pt-2">
+             <label className="flex items-start gap-3 cursor-pointer">
+                <input type="checkbox" required className="mt-1 appearance-none w-3 h-3 border border-stone-300 checked:bg-stone-900 rounded-none transition-all" />
+                <span className="text-xs text-stone-500 font-serif leading-tight">
+                   I agree to the <Link to="/terms" className="underline hover:text-stone-900">Terms of Service</Link> and <Link to="/privacy" className="underline hover:text-stone-900">Privacy Policy</Link>.
+                </span>
+             </label>
+          </div>
+
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full bg-stone-900 text-white py-4 text-xs uppercase tracking-[0.2em] font-bold hover:bg-black transition-all disabled:opacity-70 flex justify-center items-center gap-3"
+          >
+            {isLoading ? <FaSpinner className="animate-spin" /> : "CREATE ACCOUNT"}
+          </button>
+        </form>
+
+        <div className="mt-10 pt-6 border-t border-stone-100 text-center">
+          <p className="text-stone-500 font-serif text-sm">
+            Already have an account?{' '}
+            <Link to="/login" className="text-stone-900 italic border-b border-stone-300 hover:border-stone-900 transition-all">
+              Sign In
+            </Link>
+          </p>
         </div>
+
       </motion.div>
     </div>
   );

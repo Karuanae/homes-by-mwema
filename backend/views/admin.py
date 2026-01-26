@@ -62,6 +62,7 @@ def admin_create_property():
     """Admin: Create new property"""
     require_admin()
     
+    user_id = get_jwt_identity()
     data = request.json
     
     # Validate required fields
@@ -82,6 +83,7 @@ def admin_create_property():
         bathrooms=data.get('bathrooms', 1),
         max_guests=data.get('max_guests', data.get('maxGuests', 2)),
         area=data.get('area', ''),
+        host_id=user_id,
         specs=data.get('specs', {
             'guests': data.get('max_guests', data.get('maxGuests', 2)),
             'bedrooms': data.get('rooms', 1),
@@ -287,7 +289,7 @@ def admin_get_payments():
         result.append({
             'id': payment.id,
             'bookingId': payment.booking_id,
-            'guestName': payment.guest_name,
+            'guestName': payment.user.name if payment.user else 'Guest',
             'property': payment.property.name if payment.property else '',
             'amount': float(payment.amount) if payment.amount else 0,
             'method': payment.method,

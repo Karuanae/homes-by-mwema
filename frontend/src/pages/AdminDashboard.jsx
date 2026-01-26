@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { 
   FaHome, FaCalendarAlt, FaUsers, FaChartBar, FaEnvelope, 
   FaCog, FaPlus, FaEdit, FaTrash, FaEye, FaFilter,
@@ -6,10 +6,11 @@ import {
   FaCheckCircle, FaTimesCircle, FaClock, FaMoneyBillWave,
   FaWhatsapp, FaSync, FaImage, FaUpload, FaTag,
   FaBed, FaBath, FaRuler, FaLocationArrow, FaStar,
-  FaMapMarkerAlt, FaDollarSign, FaPercentage
+  FaMapMarkerAlt, FaDollarSign, FaPercentage,
+  FaBars, FaTimes, FaSignOutAlt, FaList, FaBuilding
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
-import { Line, Bar, Doughnut } from "react-chartjs-2";
+import { Line, Bar } from "react-chartjs-2";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -39,8 +40,11 @@ ChartJS.register(
 );
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState("properties");
+  const [activeTab, setActiveTab] = useState("dashboard");
   const [properties, setProperties] = useState([]);
+  const [bookings, setBookings] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [messages, setMessages] = useState([]);
   const [stats, setStats] = useState({
     totalProperties: 0,
     activeBookings: 0,
@@ -52,6 +56,10 @@ export default function AdminDashboard() {
   const [showAddProperty, setShowAddProperty] = useState(false);
   const [showEditProperty, setShowEditProperty] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [loadingBookings, setLoadingBookings] = useState(false);
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
+  const [loadingMessages, setLoadingMessages] = useState(false);
   
   const [newProperty, setNewProperty] = useState({
     name: "",
@@ -68,7 +76,7 @@ export default function AdminDashboard() {
     tags: []
   });
 
-  // Load data from API
+  // Load initial data from API
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -78,7 +86,6 @@ export default function AdminDashboard() {
           return;
         }
 
-        // Fetch admin data
         const [propertiesResponse, statsResponse] = await Promise.all([
           api.admin.getProperties(),
           api.admin.getStats()
@@ -93,7 +100,6 @@ export default function AdminDashboard() {
           localStorage.removeItem('token');
           window.location.href = '/login';
         }
-        // Set fallback data
         setProperties([]);
         setStats({
           totalProperties: 0,
@@ -107,6 +113,59 @@ export default function AdminDashboard() {
 
     fetchData();
   }, []);
+
+  // Fetch bookings when tab is clicked
+  const fetchBookings = async () => {
+    setLoadingBookings(true);
+    try {
+      const response = await api.bookings.getAll();
+      setBookings(response.data || []);
+    } catch (error) {
+      console.error('Error fetching bookings:', error);
+      setBookings([]);
+    } finally {
+      setLoadingBookings(false);
+    }
+  };
+
+  // Fetch customers/users when tab is clicked
+  const fetchCustomers = async () => {
+    setLoadingCustomers(true);
+    try {
+      const response = await api.admin.getUsers();
+      setCustomers(response.data || []);
+    } catch (error) {
+      console.error('Error fetching customers:', error);
+      setCustomers([]);
+    } finally {
+      setLoadingCustomers(false);
+    }
+  };
+
+  // Fetch messages/chats when tab is clicked
+  const fetchMessages = async () => {
+    setLoadingMessages(true);
+    try {
+      const response = await api.chats.getAll();
+      setMessages(response.data || []);
+    } catch (error) {
+      console.error('Error fetching messages:', error);
+      setMessages([]);
+    } finally {
+      setLoadingMessages(false);
+    }
+  };
+
+  // Trigger fetching when tab changes
+  useEffect(() => {
+    if (activeTab === "bookings") {
+      fetchBookings();
+    } else if (activeTab === "customers") {
+      fetchCustomers();
+    } else if (activeTab === "messages") {
+      fetchMessages();
+    }
+  }, [activeTab]);
 
   // Property Management Functions
   const handleAddProperty = async () => {
@@ -186,12 +245,8 @@ export default function AdminDashboard() {
   };
 
   const handleImageUpload = (e) => {
-    const files = Array.from(e.target.files);
-    const imageUrls = files.map(file => URL.createObjectURL(file));
-    setNewProperty(prev => ({
-      ...prev,
-      images: [...prev.images, ...imageUrls]
-    }));
+    // Removed blob URL creation - now using direct URL input
+    // This prevents blob URLs from being saved to the database
   };
 
   // Chart Data
@@ -228,10 +283,36 @@ export default function AdminDashboard() {
     property.type.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Tabs Configuration (Simplified - Only Properties and Dashboard)
-  const tabs = [
+  // Navigation items
+  const navItems = [
     { id: "dashboard", label: "Dashboard", icon: FaChartBar },
-    { id: "properties", label: "Properties", icon: FaHome }
+    { id: "properties", label: "Properties", icon: FaHome },
+    { id: "bookings", label: "Bookings", icon: FaCalendarAlt },
+    { id: "customers", label: "Customers", icon: FaUsers },
+    { id: "reports", label: "Reports", icon: FaFileExport },
+    { id: "messages", label: "Messages", icon: FaEnvelope },
+    { id: "settings", label: "Settings", icon: FaCog }
+  ];
+
+  const quickActions = [
+    { 
+      id: "add-property", 
+      label: "Add New Property", 
+      icon: FaPlus,
+      onClick: () => setShowAddProperty(true)
+    },
+    { 
+      id: "view-bookings", 
+      label: "View Bookings", 
+      icon: FaCalendarAlt,
+      onClick: () => setActiveTab("bookings")
+    },
+    { 
+      id: "generate-report", 
+      label: "Generate Report", 
+      icon: FaFileExport,
+      onClick: () => console.log("Generate Report")
+    }
   ];
 
   const handleLogout = () => {
@@ -241,329 +322,624 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-stone-50 font-sans">
-      {/* Top Navigation */}
-      <nav className="bg-teal-900 text-white px-6 py-4 shadow-lg">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
+    <div className="min-h-screen bg-stone-50 font-sans flex">
+      {/* Sidebar */}
+      <motion.aside
+        initial={{ x: -300 }}
+        animate={{ x: sidebarOpen ? 0 : -300 }}
+        transition={{ type: "spring", damping: 25 }}
+        className={`fixed lg:relative z-40 w-64 h-screen bg-teal-900 text-white flex flex-col shadow-xl ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        {/* Logo Section */}
+        <div className="p-6 border-b border-teal-800">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-teal-800 rounded-lg">
-              <FaHome className="text-xl" />
+              <FaBuilding className="text-xl" />
             </div>
             <div>
-              <h1 className="text-xl font-serif font-bold">Homes by Mwema Admin</h1>
-              <p className="text-teal-200 text-sm">Property Management Dashboard</p>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-3">
-              <FaUserCircle className="text-2xl" />
-              <div>
-                <p className="text-sm font-medium">Admin User</p>
-                <button 
-                  onClick={handleLogout}
-                  className="text-xs text-teal-200 hover:text-white"
-                >
-                  Logout
-                </button>
-              </div>
+              <h1 className="text-xl font-serif font-bold">Homes by Mwema</h1>
+              <p className="text-teal-200 text-xs">Admin Panel</p>
             </div>
           </div>
         </div>
-      </nav>
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Stats Overview */}
-        {activeTab === "dashboard" && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-            {[
-              { label: "Properties", value: stats.totalProperties, icon: FaHome, color: "teal" },
-              { label: "Active Bookings", value: stats.activeBookings, icon: FaCalendarAlt, color: "blue" },
-              { label: "Total Revenue", value: formatCurrency(stats.revenue), icon: FaMoneyBillWave, color: "emerald" },
-              { label: "Occupancy Rate", value: `${stats.occupancyRate}%`, icon: FaPercentage, color: "purple" },
-              { label: "Pending Payments", value: formatCurrency(stats.pendingPayments), icon: FaClock, color: "red" }
-            ].map((stat, i) => (
-              <div key={i} className="bg-white p-4 rounded-xl shadow border border-stone-100">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-xs text-stone-500 uppercase tracking-wider">{stat.label}</p>
-                    <p className="text-2xl font-bold text-teal-900 mt-1">{stat.value}</p>
-                  </div>
-                  <div className={`p-2 ${
-                    stat.color === 'teal' ? 'bg-teal-50' :
-                    stat.color === 'blue' ? 'bg-blue-50' :
-                    stat.color === 'emerald' ? 'bg-emerald-50' :
-                    stat.color === 'purple' ? 'bg-purple-50' :
-                    'bg-red-50'
-                  } rounded-lg`}>
-                    <stat.icon className={`${
-                      stat.color === 'teal' ? 'text-teal-600' :
-                      stat.color === 'blue' ? 'text-blue-600' :
-                      stat.color === 'emerald' ? 'text-emerald-600' :
-                      stat.color === 'purple' ? 'text-purple-600' :
-                      'text-red-600'
-                    } text-lg`} />
-                  </div>
-                </div>
-              </div>
+        {/* User Profile */}
+        <div className="p-4 border-b border-teal-800">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-teal-800 flex items-center justify-center">
+              <FaUserCircle className="text-xl" />
+            </div>
+            <div>
+              <p className="font-medium">Admin User</p>
+              <p className="text-xs text-teal-300">Super Admin</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="p-4 border-b border-teal-800">
+          <h3 className="text-xs uppercase text-teal-300 tracking-wider mb-3">Quick Actions</h3>
+          <div className="space-y-2">
+            {quickActions.map((action) => (
+              <button
+                key={action.id}
+                onClick={action.onClick}
+                className="w-full flex items-center gap-3 p-3 text-sm rounded-lg hover:bg-teal-800 transition-colors"
+              >
+                <action.icon className="text-teal-300" />
+                <span>{action.label}</span>
+              </button>
             ))}
           </div>
-        )}
+        </div>
 
-        {/* Main Dashboard Tabs */}
-        <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-8">
-          <div className="border-b border-stone-200">
-            <div className="flex">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-6 py-4 text-sm font-medium transition-colors relative ${
-                    activeTab === tab.id
-                      ? "text-teal-700 border-b-2 border-teal-700 bg-teal-50"
-                      : "text-stone-500 hover:text-teal-600 hover:bg-stone-50"
-                  }`}
-                >
-                  <tab.icon />
-                  {tab.label}
-                </button>
-              ))}
+        {/* Main Navigation */}
+        <div className="flex-1 p-4 overflow-y-auto">
+          <h3 className="text-xs uppercase text-teal-300 tracking-wider mb-3">Navigation</h3>
+          <nav className="space-y-1">
+            {navItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`w-full flex items-center gap-3 p-3 text-sm rounded-lg transition-colors ${
+                  activeTab === item.id
+                    ? "bg-teal-800 text-white"
+                    : "text-teal-200 hover:bg-teal-800/50"
+                }`}
+              >
+                <item.icon />
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        {/* Logout Section */}
+        <div className="p-4 border-t border-teal-800">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 p-3 text-sm rounded-lg bg-teal-800 hover:bg-teal-700 transition-colors"
+          >
+            <FaSignOutAlt />
+            <span>Logout</span>
+          </button>
+        </div>
+      </motion.aside>
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col">
+        {/* Top Header */}
+        <header className="bg-white border-b border-stone-200 p-4 lg:p-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="lg:hidden p-2 hover:bg-stone-100 rounded-lg"
+              >
+                {sidebarOpen ? <FaTimes /> : <FaBars />}
+              </button>
+              <div>
+                <h1 className="text-xl lg:text-2xl font-serif text-teal-950">
+                  {navItems.find(item => item.id === activeTab)?.label || "Dashboard"}
+                </h1>
+                <p className="text-stone-500 text-sm">
+                  Welcome back! Here's what's happening today.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <button className="p-2 hover:bg-stone-100 rounded-lg relative">
+                <FaBell className="text-xl text-stone-600" />
+                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+              </button>
+              
+              <div className="hidden lg:flex items-center gap-3">
+                <div className="text-right">
+                  <p className="text-sm font-medium">Admin User</p>
+                  <p className="text-xs text-stone-500">admin@example.com</p>
+                </div>
+                <div className="w-10 h-10 rounded-full bg-teal-100 flex items-center justify-center">
+                  <FaUserCircle className="text-xl text-teal-700" />
+                </div>
+              </div>
             </div>
           </div>
+        </header>
 
-          {/* Tab Content */}
-          <div className="p-6">
-            {/* DASHBOARD TAB */}
-            {activeTab === "dashboard" && (
-              <div>
-                <h2 className="text-2xl font-serif text-teal-950 mb-6">Dashboard Overview</h2>
+        {/* Main Content Area */}
+        <main className="flex-1 p-4 lg:p-6 overflow-y-auto">
+          {/* Stats Overview */}
+          {activeTab === "dashboard" && (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+                {[
+                  { label: "Properties", value: stats.totalProperties, icon: FaHome, color: "teal" },
+                  { label: "Active Bookings", value: stats.activeBookings, icon: FaCalendarAlt, color: "blue" },
+                  { label: "Total Revenue", value: formatCurrency(stats.revenue), icon: FaMoneyBillWave, color: "emerald" },
+                  { label: "Occupancy Rate", value: `${stats.occupancyRate}%`, icon: FaPercentage, color: "purple" },
+                  { label: "Pending Payments", value: formatCurrency(stats.pendingPayments), icon: FaClock, color: "red" }
+                ].map((stat, i) => (
+                  <div key={i} className="bg-white p-4 rounded-xl shadow border border-stone-100">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="text-xs text-stone-500 uppercase tracking-wider">{stat.label}</p>
+                        <p className="text-2xl font-bold text-teal-900 mt-1">{stat.value}</p>
+                      </div>
+                      <div className={`p-2 ${
+                        stat.color === 'teal' ? 'bg-teal-50' :
+                        stat.color === 'blue' ? 'bg-blue-50' :
+                        stat.color === 'emerald' ? 'bg-emerald-50' :
+                        stat.color === 'purple' ? 'bg-purple-50' :
+                        'bg-red-50'
+                      } rounded-lg`}>
+                        <stat.icon className={`${
+                          stat.color === 'teal' ? 'text-teal-600' :
+                          stat.color === 'blue' ? 'text-blue-600' :
+                          stat.color === 'emerald' ? 'text-emerald-600' :
+                          stat.color === 'purple' ? 'text-purple-600' :
+                          'text-red-600'
+                        } text-lg`} />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                <div className="bg-white p-6 rounded-xl border border-stone-200">
+                  <h3 className="font-medium text-stone-700 mb-4">Revenue Trend</h3>
+                  <div className="h-64">
+                    <Line
+                      data={revenueData}
+                      options={{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { position: 'top' } }
+                      }}
+                    />
+                  </div>
+                </div>
                 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-                  <div className="bg-white p-6 rounded-xl border border-stone-200">
-                    <h3 className="font-medium text-stone-700 mb-4">Revenue Trend</h3>
-                    <div className="h-64">
-                      <Line
-                        data={revenueData}
-                        options={{
-                          responsive: true,
-                          maintainAspectRatio: false,
-                          plugins: {
-                            legend: { position: 'top' }
-                          }
-                        }}
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="bg-white p-6 rounded-xl border border-stone-200">
-                    <h3 className="font-medium text-stone-700 mb-4">Top Properties by Occupancy</h3>
-                    <div className="h-64">
-                      <Bar
-                        data={occupancyData}
-                        options={{
-                          responsive: true,
-                          maintainAspectRatio: false,
-                          plugins: {
-                            legend: { position: 'top' }
-                          }
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-stone-50 p-6 rounded-xl">
-                  <h3 className="font-serif text-xl text-teal-950 mb-4">Quick Actions</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <button 
-                      onClick={() => setActiveTab("properties")}
-                      className="bg-white p-4 rounded-lg border border-stone-200 hover:border-teal-300 hover:bg-teal-50 transition-colors text-left"
-                    >
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-teal-100 rounded-lg">
-                          <FaPlus className="text-teal-600" />
-                        </div>
-                        <h4 className="font-medium text-teal-900">Add New Property</h4>
-                      </div>
-                      <p className="text-sm text-stone-600">Create a new property listing</p>
-                    </button>
-                    
-                    <button className="bg-white p-4 rounded-lg border border-stone-200 hover:border-teal-300 hover:bg-teal-50 transition-colors text-left">
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-blue-100 rounded-lg">
-                          <FaCalendarAlt className="text-blue-600" />
-                        </div>
-                        <h4 className="font-medium text-teal-900">View Bookings</h4>
-                      </div>
-                      <p className="text-sm text-stone-600">Manage guest bookings and reservations</p>
-                    </button>
-                    
-                    <button className="bg-white p-4 rounded-lg border border-stone-200 hover:border-teal-300 hover:bg-teal-50 transition-colors text-left">
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-emerald-100 rounded-lg">
-                          <FaMoneyBillWave className="text-emerald-600" />
-                        </div>
-                        <h4 className="font-medium text-teal-900">Payment Reports</h4>
-                      </div>
-                      <p className="text-sm text-stone-600">View financial reports and transactions</p>
-                    </button>
+                <div className="bg-white p-6 rounded-xl border border-stone-200">
+                  <h3 className="font-medium text-stone-700 mb-4">Top Properties by Occupancy</h3>
+                  <div className="h-64">
+                    <Bar
+                      data={occupancyData}
+                      options={{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { position: 'top' } }
+                      }}
+                    />
                   </div>
                 </div>
               </div>
-            )}
+            </>
+          )}
 
-            {/* PROPERTIES TAB */}
-            {activeTab === "properties" && (
-              <div>
-                <div className="flex justify-between items-center mb-6">
-                  <div>
-                    <h2 className="text-2xl font-serif text-teal-950">Property Management</h2>
-                    <p className="text-stone-500">Add, edit, and manage your properties</p>
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="relative">
-                      <FaSearch className="absolute left-3 top-3 text-stone-400" />
-                      <input
-                        type="text"
-                        placeholder="Search properties..."
-                        className="pl-10 pr-4 py-2 border border-stone-300 rounded-lg w-64"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                      />
-                    </div>
-                    <button
-                      onClick={() => setShowAddProperty(true)}
-                      className="bg-teal-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-800 transition-colors"
-                    >
-                      <FaPlus /> Add Property
-                    </button>
-                    <button 
-                      onClick={() => window.location.reload()}
-                      className="bg-white border border-teal-700 text-teal-700 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-50"
-                    >
-                      <FaSync /> Refresh
-                    </button>
-                  </div>
+          {/* Properties Tab */}
+          {activeTab === "properties" && (
+            <div>
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className="text-2xl font-serif text-teal-950">Property Management</h2>
+                  <p className="text-stone-500">Add, edit, and manage your properties</p>
                 </div>
-
-                {/* Properties Grid */}
-                {filteredProperties.length === 0 ? (
-                  <div className="text-center py-12 border border-stone-200 rounded-xl">
-                    <FaHome className="text-4xl text-stone-300 mx-auto mb-4" />
-                    <h3 className="text-xl font-serif text-teal-950 mb-2">No properties found</h3>
-                    <p className="text-stone-500 mb-6">Add your first property to get started</p>
-                    <button
-                      onClick={() => setShowAddProperty(true)}
-                      className="bg-teal-700 text-white px-6 py-3 rounded-lg flex items-center gap-2 mx-auto hover:bg-teal-800"
-                    >
-                      <FaPlus /> Add Property
-                    </button>
+                <div className="flex gap-3">
+                  <div className="relative">
+                    <FaSearch className="absolute left-3 top-3 text-stone-400" />
+                    <input
+                      type="text"
+                      placeholder="Search properties..."
+                      className="pl-10 pr-4 py-2 border border-stone-300 rounded-lg w-64"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
                   </div>
-                ) : (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {filteredProperties.map((property) => (
-                      <div key={property.id} className="border border-stone-200 rounded-xl overflow-hidden bg-white hover:shadow-lg transition-shadow">
-                        <div className="relative h-48">
-                          <img
-                            src={property.images?.[0] || "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb"}
-                            alt={property.name}
-                            className="w-full h-full object-cover"
-                          />
-                          <div className="absolute top-3 right-3 bg-teal-700 text-white px-2 py-1 rounded text-sm">
-                            {formatCurrency(property.price)}/night
+                  <button
+                    onClick={() => setShowAddProperty(true)}
+                    className="bg-teal-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-800 transition-colors"
+                  >
+                    <FaPlus /> Add Property
+                  </button>
+                  <button 
+                    onClick={() => window.location.reload()}
+                    className="bg-white border border-teal-700 text-teal-700 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-50"
+                  >
+                    <FaSync /> Refresh
+                  </button>
+                </div>
+              </div>
+
+              {/* Properties Grid */}
+              {filteredProperties.length === 0 ? (
+                <div className="text-center py-12 border border-stone-200 rounded-xl">
+                  <FaHome className="text-4xl text-stone-300 mx-auto mb-4" />
+                  <h3 className="text-xl font-serif text-teal-950 mb-2">No properties found</h3>
+                  <p className="text-stone-500 mb-6">Add your first property to get started</p>
+                  <button
+                    onClick={() => setShowAddProperty(true)}
+                    className="bg-teal-700 text-white px-6 py-3 rounded-lg flex items-center gap-2 mx-auto hover:bg-teal-800"
+                  >
+                    <FaPlus /> Add Property
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                  {filteredProperties.map((property) => (
+                    <div key={property.id} className="border border-stone-200 rounded-xl overflow-hidden bg-white hover:shadow-lg transition-shadow">
+                      <div className="relative h-48">
+                        <img
+                          src={property.images?.[0] || "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb"}
+                          alt={property.name}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute top-3 right-3 bg-teal-700 text-white px-2 py-1 rounded text-sm">
+                          {formatCurrency(property.price)}/night
+                        </div>
+                        <div className={`absolute top-3 left-3 px-2 py-1 rounded text-xs font-bold ${
+                          property.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                        }`}>
+                          {property.status.toUpperCase()}
+                        </div>
+                      </div>
+                      <div className="p-5">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <h3 className="text-lg font-serif text-teal-950">{property.name}</h3>
+                            <p className="text-stone-500 text-sm flex items-center gap-1">
+                              <FaMapMarkerAlt className="text-xs" />
+                              {property.location}
+                            </p>
                           </div>
-                          <div className={`absolute top-3 left-3 px-2 py-1 rounded text-xs font-bold ${
-                            property.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                          }`}>
-                            {property.status.toUpperCase()}
+                          <div className="text-amber-500 flex items-center gap-1">
+                            <FaStar className="text-sm" />
+                            <span className="font-medium">{property.rating || 'New'}</span>
                           </div>
                         </div>
-                        <div className="p-5">
-                          <div className="flex justify-between items-start mb-3">
-                            <div>
-                              <h3 className="text-lg font-serif text-teal-950">{property.name}</h3>
-                              <p className="text-stone-500 text-sm flex items-center gap-1">
-                                <FaMapMarkerAlt className="text-xs" />
-                                {property.location}
-                              </p>
-                            </div>
-                            <div className="text-amber-500 flex items-center gap-1">
-                              <FaStar className="text-sm" />
-                              <span className="font-medium">{property.rating || 'New'}</span>
-                            </div>
-                          </div>
-                          
-                          <div className="flex gap-4 text-sm text-stone-600 mb-4">
-                            <span className="flex items-center gap-1">
-                              <FaBed /> {property.rooms} {property.rooms === 1 ? 'Room' : 'Rooms'}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <FaBath /> {property.bathrooms} Bath
-                            </span>
-                            {property.area && <span>{property.area}</span>}
-                          </div>
+                        
+                        <div className="flex gap-4 text-sm text-stone-600 mb-4">
+                          <span className="flex items-center gap-1">
+                            <FaBed /> {property.rooms} {property.rooms === 1 ? 'Room' : 'Rooms'}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <FaBath /> {property.bathrooms} Bath
+                          </span>
+                          {property.area && <span>{property.area}</span>}
+                        </div>
 
-                          {property.description && (
-                            <div className="mb-4">
-                              <p className="text-sm text-stone-600 line-clamp-2">{property.description}</p>
-                            </div>
-                          )}
+                        {property.description && (
+                          <div className="mb-4">
+                            <p className="text-sm text-stone-600 line-clamp-2">{property.description}</p>
+                          </div>
+                        )}
 
-                          {property.amenities?.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mb-4">
-                              {property.amenities.slice(0, 3).map((amenity, idx) => (
-                                <span key={idx} className="text-xs bg-stone-100 text-stone-600 px-2 py-1 rounded">
-                                  {amenity}
-                                </span>
-                              ))}
-                              {property.amenities.length > 3 && (
-                                <span className="text-xs bg-stone-100 text-stone-600 px-2 py-1 rounded">
-                                  +{property.amenities.length - 3} more
-                                </span>
-                              )}
-                            </div>
-                          )}
-                          
-                          <div className="flex justify-between items-center">
-                            <div className="text-xs text-stone-500">
-                              <p>Type: {property.type.replace('_', ' ')}</p>
-                              <p>Max Guests: {property.max_guests || 2}</p>
-                            </div>
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => handleEditProperty(property)}
-                                className="p-2 text-teal-600 hover:bg-teal-50 rounded-lg"
-                                title="Edit"
-                              >
-                                <FaEdit />
-                              </button>
-                              <button
-                                onClick={() => deleteProperty(property.id)}
-                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                                title="Delete"
-                              >
-                                <FaTrash />
-                              </button>
-                              <a
-                                href={`/property/${property.id}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
-                                title="View"
-                              >
+                        {property.amenities?.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mb-4">
+                            {property.amenities.slice(0, 3).map((amenity, idx) => (
+                              <span key={idx} className="text-xs bg-stone-100 text-stone-600 px-2 py-1 rounded">
+                                {amenity}
+                              </span>
+                            ))}
+                            {property.amenities.length > 3 && (
+                              <span className="text-xs bg-stone-100 text-stone-600 px-2 py-1 rounded">
+                                +{property.amenities.length - 3} more
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        
+                        <div className="flex justify-between items-center">
+                          <div className="text-xs text-stone-500">
+                            <p>Type: {property.type.replace('_', ' ')}</p>
+                            <p>Max Guests: {property.max_guests || 2}</p>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleEditProperty(property)}
+                              className="p-2 text-teal-600 hover:bg-teal-50 rounded-lg"
+                              title="Edit"
+                            >
+                              <FaEdit />
+                            </button>
+                            <button
+                              onClick={() => deleteProperty(property.id)}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                              title="Delete"
+                            >
+                              <FaTrash />
+                            </button>
+                            <a
+                              href={`/property/${property.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                              title="View"
+                            >
+                              <FaEye />
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Bookings Tab */}
+          {activeTab === "bookings" && (
+            <div>
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className="text-2xl font-serif text-teal-950">Bookings Management</h2>
+                  <p className="text-stone-500">View and manage all bookings</p>
+                </div>
+                <button 
+                  onClick={fetchBookings}
+                  className="bg-white border border-teal-700 text-teal-700 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-50"
+                >
+                  <FaSync /> Refresh
+                </button>
+              </div>
+
+              {loadingBookings ? (
+                <div className="bg-white rounded-xl border border-stone-200 p-8 text-center">
+                  <FaSync className="text-4xl text-teal-600 mx-auto mb-4 animate-spin" />
+                  <p className="text-stone-500">Loading bookings...</p>
+                </div>
+              ) : bookings.length === 0 ? (
+                <div className="bg-white rounded-xl border border-stone-200 p-8 text-center">
+                  <FaCalendarAlt className="text-4xl text-stone-300 mx-auto mb-4" />
+                  <h3 className="text-xl font-serif text-teal-950 mb-2">No bookings found</h3>
+                  <p className="text-stone-500">There are currently no bookings</p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-stone-200 bg-stone-50">
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Booking ID</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Guest</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Property</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Check-In</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Check-Out</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Amount</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Status</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {bookings.map((booking) => (
+                          <tr key={booking.id} className="border-b border-stone-100 hover:bg-stone-50 transition-colors">
+                            <td className="px-6 py-4 text-sm text-stone-600">#{booking.id}</td>
+                            <td className="px-6 py-4 text-sm">
+                              <div>
+                                <p className="font-medium text-stone-900">{booking.guest_name || booking.user_name || 'N/A'}</p>
+                                <p className="text-xs text-stone-500">{booking.guest_email || booking.user_email}</p>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-sm text-stone-600">{booking.property_name || booking.property?.name || 'N/A'}</td>
+                            <td className="px-6 py-4 text-sm text-stone-600">
+                              {new Date(booking.check_in).toLocaleDateString()}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-stone-600">
+                              {new Date(booking.check_out).toLocaleDateString()}
+                            </td>
+                            <td className="px-6 py-4 text-sm font-semibold text-teal-900">
+                              {formatCurrency(booking.total_amount)}
+                            </td>
+                            <td className="px-6 py-4 text-sm">
+                              <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                                booking.status === 'confirmed' ? 'bg-green-100 text-green-800' :
+                                booking.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                booking.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {booking.status?.toUpperCase() || 'PENDING'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-sm">
+                              <button className="text-teal-600 hover:text-teal-800 font-medium">
                                 <FaEye />
-                              </a>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Customers Tab */}
+          {activeTab === "customers" && (
+            <div>
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className="text-2xl font-serif text-teal-950">Customers Management</h2>
+                  <p className="text-stone-500">View all registered customers</p>
+                </div>
+                <button 
+                  onClick={fetchCustomers}
+                  className="bg-white border border-teal-700 text-teal-700 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-50"
+                >
+                  <FaSync /> Refresh
+                </button>
               </div>
-            )}
-          </div>
-        </div>
+
+              {loadingCustomers ? (
+                <div className="bg-white rounded-xl border border-stone-200 p-8 text-center">
+                  <FaSync className="text-4xl text-teal-600 mx-auto mb-4 animate-spin" />
+                  <p className="text-stone-500">Loading customers...</p>
+                </div>
+              ) : customers.length === 0 ? (
+                <div className="bg-white rounded-xl border border-stone-200 p-8 text-center">
+                  <FaUsers className="text-4xl text-stone-300 mx-auto mb-4" />
+                  <h3 className="text-xl font-serif text-teal-950 mb-2">No customers found</h3>
+                  <p className="text-stone-500">There are currently no registered customers</p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-stone-200 bg-stone-50">
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Name</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Email</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Phone</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Role</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Joined</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {customers.map((customer) => (
+                          <tr key={customer.id} className="border-b border-stone-100 hover:bg-stone-50 transition-colors">
+                            <td className="px-6 py-4 text-sm">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-xs font-bold">
+                                  {customer.name?.charAt(0) || customer.email?.charAt(0)}
+                                </div>
+                                <span className="font-medium text-stone-900">{customer.name}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-sm text-stone-600">{customer.email}</td>
+                            <td className="px-6 py-4 text-sm text-stone-600">{customer.phone || 'N/A'}</td>
+                            <td className="px-6 py-4 text-sm">
+                              <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                                customer.role === 'admin' ? 'bg-purple-100 text-purple-800' :
+                                customer.role === 'host' ? 'bg-blue-100 text-blue-800' :
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {customer.role?.toUpperCase() || 'USER'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-sm text-stone-600">
+                              {new Date(customer.created_at).toLocaleDateString()}
+                            </td>
+                            <td className="px-6 py-4 text-sm">
+                              <button className="text-teal-600 hover:text-teal-800 font-medium">
+                                <FaEye />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Messages/Chats Tab */}
+          {activeTab === "messages" && (
+            <div>
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className="text-2xl font-serif text-teal-950">Messages & Chats</h2>
+                  <p className="text-stone-500">View all customer messages and conversations</p>
+                </div>
+                <button 
+                  onClick={fetchMessages}
+                  className="bg-white border border-teal-700 text-teal-700 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-50"
+                >
+                  <FaSync /> Refresh
+                </button>
+              </div>
+
+              {loadingMessages ? (
+                <div className="bg-white rounded-xl border border-stone-200 p-8 text-center">
+                  <FaSync className="text-4xl text-teal-600 mx-auto mb-4 animate-spin" />
+                  <p className="text-stone-500">Loading messages...</p>
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="bg-white rounded-xl border border-stone-200 p-8 text-center">
+                  <FaEnvelope className="text-4xl text-stone-300 mx-auto mb-4" />
+                  <h3 className="text-xl font-serif text-teal-950 mb-2">No messages found</h3>
+                  <p className="text-stone-500">There are currently no messages</p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-stone-200 bg-stone-50">
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Chat ID</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">From</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">To</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Last Message</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Date</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Status</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {messages.map((chat) => (
+                          <tr key={chat.id} className="border-b border-stone-100 hover:bg-stone-50 transition-colors">
+                            <td className="px-6 py-4 text-sm text-stone-600">#{chat.id}</td>
+                            <td className="px-6 py-4 text-sm">
+                              <p className="font-medium text-stone-900">{chat.user_name || chat.from_name || 'N/A'}</p>
+                              <p className="text-xs text-stone-500">{chat.user_email || chat.from_email}</p>
+                            </td>
+                            <td className="px-6 py-4 text-sm">
+                              <p className="font-medium text-stone-900">{chat.host_name || chat.to_name || 'Admin'}</p>
+                              <p className="text-xs text-stone-500">{chat.host_email || chat.to_email || 'admin@example.com'}</p>
+                            </td>
+                            <td className="px-6 py-4 text-sm text-stone-600 max-w-xs truncate">
+                              {chat.last_message || 'No messages'}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-stone-600">
+                              {chat.updated_at ? new Date(chat.updated_at).toLocaleDateString() : 'N/A'}
+                            </td>
+                            <td className="px-6 py-4 text-sm">
+                              <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                                chat.unread_count > 0 ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-green-100 text-green-800'
+                              }`}>
+                                {chat.unread_count > 0 ? `${chat.unread_count} Unread` : 'Read'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-sm">
+                              <button className="text-teal-600 hover:text-teal-800 font-medium">
+                                <FaEye />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Other Tabs Placeholder */}
+          {!["dashboard", "properties", "bookings", "customers", "messages"].includes(activeTab) && (
+            <div className="bg-white rounded-xl border border-stone-200 p-8 text-center">
+              <div className="text-5xl text-stone-300 mb-4">
+                {navItems.find(item => item.id === activeTab)?.icon && 
+                  React.createElement(navItems.find(item => item.id === activeTab).icon)
+                }
+              </div>
+              <h3 className="text-2xl font-serif text-teal-950 mb-2">
+                {navItems.find(item => item.id === activeTab)?.label}
+              </h3>
+              <p className="text-stone-500">
+                This section is under development. Coming soon!
+              </p>
+            </div>
+          )}
+        </main>
       </div>
 
       {/* Add/Edit Property Modal */}
@@ -747,34 +1123,44 @@ export default function AdminDashboard() {
 
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-stone-700 mb-2">
-                      Upload Images
+                      Image URLs (comma separated)
                     </label>
-                    <div className="border-2 border-dashed border-stone-300 rounded-lg p-6 text-center">
-                      <FaUpload className="text-3xl text-stone-400 mx-auto mb-3" />
-                      <p className="text-stone-500 mb-2">Click to browse images</p>
-                      <input
-                        type="file"
-                        multiple
-                        accept="image/*"
-                        onChange={handleImageUpload}
-                        className="hidden"
-                        id="image-upload"
-                      />
-                      <label
-                        htmlFor="image-upload"
-                        className="inline-block bg-teal-50 text-teal-700 px-4 py-2 rounded-lg cursor-pointer hover:bg-teal-100 transition-colors"
-                      >
-                        <FaImage className="inline mr-2" />
-                        Select Images
-                      </label>
-                      {newProperty.images.length > 0 && (
-                        <div className="mt-4">
-                          <p className="text-sm text-stone-600 mb-2">
-                            {newProperty.images.length} image(s) selected
-                          </p>
+                    <textarea
+                      value={newProperty.images.join(', ')}
+                      onChange={(e) => setNewProperty({...newProperty, images: e.target.value.split(',').map(url => url.trim()).filter(url => url)})}
+                      className="w-full p-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                      placeholder="https://images.unsplash.com/photo-xxx, https://images.unsplash.com/photo-yyy"
+                      rows="3"
+                    />
+                    <p className="text-xs text-stone-500 mt-2">
+                      <span className="font-semibold text-teal-700">📌 First URL = Home Page Thumbnail</span> | Enter image URLs separated by commas. The first URL will be shown on the home page, all URLs will appear in the booking page gallery.
+                    </p>
+                    {newProperty.images.length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-xs font-medium text-stone-600 mb-2">Preview ({newProperty.images.length} images)</p>
+                        <div className="flex flex-wrap gap-2">
+                          {newProperty.images.map((url, idx) => (
+                            <div key={idx} className="relative w-24 h-24 rounded-lg overflow-hidden border-2 border-stone-200">
+                              <img src={url} alt={`Preview ${idx + 1}`} className="w-full h-full object-cover" />
+                              {idx === 0 && (
+                                <div className="absolute top-0 left-0 right-0 bg-teal-600 text-white text-[10px] font-bold py-1 text-center">
+                                  HOME PAGE
+                                </div>
+                              )}
+                              <button
+                                onClick={() => setNewProperty({...newProperty, images: newProperty.images.filter((_, i) => i !== idx)})}
+                                className="absolute bottom-0 right-0 bg-red-500 text-white p-1 rounded-tl text-xs hover:bg-red-600"
+                              >
+                                ×
+                              </button>
+                              <div className="absolute bottom-0 left-0 bg-black/60 text-white text-[10px] px-2 py-1">
+                                #{idx + 1}
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 

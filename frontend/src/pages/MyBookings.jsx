@@ -312,7 +312,7 @@ export default function MyBookings() {
                          </div>
                          <div>
                             <p className="text-[10px] uppercase tracking-widest text-stone-400 mb-1">Reference</p>
-                            <p className="font-mono text-stone-600 text-xs uppercase">{booking.id.substring(0,8)}</p>
+                            <p className="font-mono text-stone-600 text-xs uppercase">#{String(booking.id).padStart(6, '0')}</p>
                          </div>
                       </div>
                    </div>

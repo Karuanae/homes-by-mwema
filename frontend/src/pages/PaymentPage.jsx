@@ -1,17 +1,10 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  FaLock, FaCreditCard, FaMobileAlt, FaGoogle, FaEnvelope, FaUser,
-  FaCalendarAlt, FaUserFriends, FaHome, FaStar, FaWhatsapp, FaChevronLeft,
-  FaCheckCircle, FaShieldAlt, FaInfoCircle, FaEye, FaEyeSlash, FaPhone,
-  FaKey, FaArrowRight, FaCheck, FaFacebook, FaTwitter, FaApple,
-  FaHeart, FaCrown, FaSpinner, FaTag, FaMapMarkerAlt, FaCommentDots,
-  FaHeadset, FaPaperPlane, FaTimes, FaExpand
-} from "react-icons/fa";
+import { FaSpinner, FaTimes } from "react-icons/fa"; // Kept only essential functional icons
 import api from "../services/api";
 
-// Chat component for client side
+// --- MINIMALIST CHAT WIDGET ---
 const ChatWidget = ({ isOpen, onClose, onToggle, user }) => {
   const [message, setMessage] = useState('');
   const [chatMessages, setChatMessages] = useState([]);
@@ -20,14 +13,12 @@ const ChatWidget = ({ isOpen, onClose, onToggle, user }) => {
 
   useEffect(() => {
     if (!isOpen || !user) return;
-
     let mounted = true;
 
     const initChat = async () => {
       try {
         const chatsResp = await api.chats.getUserChats(user.id);
         const chats = chatsResp.data || [];
-
         let chat = chats.length ? chats[0] : null;
 
         if (!chat) {
@@ -44,31 +35,22 @@ const ChatWidget = ({ isOpen, onClose, onToggle, user }) => {
         console.error('Chat init error', err);
       }
     };
-
     initChat();
-
     return () => { mounted = false; };
   }, [isOpen, user]);
 
   const handleSendMessage = async () => {
     if (!message.trim() || !user) return;
-
     try {
       setIsTyping(true);
-
-      // Ensure chat exists
       let cid = chatId;
       if (!cid) {
         const startResp = await api.chats.startChat(user.id, null, null);
         cid = startResp.data?.chat?.id;
         setChatId(cid);
       }
-
-      // Send message
       const payload = { message, sender_id: user.id, sender_name: user.name, is_host: false };
       await api.chats.sendMessage(cid, payload);
-
-      // Refresh messages
       const msgsResp = await api.chats.getMessages(cid);
       setChatMessages(msgsResp.data || []);
       setMessage('');
@@ -79,28 +61,14 @@ const ChatWidget = ({ isOpen, onClose, onToggle, user }) => {
     }
   };
 
-  const quickQuestions = [
-    "Is M-Pesa secure?",
-    "When will I get confirmation?",
-    "What if payment fails?",
-    "Can I pay partial amount?"
-  ];
-
   if (!isOpen) {
     return (
-      <motion.button
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
+      <button
         onClick={onToggle}
-        className="fixed bottom-6 right-6 z-50 bg-teal-600 text-white p-4 rounded-full shadow-lg hover:shadow-xl hover:bg-teal-700 transition-all duration-300 flex items-center justify-center group"
-        style={{ boxShadow: '0 10px 25px rgba(13, 148, 136, 0.3)' }}
+        className="fixed bottom-8 right-8 z-50 bg-stone-900 text-stone-50 px-6 py-3 font-serif italic text-sm shadow-xl hover:bg-black transition-all duration-500 border border-stone-800"
       >
-        <div className="relative">
-          <FaCommentDots className="text-xl" />
-          <span className="absolute -top-2 -right-2 bg-green-400 text-white text-xs w-3 h-3 rounded-full"></span>
-        </div>
-        <span className="ml-2 text-sm font-medium hidden md:inline">Payment Help</span>
-      </motion.button>
+        Concierge
+      </button>
     );
   }
 
@@ -108,119 +76,45 @@ const ChatWidget = ({ isOpen, onClose, onToggle, user }) => {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="fixed bottom-24 right-6 md:bottom-6 md:right-6 w-96 max-w-[calc(100vw-3rem)] h-[500px] max-h-[80vh] bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-200 z-50"
-      style={{ boxShadow: '0 20px 60px rgba(0, 0, 0, 0.15)' }}
+      className="fixed bottom-8 right-8 w-80 h-[450px] bg-stone-50 border border-stone-200 shadow-2xl z-50 flex flex-col"
     >
-      {/* Chat Header */}
-      <div className="bg-gradient-to-r from-teal-600 to-teal-700 text-white p-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-              <FaHeadset className="text-lg" />
-            </div>
-            <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-400 rounded-full border-2 border-teal-600"></div>
-          </div>
-          <div>
-            <h3 className="font-bold text-lg">Payment Support</h3>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-teal-100">Online • Quick replies</span>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onToggle}
-            className="p-2 hover:bg-teal-800 rounded-lg transition-colors"
-            title="Minimize"
-          >
-            <FaExpand className="transform rotate-45" />
-          </button>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-teal-800 rounded-lg transition-colors"
-            title="Close"
-          >
-            <FaTimes />
-          </button>
-        </div>
+      {/* Minimal Header */}
+      <div className="bg-stone-900 text-stone-50 p-4 flex items-center justify-between">
+        <span className="font-serif italic">Concierge Support</span>
+        <button onClick={onClose} className="hover:text-stone-300"><FaTimes /></button>
       </div>
 
-      {/* Chat Messages */}
-      <div className="flex-1 overflow-y-auto p-4 bg-gradient-to-b from-gray-50 to-white h-[calc(100%-140px)]">
-        <div className="space-y-4">
-          {chatMessages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
-              <div
-                className={`max-w-[80%] rounded-2xl p-3 ${
-                  msg.sender === 'user'
-                    ? 'bg-teal-600 text-white rounded-br-none'
-                    : 'bg-gray-100 text-gray-800 rounded-bl-none'
-                }`}
-              >
-                <p className="text-sm">{msg.text}</p>
-                <div className={`text-xs mt-1 ${msg.sender === 'user' ? 'text-teal-200' : 'text-gray-500'}`}>
-                  {msg.time}
-                </div>
-              </div>
+      {/* Messages Area */}
+      <div className="flex-1 overflow-y-auto p-4 bg-white space-y-4">
+        {chatMessages.map((msg) => (
+          <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`max-w-[80%] p-3 text-xs ${
+              msg.sender === 'user' ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-800'
+            }`}>
+              {msg.text}
             </div>
-          ))}
-          
-          {isTyping && (
-            <div className="flex justify-start">
-              <div className="bg-gray-100 text-gray-800 rounded-2xl rounded-bl-none p-3">
-                <div className="flex items-center gap-1">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
-                  <span className="text-xs text-gray-600 ml-2">Support is typing...</span>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Quick Questions */}
-      <div className="px-4 py-2 bg-gray-50 border-t border-gray-200">
-        <div className="flex overflow-x-auto gap-2 pb-2">
-          {quickQuestions.map((question, index) => (
-            <button
-              key={index}
-              onClick={() => setMessage(question)}
-              className="flex-shrink-0 text-xs bg-white border border-gray-300 text-gray-700 px-3 py-1 rounded-full hover:bg-gray-100 transition-colors"
-            >
-              {question}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Message Input */}
-      <div className="p-4 border-t border-gray-200 bg-white">
-        <div className="flex items-center gap-2">
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-              placeholder="Ask about your payment..."
-              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-            />
           </div>
-          <button
+        ))}
+        {isTyping && <div className="text-xs text-stone-400 italic">Concierge is typing...</div>}
+      </div>
+
+      {/* Input Area */}
+      <div className="p-4 border-t border-stone-200 bg-white">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+            placeholder="Type your inquiry..."
+            className="flex-1 border-b border-stone-300 focus:border-stone-900 outline-none text-sm py-2 bg-transparent placeholder-stone-400 font-serif"
+          />
+          <button 
             onClick={handleSendMessage}
             disabled={!message.trim()}
-            className={`p-3 rounded-lg flex items-center gap-2 ${
-              message.trim()
-                ? 'bg-teal-600 text-white hover:bg-teal-700'
-                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-            } transition-colors`}
+            className="text-xs uppercase tracking-widest font-bold text-stone-900 hover:text-stone-600 disabled:opacity-30"
           >
-            <FaPaperPlane />
+            SEND
           </button>
         </div>
       </div>
@@ -228,66 +122,60 @@ const ChatWidget = ({ isOpen, onClose, onToggle, user }) => {
   );
 };
 
+// --- MAIN PAYMENT PAGE ---
 export default function PaymentPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
   
-  // Chat state
+  // State
   const [showChat, setShowChat] = useState(false);
-  
-  // Get booking details from previous page or use defaults for demo
   const { bookingDetails: passedDetails } = location.state || {};
-  
-  /* ================= STATE MANAGEMENT ================= */
   const [currentStep, setCurrentStep] = useState(1); 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [user, setUser] = useState(null);
-  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   
-  // Auth Form State
+  // Auth Form
   const [authMode, setAuthMode] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
-  const [rememberMe, setRememberMe] = useState(true);
   
-  // Payment Form State
+  // Payment Form
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(""); 
   const [paymentType, setPaymentType] = useState("full"); 
   const [mpesaNumber, setMpesaNumber] = useState("");
-  const [cardDetails, setCardDetails] = useState({ number: "", expiry: "", cvv: "", name: "" });
   const [messageToHost, setMessageToHost] = useState("");
   
-  // Data State
+  // Data
   const [property, setProperty] = useState(null);
   const [bookingDetails, setBookingDetails] = useState({
-    checkIn: "", checkOut: "", guests: { adults: 1, children: 0 }, nights: 0, total: 0
+    checkIn: "", checkOut: "", guests: { adults: 1, children: 0 }, 
+    nights: 0, baseAmount: 0, cleaningFee: 0, serviceFee: 0, taxes: 0, total: 0
   });
 
-  /* ================= INITIALIZATION ================= */
+  // Initialization
   useEffect(() => {
+    window.scrollTo(0, 0);
     const fetchData = async () => {
       try {
-        // 1. Check Auth Status
         const storedUser = localStorage.getItem('user');
         if (storedUser) {
           setUser(JSON.parse(storedUser));
           setIsLoggedIn(true);
-          setCurrentStep(2); // Skip auth if logged in
+          setCurrentStep(2);
         }
 
-        // 2. Fetch Property Data from API
         const propertyResponse = await api.properties.getById(id);
         setProperty(propertyResponse.data);
 
-        // 3. Set Booking Details
+        // Logic for booking details (same as before)
         if (passedDetails) {
           setBookingDetails(passedDetails);
         } else {
-          // Fallback demo data
+          // Demo fallback
           const today = new Date();
           const checkIn = new Date(today.setDate(today.getDate() + 2));
           const checkOut = new Date(today.setDate(today.getDate() + 3));
@@ -296,28 +184,21 @@ export default function PaymentPage() {
             checkOut: checkOut.toISOString().split('T')[0],
             guests: { adults: 2, children: 0 },
             nights: 3,
+            baseAmount: 15000,
+            cleaningFee: 1500,
+            serviceFee: 2000,
+            taxes: 0,
             total: 18500
           });
         }
       } catch (error) {
-        console.error('Error fetching property data:', error);
-        // Set fallback property data
-        setProperty({
-          id: id,
-          title: "Property Not Found",
-          price: 0,
-          image: "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00",
-          rating: 0,
-          reviewCount: 0,
-          location: "Unknown Location"
-        });
+        console.error('Error:', error);
       }
     };
-
     fetchData();
   }, [id, passedDetails]);
 
-  // Calculate Partial Payment Logic
+  // Logic
   const calculatePartialPayment = () => {
     if (!bookingDetails.total) return { now: 0, later: 0, dueDate: '' };
     const now = Math.floor(bookingDetails.total * 0.5);
@@ -326,477 +207,376 @@ export default function PaymentPage() {
     dueDate.setDate(dueDate.getDate() - 2); 
     return { now, later, dueDate: dueDate.toLocaleDateString() };
   };
-
   const partialPayment = calculatePartialPayment();
 
-  /* ================= HANDLERS ================= */
   const handleAuth = async () => {
     setIsLoading(true);
     try {
       let response;
-      if (authMode === "login") {
-        response = await api.auth.login({ email, password });
-      } else {
-        response = await api.auth.register({
-          name: fullName,
-          email,
-          password,
-          phone: phoneNumber
-        });
-      }
-
+      if (authMode === "login") response = await api.auth.login({ email, password });
+      else response = await api.auth.register({ name: fullName, email, password, phone: phoneNumber });
+      
       const userData = response.data;
       localStorage.setItem('user', JSON.stringify(userData));
       setUser(userData);
       setIsLoggedIn(true);
       setCurrentStep(2);
     } catch (error) {
-      console.error('Auth error:', error);
-      alert('Authentication failed. Please try again.');
+      alert('Authentication failed.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleGuestCheckout = () => {
-    const guestUser = { id: `guest_${Date.now()}`, name: "Guest", email: "guest@example.com", isGuest: true };
-    localStorage.setItem('user', JSON.stringify(guestUser));
-    setUser(guestUser);
-    setIsLoggedIn(true);
-    setCurrentStep(2);
+  const createBooking = async () => {
+    return await api.bookings.create({
+      propertyId: id,
+      checkIn: bookingDetails.checkIn,
+      checkOut: bookingDetails.checkOut,
+      guests: bookingDetails.guests,
+      totalAmount: bookingDetails.total,
+      paymentType,
+      paymentMethod: selectedPaymentMethod,
+      messageToHost
+    });
   };
 
   const completeBooking = async () => {
     setIsLoading(true);
     try {
-      // Create booking via API
-      const bookingData = {
-        propertyId: id,
-        checkIn: bookingDetails.checkIn,
-        checkOut: bookingDetails.checkOut,
-        guests: bookingDetails.guests,
-        totalAmount: bookingDetails.total,
-        paymentType: paymentType,
-        paymentMethod: selectedPaymentMethod,
-        messageToHost: messageToHost
-      };
-
-      const response = await api.bookings.create(bookingData);
-      const newBooking = response.data;
-
-      setIsLoading(false);
+      await createBooking();
       navigate("/my-bookings", { state: { newBooking: true } });
     } catch (error) {
-      console.error('Booking creation error:', error);
-      alert('Failed to create booking. Please try again.');
+      alert('Failed to create booking.');
+    } finally {
       setIsLoading(false);
     }
   };
 
-  const formatCurrency = (val) => `KSh ${val?.toLocaleString() || '0'}`;
+  const handleSendStkPush = async () => {
+    if (!mpesaNumber.trim()) { alert('Enter M-PESA number.'); return; }
+    setSelectedPaymentMethod('mpesa');
+    setIsLoading(true);
+    try {
+      const amountDue = paymentType === 'full' ? bookingDetails.total : partialPayment.now;
+      const newBooking = await createBooking().then(res => res.data);
+      if (!newBooking) throw new Error('Booking failed');
+      
+      const result = await api.payments.initiateMpesa(newBooking.id, mpesaNumber, amountDue);
+      if (result.success) {
+        alert('Check your phone for M-PESA prompt');
+        // Simple mock success for demo
+        setTimeout(() => {
+          setIsLoading(false);
+          setCurrentStep(3); // Go to confirmation
+        }, 5000);
+      }
+    } catch (error) {
+      alert('STK Push failed.');
+      setIsLoading(false);
+    }
+  };
 
-  /* ================= RENDER ================= */
+  const formatCurrency = (val) => `KES ${val?.toLocaleString() || '0'}`;
+
+  // --- RENDER ---
   return (
-    <div className="min-h-screen bg-stone-50 font-sans text-slate-800">
+    <div className="min-h-screen bg-stone-50 font-sans text-stone-900 selection:bg-stone-200">
       
-      {/* Chat Widget */}
-      <ChatWidget 
-        isOpen={showChat}
-        onClose={() => setShowChat(false)}
-        onToggle={() => setShowChat(!showChat)}
-        user={user}
-      />
+      <ChatWidget isOpen={showChat} onClose={() => setShowChat(false)} onToggle={() => setShowChat(!showChat)} user={user} />
       
-      {/* 1. COMPACT HEADER */}
-      <header className="sticky top-0 bg-white/80 backdrop-blur-md border-b border-stone-200 z-40">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-          <Link to={`/properties`} className="flex items-center gap-2 text-stone-500 hover:text-teal-900 transition-colors">
-            <FaChevronLeft className="text-xs" />
-            <span className="text-sm font-medium uppercase tracking-wider">Cancel Payment</span>
-          </Link>
-          <div className="flex items-center gap-4">
-            {/* Chat Help Button */}
-            <button
-              onClick={() => setShowChat(!showChat)}
-              className="flex items-center gap-2 px-4 py-2 bg-teal-50 text-teal-700 rounded-full border border-teal-100 hover:bg-teal-100 transition-colors"
-            >
-              <FaCommentDots className="text-sm" />
-              <span className="text-sm font-medium">Payment Help</span>
-            </button>
-            
-            <div className="flex items-center gap-2 text-teal-700 bg-teal-50 px-4 py-1.5 rounded-full border border-teal-100">
-              <FaLock className="text-xs" />
-              <span className="text-xs font-bold uppercase tracking-widest">Bank-Level Security</span>
-            </div>
+      <main className="max-w-7xl mx-auto px-6 pt-32 pb-24">
+        
+        {/* Minimalist Progress Header */}
+        <div className="mb-16 border-b border-stone-200 pb-4 flex justify-between items-end">
+          <h1 className="font-serif text-3xl italic text-stone-900">
+            {currentStep === 1 ? "Identity" : currentStep === 2 ? "Secure Payment" : "Confirmation"}
+          </h1>
+          <div className="hidden md:flex gap-8 text-[10px] uppercase tracking-[0.2em] font-medium">
+            <span className={currentStep === 1 ? "text-stone-900 border-b border-stone-900 pb-4 -mb-4.5" : "text-stone-400"}>01 Identity</span>
+            <span className={currentStep === 2 ? "text-stone-900 border-b border-stone-900 pb-4 -mb-4.5" : "text-stone-400"}>02 Payment</span>
+            <span className={currentStep === 3 ? "text-stone-900 border-b border-stone-900 pb-4 -mb-4.5" : "text-stone-400"}>03 Confirmed</span>
           </div>
         </div>
-      </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-12">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
           
-          {/* LEFT COLUMN: STEPS */}
-          <div className="lg:col-span-2 space-y-8">
-            
-            {/* PROGRESS INDICATOR */}
-            <div className="flex items-center justify-between mb-8 px-2">
-              {[
-                { n: 1, label: "Identity" },
-                { n: 2, label: "Payment" },
-                { n: 3, label: "Confirm" }
-              ].map((step) => (
-                <div key={step.n} className="flex items-center gap-3">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
-                    currentStep >= step.n ? "bg-teal-900 text-white" : "bg-stone-200 text-stone-500"
-                  }`}>
-                    {currentStep > step.n ? <FaCheck /> : step.n}
-                  </div>
-                  <span className={`text-sm uppercase tracking-widest ${currentStep >= step.n ? "text-teal-900" : "text-stone-400"}`}>
-                    {step.label}
-                  </span>
-                  {step.n < 3 && <div className="w-12 h-px bg-stone-200 ml-3 hidden sm:block" />}
-                </div>
-              ))}
-            </div>
-
+          {/* LEFT COLUMN: INTERACTION */}
+          <div className="lg:col-span-7">
             <AnimatePresence mode="wait">
+              
               {/* STEP 1: AUTHENTICATION */}
               {currentStep === 1 && (
                 <motion.div 
                   key="step1"
-                  initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-                  className="bg-white rounded-lg border border-stone-200 shadow-xl shadow-stone-200/50 overflow-hidden"
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  className="bg-white p-12 border border-stone-100 shadow-sm"
                 >
-                  <div className="p-8">
-                    <h2 className="text-2xl font-serif text-teal-950 mb-2">Begin Your Journey</h2>
-                    <p className="text-stone-500 mb-8">Log in or sign up to secure your reservation.</p>
-
-                    {/* Social Login */}
-                    <div className="grid grid-cols-2 gap-4 mb-8">
-                      <button onClick={handleAuth} className="flex items-center justify-center gap-2 py-3 border border-stone-200 rounded-sm hover:bg-stone-50 transition-colors">
-                        <FaGoogle className="text-red-500" /> <span className="text-sm font-medium">Google</span>
-                      </button>
-                      <button className="flex items-center justify-center gap-2 py-3 border border-stone-200 rounded-sm hover:bg-stone-50 transition-colors">
-                        <FaApple className="text-stone-800" /> <span className="text-sm font-medium">Apple</span>
-                      </button>
-                    </div>
-
-                    <div className="relative mb-8 text-center">
-                      <span className="bg-white px-4 text-xs text-stone-400 uppercase tracking-widest relative z-10">Or continue with email</span>
-                      <div className="absolute top-1/2 left-0 w-full h-px bg-stone-200 -z-0"></div>
-                    </div>
-
-                    {/* Form Inputs */}
-                    <div className="space-y-4">
-                      {authMode === 'signup' && (
-                        <div className="grid grid-cols-2 gap-4">
+                  <p className="font-serif text-xl mb-8 text-stone-600 italic">Please identify yourself to continue.</p>
+                  
+                  <div className="space-y-8">
+                    {authMode === 'signup' && (
+                      <div className="grid grid-cols-2 gap-8">
+                        <div className="group">
+                          <label className="text-[10px] uppercase tracking-widest text-stone-500">Full Name</label>
                           <input 
-                            type="text" placeholder="Full Name" 
+                            type="text" 
                             value={fullName} onChange={e => setFullName(e.target.value)}
-                            className="w-full p-4 bg-stone-50 border border-stone-200 rounded-sm focus:outline-none focus:border-teal-900 transition-colors"
-                          />
-                          <input 
-                            type="tel" placeholder="Phone" 
-                            value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)}
-                            className="w-full p-4 bg-stone-50 border border-stone-200 rounded-sm focus:outline-none focus:border-teal-900 transition-colors"
+                            className="w-full pt-2 pb-3 bg-transparent border-b border-stone-300 focus:border-stone-900 outline-none transition-colors font-serif"
+                            placeholder="John Doe"
                           />
                         </div>
-                      )}
-                      <input 
-                        type="email" placeholder="Email Address" 
-                        value={email} onChange={e => setEmail(e.target.value)}
-                        className="w-full p-4 bg-stone-50 border border-stone-200 rounded-sm focus:outline-none focus:border-teal-900 transition-colors"
-                      />
-                      <div className="relative">
-                        <input 
-                          type={showPassword ? "text" : "password"} placeholder="Password" 
-                          value={password} onChange={e => setPassword(e.target.value)}
-                          className="w-full p-4 bg-stone-50 border border-stone-200 rounded-sm focus:outline-none focus:border-teal-900 transition-colors"
-                        />
-                        <button onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-4 text-stone-400">
-                          {showPassword ? <FaEyeSlash/> : <FaEye/>}
-                        </button>
+                        <div className="group">
+                          <label className="text-[10px] uppercase tracking-widest text-stone-500">Phone</label>
+                          <input 
+                            type="tel" 
+                            value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)}
+                            className="w-full pt-2 pb-3 bg-transparent border-b border-stone-300 focus:border-stone-900 outline-none transition-colors font-serif"
+                            placeholder="+254..."
+                          />
+                        </div>
                       </div>
+                    )}
+                    
+                    <div className="group">
+                      <label className="text-[10px] uppercase tracking-widest text-stone-500">Email Address</label>
+                      <input 
+                        type="email" 
+                        value={email} onChange={e => setEmail(e.target.value)}
+                        className="w-full pt-2 pb-3 bg-transparent border-b border-stone-300 focus:border-stone-900 outline-none transition-colors font-serif"
+                        placeholder="name@example.com"
+                      />
+                    </div>
+                    
+                    <div className="group">
+                      <label className="text-[10px] uppercase tracking-widest text-stone-500">Password</label>
+                      <input 
+                        type="password" 
+                        value={password} onChange={e => setPassword(e.target.value)}
+                        className="w-full pt-2 pb-3 bg-transparent border-b border-stone-300 focus:border-stone-900 outline-none transition-colors font-serif"
+                        placeholder="••••••••"
+                      />
                     </div>
 
-                    {/* Actions */}
-                    <button 
-                      onClick={handleAuth} disabled={isLoading}
-                      className="w-full mt-8 bg-teal-950 text-white py-4 font-bold uppercase tracking-widest text-sm hover:bg-teal-900 transition-colors flex items-center justify-center gap-2"
-                    >
-                      {isLoading ? <FaSpinner className="animate-spin"/> : (authMode === 'login' ? "Secure Login" : "Create Account")}
-                    </button>
-
-                    <div className="mt-6 flex justify-between items-center text-sm">
-                      <button onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')} className="text-teal-700 underline">
-                        {authMode === 'login' ? "No account? Sign up" : "Have an account? Login"}
+                    <div className="pt-6">
+                      <button 
+                        onClick={handleAuth} disabled={isLoading}
+                        className="w-full bg-stone-900 text-white py-4 text-xs uppercase tracking-[0.2em] hover:bg-black transition-all disabled:opacity-50"
+                      >
+                        {isLoading ? "PROCESSING..." : (authMode === 'login' ? "ACCESS ACCOUNT" : "CREATE ACCOUNT")}
                       </button>
-                      <button onClick={handleGuestCheckout} className="text-stone-500 hover:text-stone-800">Continue as Guest</button>
+                    </div>
+
+                    <div className="flex justify-between items-center text-xs tracking-wide pt-4">
+                      <button onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')} className="text-stone-500 hover:text-stone-900 underline decoration-stone-300 underline-offset-4">
+                        {authMode === 'login' ? "New Client? Register" : "Existing Client? Login"}
+                      </button>
+                      <button onClick={() => {
+                        setUser({ name: "Guest", email: "guest@client.com" }); setIsLoggedIn(true); setCurrentStep(2);
+                      }} className="text-stone-400 hover:text-stone-600">
+                        Continue as Guest
+                      </button>
                     </div>
                   </div>
                 </motion.div>
               )}
 
-              {/* STEP 2: PAYMENT DETAILS */}
+              {/* STEP 2: PAYMENT */}
               {currentStep === 2 && (
                 <motion.div 
                   key="step2"
-                  initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-                  className="space-y-6"
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  className="space-y-12"
                 >
-                  {/* Payment Help Banner */}
-                  <div className="bg-gradient-to-r from-teal-50 to-blue-50 border border-teal-100 rounded-lg p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-teal-600 text-white flex items-center justify-center">
-                        <FaHeadset />
-                      </div>
-                      <div>
-                        <p className="font-medium text-teal-900">Need help with payment?</p>
-                        <p className="text-sm text-teal-700">Chat with our support team for assistance</p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setShowChat(true)}
-                      className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors flex items-center gap-2"
-                    >
-                      <FaCommentDots /> Chat Now
-                    </button>
-                  </div>
-
-                  {/* Payment Method Selection */}
-                  <div className="bg-white rounded-lg border border-stone-200 p-6">
-                    <h3 className="font-serif text-xl text-teal-950 mb-4">Payment Method</h3>
-                    <div className="grid grid-cols-2 gap-4">
+                  {/* Payment Method - Text Only Selection */}
+                  <section>
+                    <h3 className="font-serif text-lg mb-6 italic text-stone-600">Select Method</h3>
+                    <div className="grid grid-cols-2 gap-0 border border-stone-200">
                       <button 
                         onClick={() => setSelectedPaymentMethod('mpesa')}
-                        className={`p-4 border rounded-sm flex flex-col items-center gap-2 transition-all ${selectedPaymentMethod === 'mpesa' ? 'border-teal-600 bg-teal-50' : 'border-stone-200 hover:border-teal-300'}`}
+                        className={`py-6 text-xs uppercase tracking-[0.2em] transition-all ${selectedPaymentMethod === 'mpesa' ? 'bg-stone-900 text-white' : 'bg-white text-stone-400 hover:text-stone-900'}`}
                       >
-                        <FaMobileAlt className="text-2xl text-green-600" />
-                        <span className="text-sm font-bold text-stone-700">M-PESA</span>
+                        M-PESA Mobile
                       </button>
                       <button 
                         onClick={() => setSelectedPaymentMethod('card')}
-                        className={`p-4 border rounded-sm flex flex-col items-center gap-2 transition-all ${selectedPaymentMethod === 'card' ? 'border-teal-600 bg-teal-50' : 'border-stone-200 hover:border-teal-300'}`}
+                        className={`py-6 text-xs uppercase tracking-[0.2em] border-l border-stone-200 transition-all ${selectedPaymentMethod === 'card' ? 'bg-stone-900 text-white' : 'bg-white text-stone-400 hover:text-stone-900'}`}
                       >
-                        <FaCreditCard className="text-2xl text-blue-600" />
-                        <span className="text-sm font-bold text-stone-700">Card</span>
+                        Credit Card
                       </button>
                     </div>
 
-                    {/* Inputs based on selection */}
-                    <div className="mt-6">
+                    {/* Dynamic Inputs */}
+                    <div className="mt-8 bg-white p-8 border border-stone-100 shadow-sm">
                       {selectedPaymentMethod === 'mpesa' && (
-                        <div className="relative">
-                          <FaPhone className="absolute top-4 left-4 text-stone-400" />
+                        <div className="space-y-2">
+                          <label className="text-[10px] uppercase tracking-widest text-stone-500">M-PESA Number</label>
                           <input 
-                            type="tel" placeholder="M-PESA Number (e.g., 0712...)" 
+                            type="tel" placeholder="07XX XXX XXX"
                             value={mpesaNumber} onChange={e => setMpesaNumber(e.target.value)}
-                            className="w-full pl-10 p-4 bg-stone-50 border border-stone-200 rounded-sm focus:border-teal-900 outline-none"
+                            className="w-full text-xl font-serif py-3 border-b border-stone-200 focus:border-stone-900 outline-none bg-transparent placeholder-stone-300"
                           />
-                          <p className="text-xs text-stone-500 mt-2 flex items-center gap-1"><FaInfoCircle/> You will receive an STK prompt on your phone.</p>
+                          <p className="text-[10px] text-stone-400 pt-2 uppercase tracking-wide">An STK prompt will be sent to your device.</p>
                         </div>
                       )}
                       {selectedPaymentMethod === 'card' && (
-                        <div className="space-y-4">
-                          <input type="text" placeholder="Card Number" className="w-full p-4 bg-stone-50 border border-stone-200 rounded-sm" />
-                          <div className="grid grid-cols-2 gap-4">
-                            <input type="text" placeholder="MM/YY" className="w-full p-4 bg-stone-50 border border-stone-200 rounded-sm" />
-                            <input type="text" placeholder="CVV" className="w-full p-4 bg-stone-50 border border-stone-200 rounded-sm" />
-                          </div>
+                        <div className="space-y-6">
+                           <div>
+                              <label className="text-[10px] uppercase tracking-widest text-stone-500">Card Number</label>
+                              <input type="text" placeholder="0000 0000 0000 0000" className="w-full text-xl font-serif py-3 border-b border-stone-200 focus:border-stone-900 outline-none bg-transparent placeholder-stone-300"/>
+                           </div>
+                           <div className="grid grid-cols-2 gap-8">
+                              <div>
+                                <label className="text-[10px] uppercase tracking-widest text-stone-500">Expiry</label>
+                                <input type="text" placeholder="MM/YY" className="w-full text-xl font-serif py-3 border-b border-stone-200 focus:border-stone-900 outline-none bg-transparent placeholder-stone-300"/>
+                              </div>
+                              <div>
+                                <label className="text-[10px] uppercase tracking-widest text-stone-500">CVC</label>
+                                <input type="text" placeholder="123" className="w-full text-xl font-serif py-3 border-b border-stone-200 focus:border-stone-900 outline-none bg-transparent placeholder-stone-300"/>
+                              </div>
+                           </div>
                         </div>
                       )}
+                      {!selectedPaymentMethod && <p className="text-sm text-stone-400 italic">Please select a payment method above.</p>}
                     </div>
-                  </div>
+                  </section>
 
-                  {/* Payment Type (Full vs Partial) */}
-                  <div className="bg-white rounded-lg border border-stone-200 p-6">
-                    <h3 className="font-serif text-xl text-teal-950 mb-4">Payment Schedule</h3>
-                    
-                    <button 
-                      onClick={() => setPaymentType('full')}
-                      className={`w-full text-left p-4 border rounded-sm mb-3 flex justify-between items-center transition-all ${paymentType === 'full' ? 'border-teal-600 bg-teal-50' : 'border-stone-200'}`}
-                    >
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-teal-900">Pay Full Amount</span>
-                          <span className="bg-teal-200 text-teal-900 text-[10px] uppercase font-bold px-2 py-0.5 rounded-full">Best Value</span>
+                  {/* Payment Type */}
+                  <section>
+                    <h3 className="font-serif text-lg mb-6 italic text-stone-600">Payment Schedule</h3>
+                    <div className="space-y-4">
+                      <button 
+                        onClick={() => setPaymentType('full')}
+                        className={`w-full flex justify-between items-center p-6 border transition-all ${paymentType === 'full' ? 'border-stone-900 bg-stone-50' : 'border-stone-200 bg-white hover:border-stone-400'}`}
+                      >
+                        <span className="text-xs uppercase tracking-widest">Settle in Full</span>
+                        <span className="font-serif text-lg">{formatCurrency(bookingDetails.total)}</span>
+                      </button>
+                      <button 
+                        onClick={() => setPaymentType('partial')}
+                        className={`w-full flex justify-between items-center p-6 border transition-all ${paymentType === 'partial' ? 'border-stone-900 bg-stone-50' : 'border-stone-200 bg-white hover:border-stone-400'}`}
+                      >
+                        <div className="text-left">
+                          <span className="block text-xs uppercase tracking-widest mb-1">50% Deposit</span>
+                          <span className="block text-[10px] text-stone-500">Balance due by {partialPayment.dueDate}</span>
                         </div>
-                        <p className="text-sm text-stone-500">Settle the entire bill today.</p>
-                      </div>
-                      <span className="text-lg font-bold text-teal-900">{formatCurrency(bookingDetails.total)}</span>
-                    </button>
+                        <span className="font-serif text-lg">{formatCurrency(partialPayment.now)}</span>
+                      </button>
+                    </div>
+                  </section>
 
-                    <button 
-                      onClick={() => setPaymentType('partial')}
-                      className={`w-full text-left p-4 border rounded-sm flex justify-between items-center transition-all ${paymentType === 'partial' ? 'border-amber-500 bg-amber-50' : 'border-stone-200'}`}
-                    >
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-stone-900">Pay 50% Deposit</span>
-                          <FaTag className="text-amber-500 text-sm" />
-                        </div>
-                        <p className="text-sm text-stone-500">Pay {formatCurrency(partialPayment.later)} by {partialPayment.dueDate}</p>
-                      </div>
-                      <span className="text-lg font-bold text-stone-900">{formatCurrency(partialPayment.now)}</span>
+                  {/* Actions */}
+                  <div className="flex justify-between items-center pt-8 border-t border-stone-200">
+                    <button onClick={() => setCurrentStep(1)} className="text-xs uppercase tracking-widest text-stone-400 hover:text-stone-900">
+                      Back
                     </button>
-                  </div>
-
-                  <div className="flex justify-between pt-4">
-                    <button onClick={() => setCurrentStep(1)} className="text-stone-500 underline text-sm">Back to Login</button>
                     <button 
-                      onClick={() => setCurrentStep(3)} 
-                      disabled={!selectedPaymentMethod}
-                      className="px-8 py-3 bg-teal-950 text-white uppercase text-xs font-bold tracking-widest hover:bg-teal-900 disabled:opacity-50 transition-colors"
+                      onClick={selectedPaymentMethod === 'mpesa' ? handleSendStkPush : completeBooking}
+                      disabled={isLoading || !selectedPaymentMethod}
+                      className="bg-stone-900 text-white px-10 py-4 text-xs uppercase tracking-[0.2em] hover:bg-black disabled:bg-stone-200 disabled:text-stone-400 transition-all shadow-lg"
                     >
-                      Review Booking
+                      {isLoading ? "PROCESSING..." : `PAY ${formatCurrency(paymentType === 'full' ? bookingDetails.total : partialPayment.now)}`}
                     </button>
                   </div>
                 </motion.div>
               )}
 
-              {/* STEP 3: REVIEW & CONFIRM */}
+              {/* STEP 3: CONFIRMATION */}
               {currentStep === 3 && (
                 <motion.div 
                   key="step3"
-                  initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                  className="space-y-6"
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                  className="bg-white border border-stone-200 p-16 text-center shadow-lg"
                 >
-                  <div className="bg-white rounded-lg border border-stone-200 p-6">
-                    <h3 className="font-serif text-xl text-teal-950 mb-6">Final Review</h3>
-                    
-                    {/* User Summary */}
-                    <div className="flex items-center gap-4 mb-6 pb-6 border-b border-stone-100">
-                      <div className="w-12 h-12 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center font-bold text-xl">
-                        {user?.name?.charAt(0) || 'G'}
-                      </div>
-                      <div>
-                        <p className="font-bold text-stone-900">Booking for {user?.name || 'Guest'}</p>
-                        <p className="text-sm text-stone-500">{user?.email || 'guest@example.com'}</p>
-                      </div>
-                    </div>
+                  <h2 className="font-serif text-4xl italic text-stone-900 mb-6">Reservation Confirmed</h2>
+                  <div className="w-16 h-px bg-stone-300 mx-auto mb-6"></div>
+                  <p className="text-stone-500 font-serif text-lg mb-10 max-w-md mx-auto">
+                    We have secured your stay at <span className="text-stone-900">{property?.title}</span>. A detailed itinerary has been sent to {user?.email}.
+                  </p>
+                  
+                  <div className="grid grid-cols-2 gap-px bg-stone-200 border border-stone-200 max-w-sm mx-auto mb-10">
+                     <div className="bg-stone-50 p-4">
+                        <p className="text-[10px] uppercase tracking-widest text-stone-500 mb-1">Ref No.</p>
+                        <p className="font-serif text-stone-900">BK-{Math.floor(Math.random()*10000)}</p>
+                     </div>
+                     <div className="bg-stone-50 p-4">
+                        <p className="text-[10px] uppercase tracking-widest text-stone-500 mb-1">Paid</p>
+                        <p className="font-serif text-stone-900">{formatCurrency(paymentType === 'full' ? bookingDetails.total : partialPayment.now)}</p>
+                     </div>
+                  </div>
 
-                    {/* Message to Host */}
-                    <div className="mb-6">
-                      <label className="block text-sm font-bold text-stone-700 mb-2">Message to Host (Optional)</label>
-                      <textarea 
-                        className="w-full p-4 bg-stone-50 border border-stone-200 rounded-sm text-sm"
-                        placeholder="Share your arrival time or special requests..."
-                        rows="3"
-                        value={messageToHost}
-                        onChange={e => setMessageToHost(e.target.value)}
-                      ></textarea>
-                    </div>
-
-                    {/* Breakdown */}
-                    <div className="bg-stone-50 p-4 rounded-sm space-y-2 mb-6">
-                      <div className="flex justify-between text-sm text-stone-600">
-                        <span>Payment Method</span>
-                        <span className="font-bold capitalize">{selectedPaymentMethod}</span>
-                      </div>
-                      <div className="flex justify-between text-sm text-stone-600">
-                        <span>Payment Type</span>
-                        <span className="font-bold capitalize">{paymentType}</span>
-                      </div>
-                      <div className="border-t border-stone-200 pt-2 flex justify-between items-center mt-2">
-                        <span className="font-bold text-teal-950">Due Now</span>
-                        <span className="text-2xl font-serif text-teal-900">
-                          {formatCurrency(paymentType === 'full' ? bookingDetails.total : partialPayment.now)}
-                        </span>
-                      </div>
-                    </div>
-
-                    <button 
-                      onClick={completeBooking}
-                      disabled={isLoading}
-                      className="w-full py-4 bg-gradient-to-r from-teal-800 to-teal-950 text-white uppercase tracking-widest font-bold shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2"
-                    >
-                      {isLoading ? <FaSpinner className="animate-spin" /> : <><FaLock /> Confirm & Pay</>}
-                    </button>
+                  <div className="flex justify-center gap-6">
+                    <Link to="/my-bookings" className="border-b border-stone-900 pb-1 text-xs uppercase tracking-widest text-stone-900 hover:opacity-70">
+                      View Bookings
+                    </Link>
+                    <Link to="/" className="border-b border-transparent pb-1 text-xs uppercase tracking-widest text-stone-400 hover:text-stone-600">
+                      Return Home
+                    </Link>
                   </div>
                 </motion.div>
               )}
+
             </AnimatePresence>
           </div>
 
-          {/* RIGHT COLUMN: STICKY SUMMARY */}
-          <div className="lg:col-span-1">
-            <div className="sticky top-24">
-              <div className="bg-white rounded-lg shadow-2xl shadow-stone-200/50 border border-stone-100 overflow-hidden">
-                {/* Image */}
-                <div className="relative h-48">
-                  <img src={property?.image} alt={property?.title} className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                  <div className="absolute bottom-4 left-4 text-white">
-                    <h4 className="font-serif text-lg leading-tight line-clamp-2">{property?.title}</h4>
-                    <p className="text-xs opacity-90 mt-1 flex items-center gap-1"><FaMapMarkerAlt /> {property?.location}</p>
-                  </div>
-                </div>
-
-                {/* Details */}
-                <div className="p-6 space-y-4">
-                  <div className="flex justify-between text-sm border-b border-stone-100 pb-4">
-                    <div className="text-stone-500">
-                      <p className="uppercase text-[10px] tracking-widest mb-1">Check In</p>
-                      <p className="font-bold text-stone-800">{new Date(bookingDetails.checkIn).toLocaleDateString()}</p>
-                    </div>
-                    <div className="text-right text-stone-500">
-                      <p className="uppercase text-[10px] tracking-widest mb-1">Check Out</p>
-                      <p className="font-bold text-stone-800">{new Date(bookingDetails.checkOut).toLocaleDateString()}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-between text-sm text-stone-600">
-                    <span>{bookingDetails.nights} Nights × {formatCurrency(property?.price)}</span>
-                    <span>{formatCurrency(property?.price * bookingDetails.nights)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm text-stone-600">
-                    <span>Service Fee</span>
-                    <span>{formatCurrency(2500)}</span>
-                  </div>
-
-                  <div className="border-t border-stone-200 pt-4 flex justify-between items-center">
-                    <span className="font-bold text-stone-900">Total</span>
-                    <span className="font-bold text-xl text-teal-900">{formatCurrency(bookingDetails.total)}</span>
-                  </div>
-                </div>
-
-                {/* Trust Footer */}
-                <div className="bg-stone-50 p-4 text-center border-t border-stone-100">
-                  <p className="text-xs text-stone-400 flex items-center justify-center gap-2">
-                    <FaShieldAlt /> 100% Secure Payment Process
-                  </p>
-                </div>
+          {/* RIGHT COLUMN: SUMMARY */}
+          <div className="lg:col-span-5 relative">
+            <div className="sticky top-32 bg-white border border-stone-200 shadow-xl shadow-stone-200/50">
+              
+              {/* Image with No Gradient - Just Pure Image */}
+              <div className="h-64 overflow-hidden relative border-b border-stone-100">
+                 <img 
+                  src={property?.images?.[0] || "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800"} 
+                  alt="Property" 
+                  className="w-full h-full object-cover opacity-90 hover:scale-105 transition-transform duration-1000"
+                />
               </div>
 
-              {/* Chat Support Card */}
-              <div className="mt-6 bg-white rounded-lg border border-stone-200 p-6 shadow-lg">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-r from-teal-500 to-teal-600 flex items-center justify-center">
-                    <FaCommentDots className="text-white text-xl" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-teal-900">Payment Support</h3>
-                    <p className="text-sm text-gray-600">Questions about your payment?</p>
-                  </div>
-                </div>
-                
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-sm text-teal-700">
-                    <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                    <span>Online support available</span>
-                  </div>
-                  
-                  <button
-                    onClick={() => setShowChat(true)}
-                    className="w-full bg-teal-50 text-teal-700 py-3 rounded-lg font-medium hover:bg-teal-100 transition-colors flex items-center justify-center gap-2 border border-teal-200"
-                  >
-                    <FaCommentDots />
-                    Chat with Support
-                  </button>
+              <div className="p-8">
+                <h2 className="font-serif text-2xl text-stone-900 mb-1">{property?.title || "Luxury Villa"}</h2>
+                <p className="text-xs uppercase tracking-widest text-stone-400 mb-8">{property?.location || "Nairobi, Kenya"}</p>
 
-                  <div className="text-center">
-                    <p className="text-xs text-gray-500">Or call: +254 700 123 456</p>
-                  </div>
+                <div className="space-y-6">
+                   {/* Dates */}
+                   <div className="flex justify-between items-baseline border-b border-stone-100 pb-4">
+                      <span className="text-[10px] uppercase tracking-widest text-stone-500">Dates</span>
+                      <div className="text-right">
+                         <span className="block font-serif text-stone-900">
+                            {new Date(bookingDetails.checkIn).toLocaleDateString(undefined, {month:'short', day:'numeric'})} — {new Date(bookingDetails.checkOut).toLocaleDateString(undefined, {month:'short', day:'numeric'})}
+                         </span>
+                         <span className="text-[10px] text-stone-400">{bookingDetails.nights} Nights</span>
+                      </div>
+                   </div>
+
+                   {/* Guests */}
+                   <div className="flex justify-between items-baseline border-b border-stone-100 pb-4">
+                      <span className="text-[10px] uppercase tracking-widest text-stone-500">Guests</span>
+                      <span className="font-serif text-stone-900">{bookingDetails.guests.adults} Adults, {bookingDetails.guests.children} Children</span>
+                   </div>
+
+                   {/* Pricing */}
+                   <div className="pt-2 space-y-2 text-sm text-stone-600 font-serif">
+                      <div className="flex justify-between">
+                         <span>Accommodation</span>
+                         <span>{formatCurrency(bookingDetails.baseAmount)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                         <span>Cleaning & Service</span>
+                         <span>{formatCurrency(bookingDetails.cleaningFee + bookingDetails.serviceFee)}</span>
+                      </div>
+                   </div>
+
+                   {/* Total */}
+                   <div className="pt-6 border-t border-stone-900 flex justify-between items-center">
+                      <span className="text-xs uppercase tracking-widest text-stone-900 font-bold">Total Due</span>
+                      <span className="font-serif text-2xl text-stone-900 italic">{formatCurrency(bookingDetails.total)}</span>
+                   </div>
+                </div>
+
+                <div className="mt-8 pt-6 border-t border-stone-100 text-center">
+                  <span className="text-[10px] uppercase tracking-widest text-stone-400">
+                     Secure Encrypted Transaction
+                  </span>
                 </div>
               </div>
             </div>

@@ -13,21 +13,30 @@ export const AuthProvider = ({ children }) => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Check for stored user on initial load
+    // Check for stored user and token on initial load
     const storedUser = localStorage.getItem('user');
-    if (storedUser) {
+    const token = localStorage.getItem('token');
+    
+    if (storedUser && token) {
+      // Token will be automatically added to requests via axios interceptor
       setUser(JSON.parse(storedUser));
     }
+    
     setLoading(false);
   }, []);
 
   const login = async (credentials) => {
     try {
-      const response = await api.auth.login(credentials);
-      const userData = response.data;
+      const response = await api.auth.login(credentials.email, credentials.password);
+      const { user: userData, token } = response.data;
+      
+      // Store both user data and token
       localStorage.setItem('user', JSON.stringify(userData));
+      localStorage.setItem('token', token);
+      
+      // Token will be automatically added to requests via axios interceptor
       setUser(userData);
-      return userData;
+      return { user: userData, token };
     } catch (error) {
       throw error;
     }
@@ -36,22 +45,39 @@ export const AuthProvider = ({ children }) => {
   const signup = async (userData) => {
     try {
       const response = await api.auth.register(userData);
-      const newUser = response.data;
+      const { user: newUser, token } = response.data;
+      
       localStorage.setItem('user', JSON.stringify(newUser));
+      localStorage.setItem('token', token);
+      
+      // Token will be automatically added to requests via axios interceptor
       setUser(newUser);
-      return newUser;
+      return { user: newUser, token };
     } catch (error) {
       throw error;
     }
   };
 
   const logout = () => {
+    // Clear all auth-related data
     localStorage.removeItem('user');
+    localStorage.removeItem('token');
+    
     setUser(null);
     navigate('/');
   };
 
-  const isAuthenticated = !!user;
+  const updateUser = (updatedUserData) => {
+    const currentUser = { ...user, ...updatedUserData };
+    localStorage.setItem('user', JSON.stringify(currentUser));
+    setUser(currentUser);
+  };
+
+  const getToken = () => {
+    return localStorage.getItem('token');
+  };
+
+  const isAuthenticated = !!user && !!localStorage.getItem('token');
 
   return (
     <AuthContext.Provider value={{
@@ -59,6 +85,8 @@ export const AuthProvider = ({ children }) => {
       login,
       signup,
       logout,
+      updateUser,
+      getToken,
       isAuthenticated,
       loading
     }}>
