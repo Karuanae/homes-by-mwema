@@ -112,12 +112,29 @@ export default function Home() {
     { id: 3, number: "III", title: "Curated Design", description: "Interiors selected for their aesthetic value and comfort." }
   ];
 
-  const testimonials = [
-    { id: 1, name: "Sarah J.", location: "London", content: "The attention to detail was exceptional. A truly refined experience.", rating: "5.0" },
-    { id: 2, name: "Michael C.", location: "Singapore", content: "Perfect for business. The Executive Studio exceeded expectations.", rating: "5.0" },
-    { id: 3, name: "Emma W.", location: "New York", content: "Spacious, clean, and perfectly located. We will be returning.", rating: "4.9" }
-  ];
-
+const testimonials = [
+  { 
+    id: 1, 
+    name: "Amina K.", 
+    location: "Mombasa", 
+    content: "Capital Rise 2-Bedroom offered the perfect blend of modern luxury and authentic Kenyan hospitality. Truly exceptional.", 
+    rating: "5.0" 
+  },
+  { 
+    id: 2, 
+    name: "James M.", 
+    location: "Nairobi", 
+    content: "The 2-bedroom in Kilimani was ideal for business hosting. Central, luxurious, and impressed all our international guests.", 
+    rating: "5.0" 
+  },
+  { 
+    id: 3, 
+    name: "Lilian W.", 
+    location: "Kisumu", 
+    content: "Our stay at the house in Langata was magical. Spacious, serene, and perfect for our family retreat to Nairobi.", 
+    rating: "4.9" 
+  }
+];
   const faqData = [
     { id: 1, question: "Cancellation Policy", answer: "Cancel up to 24 hours before check-in for a full refund. Specific policies are detailed on each booking page." },
     { id: 2, question: "Check-in Process", answer: "You will receive secure access codes and detailed directions upon confirmation. We offer seamless self check-in." },
