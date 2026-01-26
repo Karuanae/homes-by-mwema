@@ -144,17 +144,15 @@ export default function Home() {
     const fetchProperties = async () => {
       try {
         setLoading(true);
+        setError(null);
+        console.log('Fetching properties from API...');
         const res = await api.properties.getAll();
-        setProperties(res.data);
+        console.log('Properties response:', res.data);
+        setProperties(res.data || []);
       } catch (error) {
         console.error('Error fetching properties:', error);
-        setError('Unable to load residences');
-        // Fallback for demo
-        setProperties([
-            { id: 1, name: "The Highland Villa", location: "Kileleshwa", price: 15000, tag: "Signature", images: ["https://images.unsplash.com/photo-1600596542815-60c37c6525fa"] },
-            { id: 2, name: "Azure Apartment", location: "Kilimani", price: 8500, tag: "New", images: ["https://images.unsplash.com/photo-1600607687939-ce8a6c25118c"] },
-            { id: 3, name: "The Loft", location: "Westlands", price: 12000, images: ["https://images.unsplash.com/photo-1600210492486-724fe5c67fb0"] },
-        ]); 
+        console.error('Error details:', error.response?.data || error.message);
+        setError('Unable to load residences. Please check if the server is running.');
       } finally {
         setLoading(false);
       }
@@ -373,10 +371,40 @@ export default function Home() {
       {/* ================= PROPERTIES COLLECTION (MOVED BELOW MARQUEE) ================= */}
       <section className="py-24 px-6 relative z-10 bg-white">
         <div className="max-w-[1400px] mx-auto">
-          <div className="flex flex-col md:flex-row justify-between items-end mb-16  pb-0">
+          <div className="flex flex-col justify-center items-center mb-16 pb-0">
+            <h2 className="text-3xl md:text-4xl text-stone-900 text-center" style={{ fontFamily: "'Playfair Display', serif" }}>Featured <span className="italic font-light text-stone-600">Properties</span></h2>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-12">
+          {/* Loading State */}
+          {loading && (
+            <div className="flex justify-center items-center py-20">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-stone-900"></div>
+            </div>
+          )}
+
+          {/* Error State */}
+          {error && !loading && (
+            <div className="text-center py-20">
+              <p className="text-stone-500 mb-4">{error}</p>
+              <button 
+                onClick={() => window.location.reload()} 
+                className="text-xs uppercase tracking-widest border-b border-stone-900 pb-1 hover:text-stone-600"
+              >
+                Try Again
+              </button>
+            </div>
+          )}
+
+          {/* Empty State */}
+          {!loading && !error && properties.length === 0 && (
+            <div className="text-center py-20">
+              <p className="text-stone-500 font-light">No residences available at the moment.</p>
+            </div>
+          )}
+
+          {/* Properties Grid */}
+          {!loading && !error && properties.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-12">
             {properties.slice(0, visibleProperties).map((property, idx) => (
               <Link to={`/booking/${property.id}`} key={property.id || idx} className="group block">
                 <div className="relative aspect-[3/4] overflow-hidden bg-stone-100 mb-4 cursor-none">
@@ -410,10 +438,11 @@ export default function Home() {
                 </div>
               </Link>
             ))}
-          </div>
+            </div>
+          )}
 
-          {visibleProperties < properties.length && (
-            <div className="mt-16 text-center md:hidden">
+          {!loading && !error && visibleProperties < properties.length && (
+            <div className="mt-16 text-center">
               <button onClick={() => setVisibleProperties(p => p + 4)} className="text-xs uppercase tracking-widest border-b border-stone-900 pb-1">
                 Load More
               </button>
@@ -508,7 +537,7 @@ export default function Home() {
 
       {/* ================= CTA FOOTER ================= */}
       <section className="py-20 bg-stone-900 text-[#f5f2ee] text-center px-6">
-        <h2 className="text-4xl md:text-6xl font-serif mb-6">Ready to Arrive?</h2>
+        <h2 className="text-4xl md:text-6xl font-serif mb-6">Ready to Book?</h2>
         <p className="text-stone-400 max-w-lg mx-auto mb-10 font-light">Experience the finest homes Kenya has to offer. Book your sanctuary today.</p>
         <div className="flex justify-center gap-6">
            <button className="px-8 py-3 bg-[#f5f2ee] text-stone-900 text-xs uppercase tracking-widest font-bold hover:bg-white transition-colors">Book Now</button>
