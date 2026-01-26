@@ -17,10 +17,10 @@ const LuxuryCarousel = ({ slides }) => {
   }, []);
 
   return (
-    <div className="relative w-full h-[500px] perspective-1000 flex items-center justify-center overflow-visible">
+    <div className="relative w-full h-[450px] perspective-1000 flex items-center justify-center overflow-visible">
        {/* 3D Scene Container */}
       <motion.div
-        className="relative w-[280px] h-[400px] preserve-3d transition-transform duration-1000 ease-in-out"
+        className="relative w-[260px] h-[360px] preserve-3d transition-transform duration-1000 ease-in-out"
         style={{ 
           transformStyle: "preserve-3d",
           transform: `rotateY(${rotation}deg)` 
@@ -35,8 +35,8 @@ const LuxuryCarousel = ({ slides }) => {
               key={slide.id}
               className="absolute inset-0 backface-hidden"
               style={{
-                // push items out by 350px (radius)
-                transform: `rotateY(${angle}deg) translateZ(350px)`,
+                // push items out by 320px (radius)
+                transform: `rotateY(${angle}deg) translateZ(320px)`,
                 transformStyle: "preserve-3d",
               }}
             >
@@ -198,7 +198,7 @@ export default function Home() {
       <div className="bg-noise" />
 
       {/* ================= HERO SECTION ================= */}
-      <div className="relative min-h-screen w-full flex flex-col pt-32 pb-12 px-6 lg:px-16 z-20">
+      <div className="relative min-h-screen w-full flex flex-col pt-32 pb-0 px-6 lg:px-16 z-20">
         
         {/* Background Gradient */}
         <div className="absolute inset-0 bg-gradient-to-b from-[#f7f5f2] to-[#ebe5de] -z-20" />
@@ -347,7 +347,7 @@ export default function Home() {
           </div>
 
           {/* Right: 3D Carousel */}
-          <div className="relative order-1 lg:order-2 h-[500px] flex items-center justify-center">
+          <div className="relative order-1 lg:order-2 h-[450px] flex items-center justify-center">
              <LuxuryCarousel slides={carouselSlides} />
           </div>
 
@@ -355,7 +355,7 @@ export default function Home() {
       </div>
 
       {/* ================= MARQUEE STRIP ================= */}
-      <div className="w-full bg-stone-900 text-stone-400 overflow-hidden py-3 border-y border-stone-800">
+      <div className="w-full bg-stone-900 text-stone-400 overflow-hidden py-3 border-y border-stone-800 mt-0">
         <div className="whitespace-nowrap animate-marquee flex gap-12 text-xs font-medium tracking-[0.2em] uppercase">
           {/* Repeated items for infinite scroll effect */}
           {Array(10).fill("Concierge • Privacy • Luxury • Comfort • Design • ").map((text, i) => (
