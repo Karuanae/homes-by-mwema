@@ -1,7 +1,76 @@
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useAnimation, useMotionValue, useTransform } from "framer-motion";
 import { useState, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
 import api from "../services/api";
+
+// --- SUB-COMPONENT: 3D LUXURY CAROUSEL ---
+const LuxuryCarousel = ({ slides }) => {
+  const [rotation, setRotation] = useState(0);
+  const containerRef = useRef(null);
+  
+  // Auto-rotate logic
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setRotation(prev => prev - 72); // 360 / 5 slides = 72 degrees
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="relative w-full h-[500px] perspective-1000 flex items-center justify-center overflow-visible">
+       {/* 3D Scene Container */}
+      <motion.div
+        className="relative w-[280px] h-[400px] preserve-3d transition-transform duration-1000 ease-in-out"
+        style={{ 
+          transformStyle: "preserve-3d",
+          transform: `rotateY(${rotation}deg)` 
+        }}
+      >
+        {slides.map((slide, index) => {
+          // Calculate the angle for this specific slide
+          const angle = index * (360 / slides.length);
+          
+          return (
+            <div
+              key={slide.id}
+              className="absolute inset-0 backface-hidden"
+              style={{
+                // push items out by 350px (radius)
+                transform: `rotateY(${angle}deg) translateZ(350px)`,
+                transformStyle: "preserve-3d",
+              }}
+            >
+              {/* Card Content */}
+              <div className="w-full h-full bg-stone-200 rounded-sm overflow-hidden shadow-2xl relative group">
+                <img 
+                  src={slide.bgImage} 
+                  alt={slide.title}
+                  className="w-full h-full object-cover filter brightness-90 group-hover:brightness-110 transition-all duration-500"
+                />
+                
+                {/* Overlay Text - Only visible when facing roughly front? 
+                    Actually, let's keep it visible but subtle 
+                */}
+                <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/80 to-transparent text-white">
+                  <p className="text-[10px] tracking-[0.3em] uppercase opacity-80 mb-1">{slide.subtitle}</p>
+                  <h3 className="font-serif text-2xl leading-none">{slide.title}</h3>
+                </div>
+
+                {/* Number Badge */}
+                <div className="absolute top-4 right-4 w-10 h-10 border border-white/30 rounded-full flex items-center justify-center backdrop-blur-sm">
+                  <span className="font-serif text-white text-sm">{slide.number}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </motion.div>
+      
+      {/* Floor Shadow for realism */}
+      <div className="absolute bottom-10 w-[200px] h-[20px] bg-black/20 blur-xl rounded-[100%]" />
+    </div>
+  );
+};
 
 export default function Home() {
   /* ================= DATE & LOGIC STATE ================= */
@@ -14,13 +83,11 @@ export default function Home() {
   const [showCalendar, setShowCalendar] = useState(false);
   const [showRooms, setShowRooms] = useState(false);
   const [showGuests, setShowGuests] = useState(false);
-  const [currentSlide, setCurrentSlide] = useState(0);
-  const [carouselRotation, setCarouselRotation] = useState(0);
   
   // Selections
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
-  const [roomType, setRoomType] = useState("Any");
+  const [roomType, setRoomType] = useState("Rooms");
   const [guests, setGuests] = useState({ adults: 1, children: 0, infants: 0 });
   const [visibleProperties, setVisibleProperties] = useState(8);
   const [openFaq, setOpenFaq] = useState(null);
@@ -30,119 +97,39 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Airbnb-style houses for carousel
-  const carouselSlides = [
-    {
-      id: 1,
-      title: "Modern Villa",
-      subtitle: "NAIROBI HILLS",
-      description: "Contemporary design meets ultimate comfort in this stunning hillside retreat",
-      number: "01",
-      bgImage: "https://images.unsplash.com/photo-1613490493576-7fde63acd811?ixlib=rb-4.0.3&auto=format&fit=crop&w=2071&q=80"
-    },
-    {
-      id: 2,
-      title: "Beachfront House",
-      subtitle: "DIANI BEACH",
-      description: "Direct beach access with panoramic ocean views and private pool",
-      number: "02",
-      bgImage: "https://images.unsplash.com/photo-1566073771259-6a8506099945?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80"
-    },
-    {
-      id: 3,
-      title: "Luxury Apartment",
-      subtitle: "WESTLANDS",
-      description: "Skyline views from a sophisticated penthouse in the city center",
-      number: "03",
-      bgImage: "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80"
-    },
-    {
-      id: 4,
-      title: "Country Cottage",
-      subtitle: "NAIVASHA",
-      description: "Peaceful countryside escape with fireplace and lake views",
-      number: "04",
-      bgImage: "https://images.unsplash.com/photo-1518780664697-55e3ad937233?ixlib=rb-4.0.3&auto=format&fit=crop&w=2065&q=80"
-    },
-    {
-      id: 5,
-      title: "Safari Lodge",
-      subtitle: "MAASAI MARA",
-      description: "Authentic wildlife experience with luxury tent accommodations",
-      number: "05",
-      bgImage: "https://images.unsplash.com/photo-1590490360182-c33d57733427?ixlib=rb-4.0.3&auto=format&fit=crop&w=2074&q=80"
-    }
-  ];
-
-  // Data Logic
-  const premiumFeatures = [
-    {
-      id: 1,
-      number: "01",
-      title: "Certified Excellence",
-      description: "Every home is verified for exceptional quality and comfort standards."
-    },
-    {
-      id: 2,
-      number: "02",
-      title: "Guest Favorite",
-      description: "The most loved homes on our platform with consistently high ratings."
-    },
-    {
-      id: 3,
-      number: "03",
-      title: "Elite Curated",
-      description: "A hand-picked collection of homes designed for the sophisticated traveler."
-    }
-  ];
-
-  const testimonials = [
-    {
-      id: 1,
-      name: "Sarah Johnson",
-      location: "London, UK",
-      content: "The Ocean Breeze villa exceeded all expectations. The attention to detail was exceptional.",
-      rating: "5.0"
-    },
-    {
-      id: 2,
-      name: "Michael Chen",
-      location: "Singapore",
-      content: "Perfect stay for my business trip. The Executive Studio had everything I needed.",
-      rating: "5.0"
-    },
-    {
-      id: 3,
-      name: "Emma Wilson",
-      location: "New York, USA",
-      content: "Our family loved the Townhouse. Spacious, clean, and perfectly located.",
-      rating: "4.9"
-    }
-  ];
-
-  const faqData = [
-    {
-      id: 1,
-      question: "Cancellation Policy",
-      answer: "Cancel up to 24 hours before check-in for a full refund. Specific policies are detailed on each booking page."
-    },
-    {
-      id: 2,
-      question: "Check-in Process",
-      answer: "You will receive secure access codes and detailed directions upon confirmation. We offer seamless self check-in."
-    },
-    {
-      id: 3,
-      question: "Amenities Included",
-      answer: "All stays include high-speed WiFi, premium linens, toiletries, and fully equipped kitchens."
-    }
-  ];
-
-  // Refs & Click Outside
+  // Refs
   const calendarRef = useRef(null);
   const roomsRef = useRef(null);
   const guestsRef = useRef(null);
 
+  // Data Definitions
+  const carouselSlides = [
+    { id: 1, title: "Capital Rise", subtitle: "KILIMANI", number: "01", bgImage: "./Capital3main.jpg" },
+    { id: 2, title: "Eva Studio", subtitle: "LUMUMBA DRIVE", number: "02", bgImage: "./EvaStudio.jpg" },
+    { id: 3, title: "Uhuru Gardens", subtitle: "LANG'ATA", number: "03", bgImage: "./Langata2.jpg" },
+    { id: 4, title: "Capital Rise", subtitle: "KILIMANI", number: "04", bgImage: "./Capital2.jpeg" },
+    { id: 5, title: "Welcome", subtitle: "Nairobi", number: "05", bgImage: "./Logo.jpeg" },
+  ];
+
+  const premiumFeatures = [
+    { id: 1, number: "I", title: "Verified Excellence", description: "Every residence is physically inspected for 150+ quality points." },
+    { id: 2, number: "II", title: "Personal Concierge", description: "Dedicated support from booking to checkout for seamless travel." },
+    { id: 3, number: "III", title: "Curated Design", description: "Interiors selected for their aesthetic value and comfort." }
+  ];
+
+  const testimonials = [
+    { id: 1, name: "Sarah J.", location: "London", content: "The attention to detail was exceptional. A truly refined experience.", rating: "5.0" },
+    { id: 2, name: "Michael C.", location: "Singapore", content: "Perfect for business. The Executive Studio exceeded expectations.", rating: "5.0" },
+    { id: 3, name: "Emma W.", location: "New York", content: "Spacious, clean, and perfectly located. We will be returning.", rating: "4.9" }
+  ];
+
+  const faqData = [
+    { id: 1, question: "Cancellation Policy", answer: "Cancel up to 24 hours before check-in for a full refund. Specific policies are detailed on each booking page." },
+    { id: 2, question: "Check-in Process", answer: "You will receive secure access codes and detailed directions upon confirmation. We offer seamless self check-in." },
+    { id: 3, question: "Amenities Included", answer: "All stays include high-speed WiFi, premium linens, toiletries, and fully equipped kitchens." }
+  ];
+
+  // Lifecycle & Handlers
   useEffect(() => {
     function handleClickOutside(e) {
       if (calendarRef.current && !calendarRef.current.contains(e.target)) setShowCalendar(false);
@@ -153,26 +140,21 @@ export default function Home() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Auto-rotate carousel
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % carouselSlides.length);
-      setCarouselRotation((prev) => prev - 360 / carouselSlides.length);
-    }, 4000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Fetch Properties
   useEffect(() => {
     const fetchProperties = async () => {
       try {
         setLoading(true);
-        const propertiesResponse = await api.properties.getAll();
-        setProperties(propertiesResponse.data);
+        const res = await api.properties.getAll();
+        setProperties(res.data);
       } catch (error) {
         console.error('Error fetching properties:', error);
         setError('Unable to load residences');
-        setProperties([]);
+        // Fallback for demo
+        setProperties([
+            { id: 1, name: "The Highland Villa", location: "Kileleshwa", price: 15000, tag: "Signature", images: ["https://images.unsplash.com/photo-1600596542815-60c37c6525fa"] },
+            { id: 2, name: "Azure Apartment", location: "Kilimani", price: 8500, tag: "New", images: ["https://images.unsplash.com/photo-1600607687939-ce8a6c25118c"] },
+            { id: 3, name: "The Loft", location: "Westlands", price: 12000, images: ["https://images.unsplash.com/photo-1600210492486-724fe5c67fb0"] },
+        ]); 
       } finally {
         setLoading(false);
       }
@@ -180,700 +162,367 @@ export default function Home() {
     fetchProperties();
   }, []);
 
-  // Helpers
   const handleDateSelect = (day) => {
     const dateStr = `${months[currentMonth]} ${day}`;
-    if (!startDate) {
-      setStartDate(dateStr);
-      setEndDate(null);
-    } else if (!endDate) {
-      if (new Date(dateStr) < new Date(startDate)) {
-        setEndDate(startDate);
-        setStartDate(dateStr);
-      } else {
-        setEndDate(dateStr);
-      }
-    } else {
-      setStartDate(dateStr);
-      setEndDate(null);
-    }
+    if (!startDate) { setStartDate(dateStr); setEndDate(null); }
+    else if (!endDate) {
+      if (new Date(dateStr) < new Date(startDate)) { setEndDate(startDate); setStartDate(dateStr); }
+      else { setEndDate(dateStr); }
+    } else { setStartDate(dateStr); setEndDate(null); }
   };
 
   const formatDateDisplay = () => {
     if (!startDate) return "Add dates";
-    if (!endDate) return `${startDate} – Checkout`;
+    if (!endDate) return `${startDate} – ...`;
     return `${startDate} – ${endDate}`;
   };
 
-  const showMoreProperties = () => {
-    setVisibleProperties(prev => Math.min(prev + 8, properties.length));
-  };
-
-  const handleCarouselNavigation = (index) => {
-    const diff = (index - currentSlide + carouselSlides.length) % carouselSlides.length;
-    const rotationChange = -(diff * (360 / carouselSlides.length));
-    setCurrentSlide(index);
-    setCarouselRotation(prev => prev + rotationChange);
-  };
-
-  // Calculate position for each carousel item in circle
-  const getCarouselItemPosition = (index) => {
-    const radius = 120; // Distance from center
-    const total = carouselSlides.length;
-    const angle = (360 / total) * index + carouselRotation;
-    const rad = (angle * Math.PI) / 180;
-    
-    const x = Math.cos(rad) * radius;
-    const y = Math.sin(rad) * radius;
-    
-    return { x, y };
-  };
-
   return (
-    <div className="bg-white font-sans text-stone-900">
+    <div className="bg-[#f5f2ee] font-sans text-stone-900 overflow-x-hidden selection:bg-stone-200">
       
-      {/* ================= HERO SECTION WITH IMAGE BACKGROUND ================= */}
-      <div className="relative min-h-screen w-full">
+      {/* GLOBAL STYLES FOR 3D */}
+      <style>{`
+        .perspective-1000 { perspective: 1000px; }
+        .preserve-3d { transform-style: preserve-3d; }
+        .backface-hidden { backface-visibility: hidden; }
+        /* Old Money Texture */
+        .bg-noise {
+          position: fixed;
+          top: 0; left: 0; width: 100%; height: 100%;
+          pointer-events: none;
+          z-index: 50;
+          opacity: 0.03;
+          background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        }
+      `}</style>
+
+      {/* NOISE OVERLAY */}
+      <div className="bg-noise" />
+
+      {/* ================= HERO SECTION ================= */}
+      <div className="relative min-h-screen w-full flex flex-col pt-32 pb-12 px-6 lg:px-16 z-20">
         
-        {/* Background Image with Overlay */}
-        <div className="absolute inset-0 z-0">
-          {/* Main gradient overlay - darker on the left */}
-          <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-black/20 z-10"></div>
-          {/* Additional gradient on the right side to fade out more */}
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-black/30 z-10"></div>
-          <img 
-            src="/Capital3main.jpg" 
-            alt="Luxury Interior" 
-            className="w-full h-full object-cover"
-          />
-        </div>
+        {/* Background Gradient */}
+        <div className="absolute inset-0 bg-gradient-to-b from-[#f7f5f2] to-[#ebe5de] -z-20" />
 
-        {/* Additional gradient overlay specifically for the right side where carousel is */}
-        <div className="absolute right-0 top-0 bottom-0 w-1/2 lg:w-2/5 bg-gradient-to-l from-black/50 via-black/30 to-transparent z-10"></div>
-
-        {/* Main Content - Aligned at bottom */}
-        <div className="relative z-30 flex flex-col lg:flex-row items-end justify-center min-h-screen px-4 md:px-4 pb-16 md:pb-24">
+        <div className="max-w-[1400px] mx-auto w-full grid grid-cols-1 lg:grid-cols-2 gap-12 items-center z-10">
           
-          {/* Left Content - Text and Search */}
-          <div className="lg:w-1/2 text-white mb-12 lg:mb-0 lg:pr-12 flex flex-col justify-end relative z-20">
+          {/* Left: Typography & Search */}
+          <div className="flex flex-col justify-center order-2 lg:order-1">
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 1, ease: "easeOut" }}
-              className="mb-10"
+              transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
             >
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-medium mb-4 md:mb-6 leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>
-                The Art of<br />Living
+              <span className="block text-xs font-bold tracking-[0.3em] text-stone-500 mb-4 uppercase pl-1">
+                Est. 2024 • Luxury Rentals
+              </span>
+              <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl text-stone-900 mb-8 leading-[0.9]" style={{ fontFamily: "'Playfair Display', serif" }}>
+                Homes By <br/>
+                <span className="italic font-light text-stone-600">Mwema.</span>
               </h1>
             </motion.div>
 
-            {/* ================= COMPACT SEARCH BAR ================= */}
-            <div className="relative z-[9999]">
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3, duration: 0.5 }}
-                className="bg-white/95 backdrop-blur-sm rounded-2xl p-4 max-w-xl shadow-2xl relative"
-              >
-                <div className="flex flex-col md:flex-row gap-3">
-                  {/* Dates */}
-                  <div 
-                    className="flex-1 border border-stone-200 hover:border-stone-400 rounded-lg p-3 cursor-pointer transition-colors bg-white relative min-w-0"
-                    onClick={() => setShowCalendar(!showCalendar)}
-                  >
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-stone-600 mb-1">Dates</div>
-                    <div className="text-stone-900 text-sm truncate">{formatDateDisplay()}</div>
-                  </div>
+            {/* FLOATING SEARCH BAR */}
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.2, duration: 0.6 }}
+              className="bg-white rounded-none shadow-[0_20px_40px_-15px_rgba(0,0,0,0.1)] border border-stone-100 p-2 max-w-xl"
+            >
+              <div className="flex flex-col sm:flex-row divide-y sm:divide-y-0 sm:divide-x divide-stone-100">
+                {/* Dates */}
+                <div 
+                  className="flex-1 p-4 hover:bg-stone-50 transition-colors cursor-pointer group relative"
+                  onClick={() => setShowCalendar(!showCalendar)}
+                >
+                  <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-bold mb-1 group-hover:text-stone-900">Check In - Out</label>
+                  <div className="text-stone-900 font-medium text-sm truncate">{formatDateDisplay()}</div>
+                  
+                  {/* Calendar Dropdown */}
+                  <AnimatePresence>
+                    {showCalendar && (
+                      <motion.div 
+                        ref={calendarRef}
+                        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
+                        className="absolute top-full left-0 mt-4 bg-white p-4 shadow-xl border border-stone-100 w-72 z-[9999]"
+                      >
+                         <div className="flex justify-between items-center mb-4">
+                            <button onClick={(e) => {e.stopPropagation(); setCurrentMonth(m => Math.max(0, m - 1))}} className="text-stone-400 hover:text-black">←</button>
+                            <span className="font-serif italic">{months[currentMonth]} {year}</span>
+                            <button onClick={(e) => {e.stopPropagation(); setCurrentMonth(m => Math.min(11, m + 1))}} className="text-stone-400 hover:text-black">→</button>
+                          </div>
+                          <div className="grid grid-cols-7 gap-1 text-center text-[10px] text-stone-400 mb-2">
+                            {["S","M","T","W","T","F","S"].map(d => <div key={d}>{d}</div>)}
+                          </div>
+                          <div className="grid grid-cols-7 gap-1">
+                            {Array.from({ length: getStartDay(currentMonth, year) }, (_, i) => <div key={`e-${i}`} />)}
+                            {Array.from({ length: getDaysInMonth(currentMonth, year) }, (_, i) => {
+                              const d = i + 1;
+                              const dateStr = `${months[currentMonth]} ${d}`;
+                              const isSel = dateStr === startDate || dateStr === endDate;
+                              return (
+                                <button key={i} onClick={(e) => {e.stopPropagation(); handleDateSelect(d);}}
+                                  className={`h-8 w-8 text-xs flex items-center justify-center transition-all ${isSel ? 'bg-stone-900 text-white' : 'hover:bg-stone-100'}`}>
+                                  {d}
+                                </button>
+                              );
+                            })}
+                          </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
 
-                  {/* Residence Type */}
-                  <div 
-                    className="flex-1 border border-stone-200 hover:border-stone-400 rounded-lg p-3 cursor-pointer transition-colors bg-white relative min-w-0"
-                    onClick={() => setShowRooms(!showRooms)}
-                  >
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-stone-600 mb-1">Residence</div>
-                    <div className="text-stone-900 text-sm truncate">{roomType}</div>
-                  </div>
+                {/* Residence Type */}
+                <div 
+                  className="flex-1 p-4 hover:bg-stone-50 transition-colors cursor-pointer group relative"
+                  onClick={() => setShowRooms(!showRooms)}
+                >
+                  <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-bold mb-1 group-hover:text-stone-900">Residence</label>
+                  <div className="text-stone-900 font-medium text-sm truncate">{roomType}</div>
+                  
+                  {/* Residence Dropdown */}
+                  <AnimatePresence>
+                    {showRooms && (
+                      <motion.div 
+                        ref={roomsRef}
+                        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
+                        className="absolute top-full left-0 mt-4 bg-white shadow-xl border border-stone-100 w-48 z-[9999]"
+                      >
+                        {["Studio", "1 Bedroom", "2 Bedroom", "3 Bedroom"].map((type) => (
+                          <button 
+                            key={type}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRoomType(type);
+                              setShowRooms(false);
+                            }}
+                            className={`w-full text-left px-4 py-3 text-sm hover:bg-stone-50 transition-colors ${roomType === type ? 'bg-stone-100 font-medium' : ''}`}
+                          >
+                            {type}
+                          </button>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
 
-                  {/* Guests */}
-                  <div 
-                    className="flex-1 border border-stone-200 hover:border-stone-400 rounded-lg p-3 cursor-pointer transition-colors bg-white relative min-w-0"
-                    onClick={() => setShowGuests(!showGuests)}
-                  >
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-stone-600 mb-1">Guests</div>
-                    <div className="text-stone-900 text-sm truncate">
-                      {guests.adults + guests.children} Guests
-                    </div>
-                  </div>
+                {/* Guests */}
+                <div 
+                  className="flex-1 p-4 hover:bg-stone-50 transition-colors cursor-pointer group relative"
+                  onClick={() => setShowGuests(!showGuests)}
+                >
+                  <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-bold mb-1 group-hover:text-stone-900">Guests</label>
+                  <div className="text-stone-900 font-medium text-sm">{guests.adults + guests.children > 1 ? `${guests.adults + guests.children} Travelers` : "Add guests"}</div>
+                  
+                  {/* Guests Dropdown */}
+                  <AnimatePresence>
+                    {showGuests && (
+                      <motion.div 
+                        ref={guestsRef}
+                        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
+                        className="absolute top-full left-0 mt-4 bg-white p-4 shadow-xl border border-stone-100 w-60 z-[9999]"
+                      >
+                         {/* Simple guest controls */}
+                         <div className="flex justify-between items-center py-2">
+                           <span className="text-sm">Adults</span>
+                           <div className="flex gap-3 items-center">
+                             <button onClick={(e)=>{e.stopPropagation(); setGuests(g=>({...g, adults:Math.max(1,g.adults-1)}))}} className="w-6 h-6 border flex items-center justify-center text-stone-500 hover:border-black">-</button>
+                             <span className="text-sm w-3 text-center">{guests.adults}</span>
+                             <button onClick={(e)=>{e.stopPropagation(); setGuests(g=>({...g, adults:g.adults+1}))}} className="w-6 h-6 border flex items-center justify-center text-stone-500 hover:border-black">+</button>
+                           </div>
+                         </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
 
-                  {/* Search Button */}
-                  <button className="bg-stone-900 hover:bg-stone-800 text-white rounded-lg p-3 font-medium text-sm tracking-wide transition-colors flex items-center justify-center min-w-[100px]">
-                    <span className="hidden md:inline">Search</span>
-                    <span className="md:hidden">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                      </svg>
-                    </span>
+                {/* Button */}
+                <div className="p-2 flex items-center">
+                  <button className="w-full h-full min-h-[44px] bg-stone-900 hover:bg-stone-800 text-white px-6 transition-colors flex items-center justify-center gap-2 group">
+                    <span className="text-xs uppercase tracking-widest font-medium">Search</span>
                   </button>
                 </div>
-
-                {/* Calendar Dropdown - Minimalistic */}
-                <AnimatePresence>
-                  {showCalendar && (
-                    <motion.div 
-                      initial={{ opacity: 0, y: 20 }} 
-                      animate={{ opacity: 1, y: 0 }} 
-                      exit={{ opacity: 0, y: 10 }}
-                      ref={calendarRef}
-                      className="fixed left-4 right-4 md:left-auto md:right-auto md:w-64 bg-white p-4 rounded-2xl shadow-2xl border border-stone-100 z-[10000]"
-                      style={{ top: 'auto', marginTop: '8px' }}
-                    >
-                      <div className="flex justify-between items-center mb-4">
-                        <button 
-                          onClick={(e) => {e.stopPropagation(); setCurrentMonth(m => Math.max(0, m - 1))}} 
-                          className="text-stone-400 hover:text-black px-2 text-sm"
-                        >
-                          ←
-                        </button>
-                        <span className="font-serif text-sm md:text-base">{months[currentMonth]} {year}</span>
-                        <button 
-                          onClick={(e) => {e.stopPropagation(); setCurrentMonth(m => Math.min(11, m + 1))}} 
-                          className="text-stone-400 hover:text-black px-2 text-sm"
-                        >
-                          →
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-7 gap-0.5 text-center text-xs text-stone-400 mb-2">
-                        {["S","M","T","W","T","F","S"].map(d => <div key={d}>{d}</div>)}
-                      </div>
-                      <div className="grid grid-cols-7 gap-0.5">
-                        {Array.from({ length: getStartDay(currentMonth, year) }, (_, i) => (
-                          <div key={`empty-${i}`} />
-                        ))}
-                        {Array.from({ length: getDaysInMonth(currentMonth, year) }, (_, i) => {
-                          const day = i + 1;
-                          const dateStr = `${months[currentMonth]} ${day}`;
-                          const isSelected = dateStr === startDate || dateStr === endDate;
-                          const isInRange = startDate && endDate && 
-                            new Date(dateStr) > new Date(startDate) && 
-                            new Date(dateStr) < new Date(endDate);
-                          
-                          return (
-                            <button 
-                              key={i} 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDateSelect(day);
-                              }}
-                              className={`h-7 w-7 md:h-8 md:w-8 rounded-full text-xs flex items-center justify-center transition-all
-                                ${isSelected ? 'bg-stone-900 text-white' : 
-                                  isInRange ? 'bg-stone-100' : 
-                                  'hover:bg-stone-100 text-stone-600'}
-                              `}
-                            >
-                              {day}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                {/* Rooms Dropdown - Minimalistic */}
-                <AnimatePresence>
-                  {showRooms && (
-                    <motion.div 
-                      initial={{ opacity: 0, y: 20 }} 
-                      animate={{ opacity: 1, y: 0 }} 
-                      exit={{ opacity: 0, y: 10 }}
-                      ref={roomsRef}
-                      className="fixed left-4 right-4 md:left-auto md:right-auto md:w-48 bg-white py-3 rounded-2xl shadow-2xl border border-stone-100 z-[10000]"
-                      style={{ top: 'auto', marginTop: '8px' }}
-                    >
-                      {["Any", "Studio", "1 Bed", "Penthouse", "Villa"].map((r) => (
-                        <button 
-                          key={r} 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setRoomType(r);
-                            setShowRooms(false);
-                          }}
-                          className="text-left px-4 md:px-5 py-2.5 hover:bg-stone-50 text-sm text-stone-600 hover:text-stone-900 transition-colors w-full text-left"
-                        >
-                          {r}
-                        </button>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                {/* Guests Dropdown - Minimalistic */}
-                <AnimatePresence>
-                  {showGuests && (
-                    <motion.div 
-                      initial={{ opacity: 0, y: 20 }} 
-                      animate={{ opacity: 1, y: 0 }} 
-                      exit={{ opacity: 0, y: 10 }}
-                      ref={guestsRef}
-                      className="fixed left-4 right-4 md:left-auto md:right-auto md:w-56 bg-white p-4 rounded-2xl shadow-2xl border border-stone-100 z-[10000]"
-                      style={{ top: 'auto', marginTop: '8px' }}
-                    >
-                      <div className="space-y-4">
-                        {/* Adults */}
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <div className="text-sm text-stone-900 font-medium">Adults</div>
-                            <div className="text-[11px] text-stone-500">13+</div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setGuests(g => ({...g, adults: Math.max(1, g.adults - 1)}));
-                              }}
-                              className="w-7 h-7 rounded-full border border-stone-300 flex items-center justify-center text-stone-500 hover:border-stone-900 hover:text-stone-900 transition-colors text-sm"
-                            >
-                              -
-                            </button>
-                            <span className="w-4 text-center text-sm text-stone-900">{guests.adults}</span>
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setGuests(g => ({...g, adults: g.adults + 1}));
-                              }}
-                              className="w-7 h-7 rounded-full border border-stone-300 flex items-center justify-center text-stone-500 hover:border-stone-900 hover:text-stone-900 transition-colors text-sm"
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Children */}
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <div className="text-sm text-stone-900 font-medium">Children</div>
-                            <div className="text-[11px] text-stone-500">2-12</div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setGuests(g => ({...g, children: Math.max(0, g.children - 1)}));
-                              }}
-                              className="w-7 h-7 rounded-full border border-stone-300 flex items-center justify-center text-stone-500 hover:border-stone-900 hover:text-stone-900 transition-colors text-sm"
-                            >
-                              -
-                            </button>
-                            <span className="w-4 text-center text-sm text-stone-900">{guests.children}</span>
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setGuests(g => ({...g, children: g.children + 1}));
-                              }}
-                              className="w-7 h-7 rounded-full border border-stone-300 flex items-center justify-center text-stone-500 hover:border-stone-900 hover:text-stone-900 transition-colors text-sm"
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Infants */}
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <div className="text-sm text-stone-900 font-medium">Infants</div>
-                            <div className="text-[11px] text-stone-500">Under 2</div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setGuests(g => ({...g, infants: Math.max(0, g.infants - 1)}));
-                              }}
-                              className="w-7 h-7 rounded-full border border-stone-300 flex items-center justify-center text-stone-500 hover:border-stone-900 hover:text-stone-900 transition-colors text-sm"
-                            >
-                              -
-                            </button>
-                            <span className="w-4 text-center text-sm text-stone-900">{guests.infants}</span>
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setGuests(g => ({...g, infants: g.infants + 1}));
-                              }}
-                              className="w-7 h-7 rounded-full border border-stone-300 flex items-center justify-center text-stone-500 hover:border-stone-900 hover:text-stone-900 transition-colors text-sm"
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </motion.div>
-            </div>
+              </div>
+            </motion.div>
           </div>
 
-          {/* Right Content - Rotating Carousel */}
-          <div className="lg:w-1/2 relative h-[350px] md:h-[400px] lg:h-[450px] flex items-end justify-center">
-            
-            {/* Center Circle with Main Image */}
-            <div className="relative z-20 w-[280px] md:w-[350px] h-[280px] md:h-[350px] mb-0">
-              <motion.div
-                key={currentSlide}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.6 }}
-                className="absolute inset-0 rounded-3xl overflow-hidden shadow-2xl"
-                style={{
-                  backgroundImage: `linear-gradient(rgba(0,0,0,0.2), rgba(0,0,0,0.4)), url(${carouselSlides[currentSlide].bgImage})`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center'
-                }}
-              >
-                <div className="absolute inset-0 p-6 md:p-8 flex flex-col justify-between">
-                  {/* Top Left - Subtitle */}
-                  <div className="text-white">
-                    <div className="text-[10px] md:text-xs tracking-[0.3em] font-light mb-1 opacity-90">
-                      {carouselSlides[currentSlide].subtitle}
-                    </div>
-                    <h3 className="text-lg md:text-2xl font-medium" style={{ fontFamily: "'Playfair Display', serif" }}>
-                      {carouselSlides[currentSlide].title}
-                    </h3>
-                  </div>
-
-                  {/* Bottom Right - Number */}
-                  <div className="text-right">
-                    <div className="text-2xl md:text-3xl text-white font-light tracking-widest">
-                      {carouselSlides[currentSlide].number}
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            </div>
-
-            {/* Rotating Circle of Images Around */}
-            <div className="absolute inset-0 z-10">
-              {carouselSlides.map((slide, index) => {
-                if (index === currentSlide) return null; // Skip current active slide
-                
-                const position = getCarouselItemPosition(index);
-                return (
-                  <motion.div
-                    key={slide.id}
-                    initial={false}
-                    animate={{
-                      x: position.x,
-                      y: position.y,
-                      scale: 0.8,
-                      opacity: 0.7
-                    }}
-                    transition={{ type: "spring", stiffness: 100, damping: 20 }}
-                    className="absolute w-[120px] md:w-[150px] h-[120px] md:h-[150px] rounded-xl overflow-hidden cursor-pointer hover:scale-110 hover:opacity-100 transition-all duration-300"
-                    onClick={() => handleCarouselNavigation(index)}
-                    style={{
-                      left: '50%',
-                      top: '50%',
-                      marginLeft: '-60px',
-                      marginTop: '-60px',
-                      backgroundImage: `url(${slide.bgImage})`,
-                      backgroundSize: 'cover',
-                      backgroundPosition: 'center'
-                    }}
-                  >
-                    <div className="absolute inset-0 bg-black/30 hover:bg-black/10 transition-colors" />
-                    <div className="absolute bottom-2 right-2 text-white text-xs font-light">
-                      {slide.number}
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </div>
-
-            {/* Carousel Navigation Dots */}
-            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-2 z-30">
-              {carouselSlides.map((_, index) => (
-                <button
-                  key={index}
-                  onClick={() => handleCarouselNavigation(index)}
-                  className={`w-2 h-2 rounded-full transition-all ${
-                    currentSlide === index ? 'bg-white w-6' : 'bg-white/50 hover:bg-white/80'
-                  }`}
-                />
-              ))}
-            </div>
+          {/* Right: 3D Carousel */}
+          <div className="relative order-1 lg:order-2 h-[500px] flex items-center justify-center">
+             <LuxuryCarousel slides={carouselSlides} />
           </div>
+
         </div>
       </div>
 
-      {/* ================= PROPERTIES GRID ================= */}
-      <section className="py-12 md:py-24 px-4 md:px-6 bg-white relative z-10">
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-8 md:mb-16">
-            <h2 className="text-2xl md:text-3xl text-stone-900 mb-1" style={{ fontFamily: "'Playfair Display', serif" }}>
-              Curated Stays
-            </h2>
-            <p className="text-stone-500 text-sm font-light">Explore our most exclusive homes</p>
+      {/* ================= MARQUEE STRIP ================= */}
+      <div className="w-full bg-stone-900 text-stone-400 overflow-hidden py-3 border-y border-stone-800">
+        <div className="whitespace-nowrap animate-marquee flex gap-12 text-xs font-medium tracking-[0.2em] uppercase">
+          {/* Repeated items for infinite scroll effect */}
+          {Array(10).fill("Concierge • Privacy • Luxury • Comfort • Design • ").map((text, i) => (
+             <span key={i}>{text}</span>
+          ))}
+        </div>
+      </div>
+      <style>{`
+        .animate-marquee { animation: marquee 30s linear infinite; }
+        @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+      `}</style>
+
+      {/* ================= PROPERTIES COLLECTION (MOVED BELOW MARQUEE) ================= */}
+      <section className="py-24 px-6 relative z-10 bg-white">
+        <div className="max-w-[1400px] mx-auto">
+          <div className="flex flex-col md:flex-row justify-between items-end mb-16  pb-0">
           </div>
 
-          {loading ? (
-            <div className="flex justify-center py-12 text-stone-400 text-sm tracking-widest uppercase animate-pulse">
-              Loading Residences...
-            </div>
-          ) : error ? (
-            <div className="text-center py-12 text-stone-500 px-4">
-              <p>{error}</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {properties.slice(0, visibleProperties).map((property, idx) => (
-                <Link to={`/booking/${property.id}`} key={property.id || idx} className="group cursor-pointer">
-                  {/* Image Card */}
-                  <div className="relative aspect-[4/5] overflow-hidden rounded-xl md:rounded-2xl bg-stone-100 mb-3">
-                    <img
-                      src={property.images?.[0] || 'https://images.unsplash.com/photo-1600596542815-60c37c6525fa'}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-12">
+            {properties.slice(0, visibleProperties).map((property, idx) => (
+              <Link to={`/booking/${property.id}`} key={property.id || idx} className="group block">
+                <div className="relative aspect-[3/4] overflow-hidden bg-stone-100 mb-4 cursor-none">
+                   {/* Property Image with Zoom Effect */}
+                   <motion.img
+                      whileHover={{ scale: 1.05 }}
+                      transition={{ duration: 0.7, ease: "easeOut" }}
+                      src={property.images?.[0]}
                       alt={property.name}
-                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                    />
-                    {property.tag && (
-                      <div className="absolute top-3 left-3 bg-white/90 backdrop-blur px-2 py-1 text-[10px] uppercase tracking-widest font-bold text-stone-900 rounded-sm">
-                        {property.tag}
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Text Details */}
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <h3 className="text-stone-900 font-medium text-sm md:text-base leading-tight mb-1 group-hover:underline decoration-stone-300 underline-offset-4">
-                        {property.name}
-                      </h3>
-                      <p className="text-stone-500 text-xs md:text-sm mb-1 line-clamp-1">{property.location}</p>
-                      <p className="text-stone-900 text-sm">
-                        <span className="font-semibold">Ksh {property.price?.toLocaleString()}</span> 
-                        <span className="font-light text-stone-500"> night</span>
-                      </p>
-                    </div>
-                    <div className="text-xs font-medium bg-stone-100 px-2 py-1 rounded text-stone-900 ml-2">
-                      {property.rating || "5.0"}
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
-
-          {visibleProperties < properties.length && (
-            <div className="mt-12 text-center">
-              <button 
-                onClick={showMoreProperties} 
-                className="border-b border-stone-900 pb-1 text-stone-900 text-sm uppercase tracking-widest hover:text-stone-600 hover:border-stone-600 transition-colors"
-              >
-                View More
-              </button>
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* ================= PREMIUM FEATURES SECTION ================= */}
-      <section className="py-12 md:py-24 px-4 md:px-6 bg-white border-t border-stone-200 relative z-10">
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-8 md:mb-16 text-center">
-            <h2 className="text-2xl md:text-3xl text-stone-900 mb-2" style={{ fontFamily: "'Playfair Display', serif" }}>
-              Premium Standards
-            </h2>
-            <p className="text-stone-500 text-sm font-light">Our commitment to exceptional experiences</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {premiumFeatures.map((feature) => (
-              <motion.div 
-                key={feature.id}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6 }}
-                className="bg-white border border-stone-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow"
-              >
-                <div className="text-4xl md:text-5xl text-stone-900 font-serif mb-4" style={{ fontFamily: "'Playfair Display', serif" }}>
-                  {feature.number}
-                </div>
-                <h3 className="text-lg font-semibold text-stone-900 mb-2">
-                  {feature.title}
-                </h3>
-                <p className="text-stone-600 text-sm leading-relaxed">
-                  {feature.description}
-                </p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ================= TESTIMONIALS ================= */}
-      <section className="py-12 md:py-24 px-4 md:px-6 bg-stone-50 relative z-10">
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-8 md:mb-16 text-center">
-            <h2 className="text-2xl md:text-3xl text-stone-900 mb-2" style={{ fontFamily: "'Playfair Display', serif" }}>
-              Guest Stories
-            </h2>
-            <p className="text-stone-500 text-sm font-light">What our guests say about their stays</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {testimonials.map((item, i) => (
-              <motion.div 
-                key={item.id}
-                initial={{ opacity: 0 }}
-                whileInView={{ opacity: 1 }}
-                transition={{ delay: i * 0.2 }}
-                className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100"
-              >
-                <div className="text-xs font-bold tracking-widest mb-4 text-stone-400">
-                  {item.rating} / 5.0 RATING
+                      className="w-full h-full object-cover grayscale-[20%] group-hover:grayscale-0 transition-all duration-500"
+                   />
+                   {property.tag && (
+                     <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm px-2 py-1 text-[10px] uppercase tracking-widest font-bold text-stone-900">
+                       {property.tag}
+                     </div>
+                   )}
                 </div>
                 
-                <p className="text-stone-800 text-base font-serif italic leading-relaxed mb-6">
-                  "{item.content}"
-                </p>
-
-                <div className="text-sm">
-                  <div className="font-bold text-stone-900">{item.name}</div>
-                  <div className="text-stone-500 text-xs mt-1">{item.location}</div>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="text-stone-900 text-lg font-serif leading-tight group-hover:italic transition-all">
+                      {property.name}
+                    </h3>
+                    <p className="text-stone-500 text-xs mt-1 uppercase tracking-wide">{property.location}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-stone-900 text-sm font-medium">
+                      Ksh {property.price?.toLocaleString()}
+                    </p>
+                  </div>
                 </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ================= FAQ ================= */}
-      <section className="py-12 md:py-24 px-4 md:px-6 bg-white relative z-10">
-        <div className="max-w-3xl mx-auto">
-          <div className="mb-8 md:mb-16 text-center">
-            <h2 className="text-2xl md:text-3xl text-stone-900 mb-2" style={{ fontFamily: "'Playfair Display', serif" }}>
-              Common Questions
-            </h2>
-            <p className="text-stone-500 text-sm font-light">Everything you need to know about booking with us</p>
-          </div>
-          
-          <div className="border-t border-stone-200">
-            {faqData.map((faq) => (
-              <div key={faq.id} className="border-b border-stone-200">
-                <button 
-                  onClick={() => setOpenFaq(openFaq === faq.id ? null : faq.id)}
-                  className="w-full py-6 flex justify-between items-center text-left hover:bg-stone-50 transition-colors px-4"
-                >
-                  <span className="text-stone-900 font-medium text-base md:text-lg pr-4">{faq.question}</span>
-                  <span className="text-stone-400 text-xl md:text-2xl font-light flex-shrink-0">
-                    {openFaq === faq.id ? '−' : '+'}
-                  </span>
-                </button>
-                <AnimatePresence>
-                  {openFaq === faq.id && (
-                    <motion.div 
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      className="overflow-hidden"
-                    >
-                      <p className="pb-8 pt-2 text-stone-500 text-sm md:text-base leading-relaxed px-4">
-                        {faq.answer}
-                      </p>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
+              </Link>
             ))}
           </div>
 
-          {/* Contact CTA */}
-          <div className="mt-12 text-center">
-            <p className="text-stone-500 text-sm mb-6">
-              Still have questions? Our team is here to help
-            </p>
-            <div className="flex gap-4 justify-center">
-              <button className="border border-stone-900 text-stone-900 px-6 py-3 rounded-lg font-medium hover:bg-stone-50 transition-colors">
-                Contact Support
-              </button>
-              <button className="bg-stone-900 text-white px-6 py-3 rounded-lg font-medium hover:bg-stone-800 transition-colors">
-                Browse All Properties
+          {visibleProperties < properties.length && (
+            <div className="mt-16 text-center md:hidden">
+              <button onClick={() => setVisibleProperties(p => p + 4)} className="text-xs uppercase tracking-widest border-b border-stone-900 pb-1">
+                Load More
               </button>
             </div>
-          </div>
+          )}
         </div>
       </section>
 
-      {/* ================= FOOTER ================= */}
-      <footer className="py-12 px-4 md:px-6 bg-stone-50 border-t border-stone-200 relative z-10">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-8">
-            <div>
-              <div className="text-xl font-semibold text-stone-900 mb-4">LuxStay</div>
-              <p className="text-stone-600 text-sm">
-                Curated luxury stays for the discerning traveler.
+      {/* ================= EDITORIAL FEATURES ================= */}
+      <section className="py-24 px-6 bg-[#EBE5DE] relative z-10">
+        <div className="max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+           <div>
+              <h2 className="text-4xl md:text-5xl text-stone-900 mb-6 leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>
+                The Standard of <br/><i>Exceptional</i> Living.
+              </h2>
+              <p className="text-stone-600 mb-8 max-w-md font-light leading-relaxed">
+                We don't just offer beds; we curate environments. Each home is selected for its architectural merit, location, and ability to provide a serene escape from the mundane.
               </p>
-            </div>
-            
-            <div>
-              <h4 className="font-medium text-stone-900 mb-4">Support</h4>
-              <ul className="space-y-2 text-sm text-stone-600">
-                <li><a href="#" className="hover:text-stone-900 transition-colors">Help Center</a></li>
-                <li><a href="#" className="hover:text-stone-900 transition-colors">Safety Information</a></li>
-                <li><a href="#" className="hover:text-stone-900 transition-colors">Cancellation Options</a></li>
-              </ul>
-            </div>
-            
-            <div>
-              <h4 className="font-medium text-stone-900 mb-4">Hosting</h4>
-              <ul className="space-y-2 text-sm text-stone-600">
-                <li><a href="#" className="hover:text-stone-900 transition-colors">Try Hosting</a></li>
-                <li><a href="#" className="hover:text-stone-900 transition-colors">Host Resources</a></li>
-                <li><a href="#" className="hover:text-stone-900 transition-colors">Community</a></li>
-              </ul>
-            </div>
-            
-            <div>
-              <h4 className="font-medium text-stone-900 mb-4">Company</h4>
-              <ul className="space-y-2 text-sm text-stone-600">
-                <li><a href="#" className="hover:text-stone-900 transition-colors">About</a></li>
-                <li><a href="#" className="hover:text-stone-900 transition-colors">Careers</a></li>
-                <li><a href="#" className="hover:text-stone-900 transition-colors">Press</a></li>
-              </ul>
-            </div>
-          </div>
-          
-          <div className="border-t border-stone-300 pt-8 text-sm text-stone-600">
-            <div className="flex flex-col md:flex-row justify-between items-center">
-              <div className="mb-4 md:mb-0">
-                © {new Date().getFullYear()} LuxStay, Inc. • Privacy • Terms • Sitemap
+              
+              <div className="space-y-8">
+                {premiumFeatures.map((feature) => (
+                  <div key={feature.id} className="flex gap-6 items-start group">
+                     <span className="text-stone-400 font-serif text-2xl group-hover:text-stone-900 transition-colors">{feature.number}</span>
+                     <div>
+                       <h4 className="text-stone-900 font-medium uppercase text-xs tracking-widest mb-2">{feature.title}</h4>
+                       <p className="text-stone-600 text-sm font-light leading-relaxed max-w-sm">{feature.description}</p>
+                     </div>
+                  </div>
+                ))}
               </div>
-              <div className="flex items-center gap-6">
-                <a href="#" className="hover:text-stone-900 transition-colors">English (US)</a>
-                <a href="#" className="hover:text-stone-900 transition-colors">KES Ksh</a>
-                <div className="flex gap-4">
-                  <a href="#" className="hover:text-stone-900 transition-colors">Facebook</a>
-                  <a href="#" className="hover:text-stone-900 transition-colors">Instagram</a>
-                  <a href="#" className="hover:text-stone-900 transition-colors">Twitter</a>
-                </div>
+           </div>
+           
+           {/* Abstract Visual */}
+           <div className="relative h-[600px] hidden lg:block">
+              <div className="absolute top-0 right-0 w-3/4 h-full bg-stone-300 overflow-hidden">
+                 <img src="https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?ixlib=rb-4.0.3&auto=format&fit=crop&w=2000&q=80" className="w-full h-full object-cover opacity-80" alt="Interior" />
               </div>
-            </div>
+              <div className="absolute bottom-12 left-0 w-1/2 h-2/3 bg-stone-100 border-8 border-[#EBE5DE] shadow-2xl overflow-hidden">
+                 <img src="https://images.unsplash.com/photo-1615529182904-14819c35db37?ixlib=rb-4.0.3&auto=format&fit=crop&w=2000&q=80" className="w-full h-full object-cover" alt="Detail" />
+              </div>
+           </div>
+        </div>
+      </section>
+
+      {/* ================= REVIEWS (Editorial Style) ================= */}
+      <section className="py-24 px-6 bg-white relative z-10">
+        <div className="max-w-4xl mx-auto text-center">
+          <span className="text-stone-400 text-2xl mb-8 block">❝</span>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:divide-x divide-stone-100">
+             {testimonials.map((t) => (
+               <div key={t.id} className="px-4 flex flex-col items-center">
+                  <p className="font-serif text-lg italic text-stone-800 mb-6 leading-relaxed">"{t.content}"</p>
+                  <div className="mt-auto">
+                    <p className="text-xs font-bold uppercase tracking-widest text-stone-900">{t.name}</p>
+                    <p className="text-[10px] text-stone-400 uppercase tracking-wide mt-1">{t.location}</p>
+                  </div>
+               </div>
+             ))}
           </div>
         </div>
-      </footer>
+      </section>
+
+      {/* ================= MINIMAL FAQ ================= */}
+      <section className="py-24 px-6 bg-[#f7f5f2] border-t border-stone-200">
+        <div className="max-w-2xl mx-auto">
+           <h2 className="text-3xl text-center mb-12 font-serif text-stone-900">Information</h2>
+           <div className="divide-y divide-stone-200">
+             {faqData.map((faq) => (
+               <div key={faq.id} className="group">
+                 <button 
+                   onClick={() => setOpenFaq(openFaq === faq.id ? null : faq.id)}
+                   className="w-full py-6 flex justify-between items-center text-left"
+                 >
+                   <span className="text-sm uppercase tracking-widest font-medium text-stone-700 group-hover:text-stone-900 transition-colors">{faq.question}</span>
+                   <span className="font-serif italic text-stone-400 text-xl">{openFaq === faq.id ? '−' : '+'}</span>
+                 </button>
+                 <AnimatePresence>
+                   {openFaq === faq.id && (
+                     <motion.div 
+                       initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                       className="overflow-hidden"
+                     >
+                       <p className="pb-6 text-stone-500 font-light leading-relaxed">{faq.answer}</p>
+                     </motion.div>
+                   )}
+                 </AnimatePresence>
+               </div>
+             ))}
+           </div>
+        </div>
+      </section>
+
+      {/* ================= CTA FOOTER ================= */}
+      <section className="py-20 bg-stone-900 text-[#f5f2ee] text-center px-6">
+        <h2 className="text-4xl md:text-6xl font-serif mb-6">Ready to Arrive?</h2>
+        <p className="text-stone-400 max-w-lg mx-auto mb-10 font-light">Experience the finest homes Kenya has to offer. Book your sanctuary today.</p>
+        <div className="flex justify-center gap-6">
+           <button className="px-8 py-3 bg-[#f5f2ee] text-stone-900 text-xs uppercase tracking-widest font-bold hover:bg-white transition-colors">Book Now</button>
+           <button className="px-8 py-3 border border-stone-700 text-[#f5f2ee] text-xs uppercase tracking-widest font-bold hover:border-[#f5f2ee] transition-colors">Contact</button>
+        </div>
+      </section>
 
       {/* ================= FLOATING ACTION ================= */}
       <motion.a 
-        href="https://wa.me/254700000000"
-        target="_blank"
-        rel="noreferrer"
-        initial={{ y: 100 }}
-        animate={{ y: 0 }}
-        transition={{ delay: 2, type: "spring" }}
-        className="fixed bottom-4 md:bottom-6 right-4 md:right-6 z-[2000] bg-stone-900 text-white px-4 md:px-6 py-3 rounded-full shadow-2xl hover:bg-black transition-colors text-xs md:text-sm font-medium tracking-wide flex items-center gap-2"
+        href="#"
+        className="fixed bottom-8 right-8 z-50 bg-stone-900 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-2xl hover:scale-110 transition-transform cursor-pointer"
+        whileHover={{ rotate: 15 }}
       >
-        <span className="hidden md:inline">Concierge Chat</span>
-        <span className="md:hidden">Chat</span>
-        <span className="animate-pulse">💬</span>
+        <span className="text-2xl">✉</span>
       </motion.a>
 
     </div>
