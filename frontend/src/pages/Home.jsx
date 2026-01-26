@@ -55,11 +55,6 @@ const LuxuryCarousel = ({ slides }) => {
                   <p className="text-[10px] tracking-[0.3em] uppercase opacity-80 mb-1">{slide.subtitle}</p>
                   <h3 className="font-serif text-2xl leading-none">{slide.title}</h3>
                 </div>
-
-                {/* Number Badge */}
-                <div className="absolute top-4 right-4 w-10 h-10 border border-white/30 rounded-full flex items-center justify-center backdrop-blur-sm">
-                  <span className="font-serif text-white text-sm">{slide.number}</span>
-                </div>
               </div>
             </div>
           );
@@ -104,11 +99,11 @@ export default function Home() {
 
   // Data Definitions
   const carouselSlides = [
-    { id: 1, title: "Capital Rise", subtitle: "KILIMANI", number: "01", bgImage: "./Capital3main.jpg" },
-    { id: 2, title: "Eva Studio", subtitle: "LUMUMBA DRIVE", number: "02", bgImage: "./EvaStudio.jpg" },
-    { id: 3, title: "Uhuru Gardens", subtitle: "LANG'ATA", number: "03", bgImage: "./Langata2.jpg" },
-    { id: 4, title: "Capital Rise", subtitle: "KILIMANI", number: "04", bgImage: "./Capital2.jpeg" },
-    { id: 5, title: "Welcome", subtitle: "Nairobi", number: "05", bgImage: "./Logo.jpeg" },
+    { id: 1, title: "Capital Rise", subtitle: "KILIMANI", bgImage: "./Capital3main.jpg" },
+    { id: 2, title: "Eva Studio", subtitle: "LUMUMBA DRIVE", bgImage: "./EvaStudio.jpg" },
+    { id: 3, title: "Uhuru Gardens", subtitle: "LANG'ATA", bgImage: "./Langata2.jpg" },
+    { id: 4, title: "Capital Rise", subtitle: "KILIMANI", bgImage: "./Capital2.jpeg" },
+    { id: 5, title: "Welcome", subtitle: "Nairobi", bgImage: "./Logo.jpeg" },
   ];
 
   const premiumFeatures = [
