@@ -342,7 +342,7 @@ export default function Home() {
           </div>
 
           {/* Right: 3D Carousel */}
-          <div className="relative order-1 lg:order-2 h-[450px] flex items-center justify-center">
+          <div className="relative order-1 lg:order-2 h-[450px] flex items-center justify-center -mt-12">
              <LuxuryCarousel slides={carouselSlides} />
           </div>
 
@@ -350,7 +350,7 @@ export default function Home() {
       </div>
 
       {/* ================= MARQUEE STRIP ================= */}
-      <div className="w-full bg-stone-900 text-stone-400 overflow-hidden py-3 border-y border-stone-800 mt-0">
+      <div className="w-full bg-stone-900 text-stone-400 overflow-hidden py-3 border-y border-stone-800">
         <div className="whitespace-nowrap animate-marquee flex gap-12 text-xs font-medium tracking-[0.2em] uppercase">
           {/* Repeated items for infinite scroll effect */}
           {Array(10).fill("Concierge • Privacy • Luxury • Comfort • Design • ").map((text, i) => (
@@ -364,7 +364,7 @@ export default function Home() {
       `}</style>
 
       {/* ================= PROPERTIES COLLECTION (MOVED BELOW MARQUEE) ================= */}
-      <section className="py-24 px-6 relative z-10 bg-white">
+      <section className="py-16 px-6 relative z-10 bg-white">
         <div className="max-w-[1400px] mx-auto">
           <div className="flex flex-col justify-center items-center mb-16 pb-0">
             <h2 className="text-3xl md:text-4xl text-stone-900 text-center" style={{ fontFamily: "'Playfair Display', serif" }}>Featured <span className="italic font-light text-stone-600">Properties</span></h2>
