@@ -342,7 +342,7 @@ export default function Home() {
           </div>
 
           {/* Right: 3D Carousel */}
-          <div className="relative order-1 lg:order-2 h-[450px] flex items-center justify-center -mt-12">
+          <div className="relative order-1 lg:order-2 h-[450px] flex items-center justify-center mt-0">
              <LuxuryCarousel slides={carouselSlides} />
           </div>
 
