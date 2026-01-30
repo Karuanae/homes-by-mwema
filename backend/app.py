@@ -53,6 +53,17 @@ app.config['MPESA_SECURITY_CREDENTIAL'] = os.environ.get('MPESA_SECURITY_CREDENT
 app.config['MPESA_B2C_TIMEOUT_URL'] = os.environ.get('MPESA_B2C_TIMEOUT_URL', 'https://yourdomain.com/api/payments/mpesa/b2c/timeout')
 app.config['MPESA_B2C_RESULT_URL'] = os.environ.get('MPESA_B2C_RESULT_URL', 'https://yourdomain.com/api/payments/mpesa/b2c/result')
 
+# PayPal REST API Configuration
+app.config['PAYPAL_ENVIRONMENT'] = os.environ.get('PAYPAL_ENVIRONMENT', 'sandbox')  # 'sandbox' or 'production'
+app.config['PAYPAL_CLIENT_ID'] = os.environ.get('PAYPAL_CLIENT_ID', 'ARx2bRbdY3X1kfuT8P-QlfoAsDF0rWqv4VExGthJOl5QOqQWhHLo76HdxztMGcyJylPpbnMqTfa_jggd')
+app.config['PAYPAL_CLIENT_SECRET'] = os.environ.get('PAYPAL_CLIENT_SECRET', 'EIm6QhXUnU9QSuBJCr0-xdxrIacugPSQfjGeSzgzHyyoStbwL0rP5ONGbvDOGDIXekfSWs_RvRdliJBi')
+app.config['PAYPAL_RETURN_URL'] = os.environ.get('PAYPAL_RETURN_URL', 'http://localhost:5173/payment/success')
+app.config['PAYPAL_CANCEL_URL'] = os.environ.get('PAYPAL_CANCEL_URL', 'http://localhost:5173/payment/cancel')
+app.config['PAYPAL_WEBHOOK_ID'] = os.environ.get('PAYPAL_WEBHOOK_ID', '')  # Set this in production
+
+# Currency conversion rate (KES to USD) - Update this regularly or use a currency API
+app.config['KES_TO_USD_RATE'] = float(os.environ.get('KES_TO_USD_RATE', '153.0'))
+
 # Initialize extensions
 
 jwt = JWTManager(app)

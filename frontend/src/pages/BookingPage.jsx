@@ -157,7 +157,7 @@ export default function BookingPage() {
   };
 
   return (
-    <div className="bg-white font-sans text-stone-900 selection:bg-stone-200 selection:text-black pb-24">
+    <div className="bg-white font-sans text-stone-900 selection:bg-stone-200 selection:text-black pb-24 pt-14">
       
       {/* ================= FULLSCREEN MODAL ================= */}
       <AnimatePresence>

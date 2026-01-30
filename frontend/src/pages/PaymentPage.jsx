@@ -149,6 +149,15 @@ export default function PaymentPage() {
   const [mpesaNumber, setMpesaNumber] = useState("");
   const [messageToHost, setMessageToHost] = useState("");
   
+  // PayPal state
+  const [paypalOrderId, setPaypalOrderId] = useState(null);
+  const [paypalProcessing, setPaypalProcessing] = useState(false);
+  
+  // Card form state
+  const [cardNumber, setCardNumber] = useState("");
+  const [cardExpiry, setCardExpiry] = useState("");
+  const [cardCvc, setCardCvc] = useState("");
+  
   // Data
   const [property, setProperty] = useState(null);
   const [bookingDetails, setBookingDetails] = useState({
@@ -277,6 +286,85 @@ export default function PaymentPage() {
     }
   };
 
+  // PayPal payment handler
+  const handlePayPalPayment = async () => {
+    setPaypalProcessing(true);
+    setIsLoading(true);
+    try {
+      const amountDue = paymentType === 'full' ? bookingDetails.total : partialPayment.now;
+      
+      // Create booking first
+      const newBooking = await createBooking().then(res => res.data);
+      if (!newBooking) throw new Error('Booking failed');
+      
+      // Create PayPal order
+      const returnUrl = `${window.location.origin}/payment/success`;
+      const cancelUrl = `${window.location.origin}/payment/cancel`;
+      
+      const result = await api.payments.createPayPalOrder(
+        newBooking.id, 
+        amountDue, 
+        'KES',
+        returnUrl,
+        cancelUrl
+      );
+      
+      if (result.success && result.approval_url) {
+        // Store order ID for later capture
+        localStorage.setItem('paypal_order_id', result.order_id);
+        localStorage.setItem('paypal_payment_id', result.payment_id);
+        localStorage.setItem('paypal_booking_id', newBooking.id);
+        
+        // Redirect to PayPal for approval
+        window.location.href = result.approval_url;
+      } else {
+        throw new Error(result.error || 'Failed to create PayPal order');
+      }
+    } catch (error) {
+      console.error('PayPal payment error:', error);
+      alert(`PayPal payment failed: ${error.message || 'Unknown error'}`);
+      setPaypalProcessing(false);
+      setIsLoading(false);
+    }
+  };
+
+  // Handle PayPal return (success)
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token'); // PayPal order ID
+    
+    if (token && location.pathname.includes('/payment/success')) {
+      const capturePayPalPayment = async () => {
+        setIsLoading(true);
+        setPaypalProcessing(true);
+        try {
+          const result = await api.payments.capturePayPalOrder(token);
+          
+          if (result.success) {
+            // Clear stored PayPal data
+            localStorage.removeItem('paypal_order_id');
+            localStorage.removeItem('paypal_payment_id');
+            localStorage.removeItem('paypal_booking_id');
+            
+            // Go to confirmation step
+            setSelectedPaymentMethod('paypal');
+            setCurrentStep(3);
+          } else {
+            throw new Error(result.error || 'Payment capture failed');
+          }
+        } catch (error) {
+          console.error('PayPal capture error:', error);
+          alert(`Payment completion failed: ${error.message}`);
+        } finally {
+          setIsLoading(false);
+          setPaypalProcessing(false);
+        }
+      };
+      
+      capturePayPalPayment();
+    }
+  }, [location]);
+
   const formatCurrency = (val) => `KES ${val?.toLocaleString() || '0'}`;
 
   // --- RENDER ---
@@ -391,12 +479,18 @@ export default function PaymentPage() {
                   {/* Payment Method - Text Only Selection */}
                   <section>
                     <h3 className="font-serif text-lg mb-6 italic text-stone-600">Select Method</h3>
-                    <div className="grid grid-cols-2 gap-0 border border-stone-200">
+                    <div className="grid grid-cols-3 gap-0 border border-stone-200">
                       <button 
                         onClick={() => setSelectedPaymentMethod('mpesa')}
                         className={`py-6 text-xs uppercase tracking-[0.2em] transition-all ${selectedPaymentMethod === 'mpesa' ? 'bg-stone-900 text-white' : 'bg-white text-stone-400 hover:text-stone-900'}`}
                       >
                         M-PESA Mobile
+                      </button>
+                      <button 
+                        onClick={() => setSelectedPaymentMethod('paypal')}
+                        className={`py-6 text-xs uppercase tracking-[0.2em] border-l border-stone-200 transition-all ${selectedPaymentMethod === 'paypal' ? 'bg-stone-900 text-white' : 'bg-white text-stone-400 hover:text-stone-900'}`}
+                      >
+                        PayPal / Card
                       </button>
                       <button 
                         onClick={() => setSelectedPaymentMethod('card')}
@@ -419,22 +513,69 @@ export default function PaymentPage() {
                           <p className="text-[10px] text-stone-400 pt-2 uppercase tracking-wide">An STK prompt will be sent to your device.</p>
                         </div>
                       )}
+                      {selectedPaymentMethod === 'paypal' && (
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-center py-6">
+                            <svg className="h-8" viewBox="0 0 101 32" xmlns="http://www.w3.org/2000/svg">
+                              <path fill="#003087" d="M12.237 5.986h-6.88c-.47 0-.87.34-.944.803L2.033 22.63a.57.57 0 0 0 .563.66h3.287c.47 0 .87-.34.943-.804l.643-4.071a.96.96 0 0 1 .944-.803h2.18c4.531 0 7.145-2.193 7.83-6.538.308-1.9.012-3.393-.88-4.438-1.182-1.387-3.278-2.15-6.306-2.15zm.79 6.444c-.377 2.454-2.263 2.454-4.089 2.454h-1.038l.729-4.607a.574.574 0 0 1 .567-.485h.476c1.243 0 2.416 0 3.022.708.362.423.472 1.05.333 1.93z"/>
+                              <path fill="#003087" d="M35.11 12.336h-3.292a.574.574 0 0 0-.567.485l-.144.917-.23-.333c-.712-1.032-2.298-1.377-3.882-1.377-3.631 0-6.732 2.749-7.334 6.604-.313 1.924.132 3.764 1.22 5.047 1 1.18 2.426 1.672 4.126 1.672 2.918 0 4.535-1.875 4.535-1.875l-.146.91a.57.57 0 0 0 .563.66h2.965a.96.96 0 0 0 .944-.804l1.78-11.246a.57.57 0 0 0-.538-.66zm-4.567 6.394c-.314 1.863-1.796 3.115-3.684 3.115-.945 0-1.702-.304-2.19-.878-.485-.571-.667-1.384-.513-2.29.293-1.847 1.8-3.139 3.658-3.139.926 0 1.678.307 2.175.887.5.585.698 1.403.554 2.305z"/>
+                              <path fill="#009cde" d="M55.924 12.336h-3.306a.958.958 0 0 0-.792.418l-4.575 6.738-1.939-6.476a.96.96 0 0 0-.92-.68h-3.247a.57.57 0 0 0-.54.753l3.653 10.723-3.437 4.85a.57.57 0 0 0 .466.897h3.303a.957.957 0 0 0 .788-.412l11.035-15.933a.57.57 0 0 0-.489-.878z"/>
+                              <path fill="#003087" d="M67.688 5.986h-6.88c-.47 0-.87.34-.944.803l-2.38 15.841a.57.57 0 0 0 .563.66h3.508c.33 0 .61-.238.661-.565l.675-4.31a.96.96 0 0 1 .943-.804h2.18c4.532 0 7.145-2.193 7.83-6.538.309-1.9.013-3.393-.88-4.438-1.18-1.387-3.277-2.15-6.276-2.15zm.79 6.444c-.377 2.454-2.263 2.454-4.088 2.454h-1.04l.73-4.607a.575.575 0 0 1 .566-.485h.476c1.243 0 2.416 0 3.022.708.361.423.472 1.05.333 1.93z"/>
+                              <path fill="#009cde" d="M90.561 12.336h-3.291a.574.574 0 0 0-.567.485l-.145.917-.229-.333c-.712-1.032-2.298-1.377-3.882-1.377-3.631 0-6.732 2.749-7.334 6.604-.313 1.924.13 3.764 1.22 5.047 1 1.18 2.425 1.672 4.125 1.672 2.918 0 4.536-1.875 4.536-1.875l-.147.91a.57.57 0 0 0 .564.66h2.965a.96.96 0 0 0 .943-.804l1.78-11.246a.57.57 0 0 0-.538-.66zm-4.567 6.394c-.314 1.863-1.797 3.115-3.684 3.115-.946 0-1.703-.304-2.19-.878-.486-.571-.668-1.384-.514-2.29.294-1.847 1.8-3.139 3.659-3.139.925 0 1.678.307 2.174.887.501.585.699 1.403.555 2.305z"/>
+                              <path fill="#009cde" d="M95.073 6.37l-2.418 15.38a.57.57 0 0 0 .563.66h2.835a.96.96 0 0 0 .943-.804l2.38-15.841a.57.57 0 0 0-.563-.66h-3.177a.574.574 0 0 0-.563.486z"/>
+                            </svg>
+                          </div>
+                          <p className="text-center text-sm text-stone-600 font-serif">
+                            Pay securely with PayPal or any credit/debit card
+                          </p>
+                          <p className="text-center text-[10px] text-stone-400 uppercase tracking-wide">
+                            You will be redirected to PayPal to complete your payment
+                          </p>
+                          <div className="flex justify-center gap-2 pt-4">
+                            <div className="flex items-center gap-1 text-[10px] text-stone-500">
+                              <svg className="w-6 h-4" viewBox="0 0 38 24" xmlns="http://www.w3.org/2000/svg"><rect fill="#fff" height="22" rx="3" width="36" x="1" y="1"/><rect fill="none" height="22" rx="3" stroke="#D9D9D9" width="36" x="1" y="1"/><path d="M7 15.5V11.93c0-.4-.23-.65-.64-.65-.21 0-.44.07-.61.3a.57.57 0 0 0-.55-.3c-.17 0-.36.05-.51.24v-.2h-.35v4.18h.36v-2.32c0-.3.16-.44.4-.44.25 0 .36.15.36.44v2.32h.35v-2.32c0-.3.17-.44.41-.44s.37.15.37.44v2.32h.2zm8.33-4.18h-.56v-.76h-.36v.76h-.32v.32h.32v1.91c0 .49.18.78.72.78.2 0 .4-.06.54-.12l-.1-.3c-.13.05-.27.08-.38.08-.23 0-.3-.14-.3-.36v-1.97h.56v-.34h-.12zm4.76-.06c-.2 0-.34.1-.43.25v-.19h-.36v4.18h.36v-2.45c.1.15.24.24.44.24.4 0 .77-.31.77-.97v-.08c0-.65-.37-.98-.78-.98zm.41 1.05c0 .41-.16.66-.44.66-.21 0-.37-.16-.42-.34v-.7c.05-.17.22-.35.42-.35.29 0 .44.24.44.65v.08zm9.16-.99c-.21 0-.34.1-.43.26v-.2h-.35v4.18h.35v-2.45c.1.15.24.24.44.24.4 0 .77-.31.77-.97v-.08c0-.65-.37-.98-.78-.98zm.41 1.06c0 .41-.16.65-.44.65-.21 0-.37-.15-.42-.34v-.7c.05-.17.22-.34.42-.34.29 0 .44.23.44.65v.08zm-6.58-.99c-.25 0-.5.06-.68.24l.1.25c.13-.12.32-.18.56-.18.27 0 .41.14.41.39v.04c-.14-.02-.3-.04-.49-.04-.4 0-.73.13-.73.55v.02c0 .36.27.58.61.58.23 0 .41-.08.51-.22l.06.18h.4v-1.15c0-.47-.26-.66-.75-.66zm.39 1.19c0 .21-.2.38-.49.38-.2 0-.36-.1-.36-.27v-.02c0-.21.18-.3.41-.3.15 0 .3.02.44.04v.17zm-3.88-1.19c-.42 0-.72.32-.72.98v.08c0 .66.33.98.77.98.2 0 .4-.06.6-.2l-.13-.25c-.14.1-.3.15-.47.15-.24 0-.43-.13-.46-.52h1.13v-.17c-.02-.68-.28-1.05-.72-1.05zm.38.84H19.1c.02-.38.17-.54.4-.54.24 0 .36.17.38.54z" fill="#000"/><path d="M35.95 13.48v-.18h-.06l-.07.13-.08-.13h-.05v.18h.04v-.14l.07.12h.04l.08-.12v.14h.03zm-.4 0v-.15h.09v-.03h-.22v.03h.08v.15h.05z" fill="#F79410"/><path d="M24.02 11.12h-1.77v2.76h1.77v-.3h-1.41v-.92h1.29v-.3h-1.29v-.92h1.41v-.32z" fill="#000"/><path d="M24.78 14.21c.38 0 .54-.24.54-.52v-.02c0-.31-.2-.45-.53-.53-.27-.07-.36-.14-.36-.29v-.02c0-.13.11-.23.32-.23.16 0 .33.06.47.16l.13-.26a.95.95 0 0 0-.58-.18c-.35 0-.52.21-.52.49v.02c0 .35.2.46.53.55.27.07.36.15.36.29v.02c0 .15-.12.24-.34.24a.82.82 0 0 1-.56-.2l-.15.24c.19.15.45.24.69.24z" fill="#000"/><path d="M26.17 11.12h-.36v3.05h.36v-3.05z" fill="#000"/><path d="M26.93 11.12h-.36v3.05h.36v-3.05z" fill="#000"/><path d="M27.36 11.31c0 .12.1.21.23.21a.2.2 0 0 0 .21-.21c0-.12-.09-.21-.21-.21-.13 0-.23.09-.23.21zm.05 2.9h.36v-2.08h-.36v2.08z" fill="#000"/><g fill="#F79410"><path d="M37 4.06C37 2.92 36.08 2 34.94 2H21.06C19.92 2 19 2.92 19 4.06v15.88c0 1.14.92 2.06 2.06 2.06h13.88c1.14 0 2.06-.92 2.06-2.06V4.06z"/></g><path d="M31.46 17.58h-5.04v-8.6h5.04l-2.52 4.3 2.52 4.3z" fill="#F16622"/><path d="M26.74 12.98c0-1.75.82-3.3 2.1-4.3A5.46 5.46 0 0 0 22 12.98a5.46 5.46 0 0 0 6.84 4.3 5.43 5.43 0 0 1-2.1-4.3z" fill="#E41B24"/><path d="M37 12.98a5.47 5.47 0 0 1-8.16 4.76 5.45 5.45 0 0 0 0-9.52A5.47 5.47 0 0 1 37 12.98z" fill="#F79410"/></svg>
+                              <svg className="w-6 h-4" viewBox="0 0 38 24" xmlns="http://www.w3.org/2000/svg"><rect fill="#fff" height="22" rx="3" width="36" x="1" y="1"/><rect fill="none" height="22" rx="3" stroke="#D9D9D9" width="36" x="1" y="1"/><path d="M10.75 17.29h2.5V6.71h-2.5v10.58zM21.17 7.17a6.2 6.2 0 0 0-2.25-.42c-2.48 0-4.23 1.3-4.25 3.17-.02 1.38 1.26 2.15 2.22 2.6.98.47 1.31.77 1.31 1.19-.01.64-.79.93-1.52.93-1.01 0-1.55-.14-2.38-.5l-.32-.16-.36 2.15c.59.27 1.68.5 2.82.51 2.64 0 4.35-1.28 4.37-3.28.01-1.09-.66-1.92-2.12-2.6-.88-.44-1.42-.74-1.42-1.18 0-.4.46-.82 1.45-.82.82-.01 1.42.17 1.88.37l.23.11.34-2.07z" fill="#00579F"/><path d="M24.4 13.55c.2-.55 1.01-2.67 1.01-2.67-.02.03.2-.56.34-.92l.17.83s.48 2.32.59 2.8h-2.1v-.04zM27.2 6.72h-1.94c-.6 0-1.05.17-1.32.79l-3.74 8.78h2.65l.53-1.44h3.23c.08.34.3 1.44.3 1.44h2.33l-2.04-9.57z" fill="#00579F"/><path d="M8.16 6.71L5.71 13.9l-.26-1.32C5.02 11.05 3.6 9.45 2 8.56l2.26 7.72h2.67l3.97-9.57H8.16z" fill="#00579F"/><path d="M3.78 6.71H.04l-.04.22c3.18.8 5.29 2.72 6.16 5.03L5.2 7.51c-.17-.6-.58-.78-1.13-.8h-.29z" fill="#FAA61A"/></svg>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                       {selectedPaymentMethod === 'card' && (
                         <div className="space-y-6">
                            <div>
                               <label className="text-[10px] uppercase tracking-widest text-stone-500">Card Number</label>
-                              <input type="text" placeholder="0000 0000 0000 0000" className="w-full text-xl font-serif py-3 border-b border-stone-200 focus:border-stone-900 outline-none bg-transparent placeholder-stone-300"/>
+                              <input 
+                                type="text" 
+                                placeholder="0000 0000 0000 0000" 
+                                value={cardNumber}
+                                onChange={e => setCardNumber(e.target.value)}
+                                className="w-full text-xl font-serif py-3 border-b border-stone-200 focus:border-stone-900 outline-none bg-transparent placeholder-stone-300"
+                              />
                            </div>
                            <div className="grid grid-cols-2 gap-8">
                               <div>
                                 <label className="text-[10px] uppercase tracking-widest text-stone-500">Expiry</label>
-                                <input type="text" placeholder="MM/YY" className="w-full text-xl font-serif py-3 border-b border-stone-200 focus:border-stone-900 outline-none bg-transparent placeholder-stone-300"/>
+                                <input 
+                                  type="text" 
+                                  placeholder="MM/YY" 
+                                  value={cardExpiry}
+                                  onChange={e => setCardExpiry(e.target.value)}
+                                  className="w-full text-xl font-serif py-3 border-b border-stone-200 focus:border-stone-900 outline-none bg-transparent placeholder-stone-300"
+                                />
                               </div>
                               <div>
                                 <label className="text-[10px] uppercase tracking-widest text-stone-500">CVC</label>
-                                <input type="text" placeholder="123" className="w-full text-xl font-serif py-3 border-b border-stone-200 focus:border-stone-900 outline-none bg-transparent placeholder-stone-300"/>
+                                <input 
+                                  type="text" 
+                                  placeholder="123" 
+                                  value={cardCvc}
+                                  onChange={e => setCardCvc(e.target.value)}
+                                  className="w-full text-xl font-serif py-3 border-b border-stone-200 focus:border-stone-900 outline-none bg-transparent placeholder-stone-300"
+                                />
                               </div>
                            </div>
+                           <p className="text-[10px] text-stone-400 uppercase tracking-wide pt-2">
+                             For direct card payments, we recommend using PayPal for secure processing
+                           </p>
                         </div>
                       )}
                       {!selectedPaymentMethod && <p className="text-sm text-stone-400 italic">Please select a payment method above.</p>}
@@ -471,11 +612,24 @@ export default function PaymentPage() {
                       Back
                     </button>
                     <button 
-                      onClick={selectedPaymentMethod === 'mpesa' ? handleSendStkPush : completeBooking}
-                      disabled={isLoading || !selectedPaymentMethod}
+                      onClick={() => {
+                        if (selectedPaymentMethod === 'mpesa') {
+                          handleSendStkPush();
+                        } else if (selectedPaymentMethod === 'paypal') {
+                          handlePayPalPayment();
+                        } else {
+                          completeBooking();
+                        }
+                      }}
+                      disabled={isLoading || !selectedPaymentMethod || paypalProcessing}
                       className="bg-stone-900 text-white px-10 py-4 text-xs uppercase tracking-[0.2em] hover:bg-black disabled:bg-stone-200 disabled:text-stone-400 transition-all shadow-lg"
                     >
-                      {isLoading ? "PROCESSING..." : `PAY ${formatCurrency(paymentType === 'full' ? bookingDetails.total : partialPayment.now)}`}
+                      {isLoading || paypalProcessing 
+                        ? "PROCESSING..." 
+                        : selectedPaymentMethod === 'paypal'
+                          ? `PAY WITH PAYPAL`
+                          : `PAY ${formatCurrency(paymentType === 'full' ? bookingDetails.total : partialPayment.now)}`
+                      }
                     </button>
                   </div>
                 </motion.div>

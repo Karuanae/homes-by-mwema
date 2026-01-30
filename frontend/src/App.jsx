@@ -5,11 +5,14 @@ import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminRoute from "./components/AdminRoute";
 import Header from "./components/Navbar";
+import UserLayout from "./components/UserLayout";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import BookingPage from "./pages/BookingPage";
 import PaymentPage from "./pages/PaymentPage";
+import PaymentSuccess from "./pages/PaymentSuccess";
+import PaymentCancel from "./pages/PaymentCancel";
 import MyBookings from "./pages/MyBookings";
 import Chat from "./pages/Chat";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -59,19 +62,46 @@ export default function App() {
           </ProtectedRoute>
         } />
 
-        <Route path="/my-bookings" element={
+        <Route path="/payment/success" element={
           <ProtectedRoute>
             <Header />
-            <MyBookings />
+            <PaymentSuccess />
             <Footer />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/payment/cancel" element={
+          <>
+            <Header />
+            <PaymentCancel />
+            <Footer />
+          </>
+        } />
+
+        <Route path="/my-bookings" element={
+          <ProtectedRoute>
+            <UserLayout>
+              <MyBookings />
+            </UserLayout>
           </ProtectedRoute>
         } />
 
         <Route path="/chat" element={
           <ProtectedRoute>
-            <Header />
-            <Chat />
-            <Footer />
+            <UserLayout>
+              <Chat />
+            </UserLayout>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/profile" element={
+          <ProtectedRoute>
+            <UserLayout>
+              <div className="p-8">
+                <h1 className="text-2xl font-serif mb-4">Profile Settings</h1>
+                <p className="text-stone-500">Profile page coming soon...</p>
+              </div>
+            </UserLayout>
           </ProtectedRoute>
         } />
 

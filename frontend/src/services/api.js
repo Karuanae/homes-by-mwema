@@ -284,6 +284,44 @@ export const paymentsAPI = {
     });
     return response;
   },
+
+  // ==================== PAYPAL PAYMENTS ====================
+  
+  // Create PayPal order
+  createPayPalOrder: async (bookingId, amount, currency = 'KES', returnUrl = null, cancelUrl = null) => {
+    const response = await api.post('/payments/paypal/create-order', {
+      booking_id: bookingId,
+      amount: amount,
+      currency: currency,
+      return_url: returnUrl,
+      cancel_url: cancelUrl
+    });
+    return response.data;
+  },
+
+  // Capture PayPal order (complete payment after approval)
+  capturePayPalOrder: async (orderId) => {
+    const response = await api.post('/payments/paypal/capture-order', {
+      order_id: orderId
+    });
+    return response.data;
+  },
+
+  // Get PayPal order details
+  getPayPalOrder: async (orderId) => {
+    const response = await api.get(`/payments/paypal/order/${orderId}`);
+    return response.data;
+  },
+
+  // Refund PayPal payment (admin only)
+  refundPayPal: async (paymentId, amount = null, note = null) => {
+    const response = await api.post('/payments/paypal/refund', {
+      payment_id: paymentId,
+      amount: amount,
+      note: note
+    });
+    return response.data;
+  },
 };
 
 // ==================== CHATS/MESSAGES API ====================

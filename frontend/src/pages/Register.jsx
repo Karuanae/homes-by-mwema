@@ -64,7 +64,7 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-stone-50 font-sans text-stone-900 p-6">
+    <div className="min-h-screen flex items-center justify-center bg-stone-50 font-sans text-stone-900 p-6 pt-20">
       
       <motion.div 
         initial={{ opacity: 0, y: 10 }}

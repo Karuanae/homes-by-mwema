@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { motion } from "framer-motion";
-import { FaPaperPlane, FaUser, FaHome } from "react-icons/fa";
+import { motion, AnimatePresence } from "framer-motion";
+import { IoSend, IoHomeOutline, IoChatbubblesOutline, IoChevronBack } from "react-icons/io5";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
 
@@ -11,30 +11,20 @@ export default function Chat() {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const messagesEndRef = useRef(null);
 
-  // Fetch user's chats on mount
   useEffect(() => {
-    if (user?.id) {
-      fetchChats();
-    }
+    if (user?.id) fetchChats();
   }, [user]);
 
-  // Fetch messages when active chat changes
   useEffect(() => {
-    if (activeChat) {
-      fetchMessages(activeChat.id);
-    }
+    if (activeChat) fetchMessages(activeChat.id);
   }, [activeChat]);
 
-  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  }, [messages]);
 
   const fetchChats = async () => {
     try {
@@ -81,8 +71,7 @@ export default function Chat() {
 
   const formatTime = (timestamp) => {
     if (!timestamp) return "";
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString("en-US", {
+    return new Date(timestamp).toLocaleTimeString("en-US", {
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
@@ -91,166 +80,176 @@ export default function Chat() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-stone-50 flex items-center justify-center pt-20">
-        <div className="text-teal-600 text-xl">Loading chats...</div>
+      <div className="min-h-screen bg-[#f5f2ee] flex flex-col items-center justify-center">
+        <div className="w-12 h-12 border-2 border-stone-300 border-t-stone-900 rounded-full animate-spin mb-4" />
+        <p className="text-[10px] uppercase tracking-[0.3em] text-stone-500 font-bold">Opening Concierge</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-stone-50 pt-20">
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="bg-white rounded-2xl shadow-xl overflow-hidden" style={{ height: "calc(100vh - 160px)" }}>
-          <div className="grid grid-cols-12 h-full">
-            
-            {/* Sidebar - Chat List */}
-            <div className="col-span-12 md:col-span-4 border-r border-gray-200 flex flex-col">
-              <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-teal-600 to-teal-700">
-                <h2 className="text-2xl font-serif text-white" style={{ fontFamily: "'Playfair Display', serif" }}>
-                  Messages
-                </h2>
-                <p className="text-teal-100 text-sm mt-1">Your conversations</p>
-              </div>
+    <div className="min-h-screen bg-[#f5f2ee] pt-6 pb-12 px-4 md:px-8">
+      {/* Background Decor */}
+      <div className="fixed top-0 left-0 w-full h-full pointer-events-none opacity-40 overflow-hidden z-0">
+        <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] bg-stone-200 blur-[120px] rounded-full" />
+        <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] bg-stone-200 blur-[120px] rounded-full" />
+      </div>
 
-              <div className="flex-1 overflow-y-auto">
-                {chats.length === 0 ? (
-                  <div className="p-8 text-center text-gray-500">
-                    <FaHome className="text-4xl mx-auto mb-4 text-gray-300" />
-                    <p>No conversations yet</p>
-                    <p className="text-sm mt-2">Start by booking a property</p>
-                  </div>
-                ) : (
-                  chats.map((chat) => (
-                    <motion.div
-                      key={chat.id}
-                      whileHover={{ backgroundColor: "#f0fdfa" }}
-                      onClick={() => setActiveChat(chat)}
-                      className={`p-4 cursor-pointer border-b border-gray-100 transition-colors ${
-                        activeChat?.id === chat.id ? "bg-teal-50 border-l-4 border-l-teal-600" : ""
-                      }`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-r from-teal-500 to-teal-600 flex items-center justify-center flex-shrink-0">
-                          <FaHome className="text-white text-lg" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-semibold text-gray-900 truncate">
-                            Property #{chat.property_id || "General"}
-                          </h4>
-                          <p className="text-sm text-gray-600 truncate">
-                            {chat.last_message || "No messages yet"}
-                          </p>
-                          {chat.last_message_time && (
-                            <p className="text-xs text-gray-400 mt-1">
-                              {formatTime(chat.last_message_time)}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))
-                )}
-              </div>
+      <div className="max-w-[1400px] mx-auto relative z-10">
+        <div className="bg-white/70 backdrop-blur-xl rounded-sm shadow-[0_20px_60px_-15px_rgba(0,0,0,0.05)] border border-white h-[85vh] flex overflow-hidden">
+          
+          {/* SIDEBAR */}
+          <motion.div 
+            animate={{ width: isSidebarOpen ? "350px" : "80px" }}
+            className="border-r border-stone-100 flex flex-col bg-white/50 relative"
+          >
+            <div className="p-6 border-b border-stone-100 flex items-center justify-between">
+              {isSidebarOpen && (
+                <h2 className="font-serif text-2xl text-stone-900">Messages</h2>
+              )}
+              <button 
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                className="p-2 hover:bg-stone-100 rounded-full transition-colors"
+              >
+                <IoChatbubblesOutline className="text-stone-400" size={20} />
+              </button>
             </div>
 
-            {/* Main Chat Area */}
-            <div className="col-span-12 md:col-span-8 flex flex-col">
-              {activeChat ? (
-                <>
-                  {/* Chat Header */}
-                  <div className="p-6 border-b border-gray-200 bg-white">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-full bg-gradient-to-r from-teal-500 to-teal-600 flex items-center justify-center">
-                        <FaHome className="text-white text-lg" />
-                      </div>
-                      <div>
-                        <h3 className="font-serif text-xl text-gray-900">
-                          Property #{activeChat.property_id || "General"}
-                        </h3>
-                        <p className="text-sm text-gray-500">Active conversation</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Messages Area */}
-                  <div className="flex-1 overflow-y-auto p-6 bg-stone-50">
-                    <div className="space-y-4">
-                      {messages.length === 0 ? (
-                        <div className="text-center text-gray-500 py-12">
-                          <p>No messages yet. Start the conversation!</p>
-                        </div>
-                      ) : (
-                        messages.map((message) => {
-                          const isOwnMessage = message.sender_id === user.id;
-                          return (
-                            <motion.div
-                              key={message.id}
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              className={`flex ${isOwnMessage ? "justify-end" : "justify-start"}`}
-                            >
-                              <div
-                                className={`max-w-xs lg:max-w-md px-4 py-3 rounded-2xl ${
-                                  isOwnMessage
-                                    ? "bg-gradient-to-r from-teal-600 to-teal-700 text-white rounded-br-none"
-                                    : "bg-white border border-gray-200 text-gray-900 rounded-bl-none"
-                                }`}
-                              >
-                                {!isOwnMessage && (
-                                  <p className="text-xs font-semibold mb-1 text-teal-600">
-                                    {message.is_host ? "Host" : message.sender_name}
-                                  </p>
-                                )}
-                                <p className="text-sm leading-relaxed">{message.content}</p>
-                                <p
-                                  className={`text-xs mt-2 ${
-                                    isOwnMessage ? "text-teal-100" : "text-gray-400"
-                                  }`}
-                                >
-                                  {formatTime(message.timestamp)}
-                                </p>
-                              </div>
-                            </motion.div>
-                          );
-                        })
-                      )}
-                      <div ref={messagesEndRef} />
-                    </div>
-                  </div>
-
-                  {/* Message Input */}
-                  <div className="p-4 border-t border-gray-200 bg-white">
-                    <form onSubmit={handleSendMessage} className="flex gap-3">
-                      <input
-                        type="text"
-                        value={newMessage}
-                        onChange={(e) => setNewMessage(e.target.value)}
-                        placeholder="Type your message..."
-                        className="flex-1 px-4 py-3 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                      />
-                      <button
-                        type="submit"
-                        disabled={!newMessage.trim()}
-                        className="px-6 py-3 bg-gradient-to-r from-teal-600 to-teal-700 text-white rounded-full hover:from-teal-700 hover:to-teal-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                      >
-                        <FaPaperPlane />
-                        <span className="hidden sm:inline">Send</span>
-                      </button>
-                    </form>
-                  </div>
-                </>
-              ) : (
-                <div className="flex-1 flex items-center justify-center text-gray-500">
-                  <div className="text-center">
-                    <FaUser className="text-6xl mx-auto mb-4 text-gray-300" />
-                    <p className="text-lg">Select a conversation to start chatting</p>
-                  </div>
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              {chats.length === 0 ? (
+                <div className="p-8 text-center">
+                  <p className="text-[10px] uppercase tracking-widest text-stone-400 font-bold">No Conversations</p>
                 </div>
+              ) : (
+                chats.map((chat) => (
+                  <button
+                    key={chat.id}
+                    onClick={() => setActiveChat(chat)}
+                    className={`w-full p-6 text-left transition-all border-b border-stone-50 flex items-center gap-4 ${
+                      activeChat?.id === chat.id ? "bg-white shadow-sm" : "hover:bg-white/40"
+                    }`}
+                  >
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 border ${
+                      activeChat?.id === chat.id ? "bg-stone-900 border-stone-900" : "bg-white border-stone-200"
+                    }`}>
+                      <IoHomeOutline className={activeChat?.id === chat.id ? "text-white" : "text-stone-400"} size={20} />
+                    </div>
+                    {isSidebarOpen && (
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-baseline mb-1">
+                          <h4 className="font-medium text-stone-900 text-sm truncate uppercase tracking-tight">
+                            Residence {chat.property_id || "Direct"}
+                          </h4>
+                          <span className="text-[9px] text-stone-400 font-bold uppercase tracking-tighter">
+                            {formatTime(chat.last_message_time)}
+                          </span>
+                        </div>
+                        <p className="text-xs text-stone-500 truncate font-light italic">
+                          {chat.last_message || "Awaiting your inquiry..."}
+                        </p>
+                      </div>
+                    )}
+                  </button>
+                ))
               )}
             </div>
+          </motion.div>
+
+          {/* MAIN CHAT */}
+          <div className="flex-1 flex flex-col bg-white/30">
+            {activeChat ? (
+              <>
+                {/* Header */}
+                <div className="px-8 py-5 border-b border-stone-100 bg-white/80 backdrop-blur-md flex justify-between items-center">
+                  <div className="flex items-center gap-4">
+                    <div>
+                      <h3 className="text-xs uppercase tracking-[0.2em] font-bold text-stone-400 mb-0.5">Concierge Service</h3>
+                      <p className="font-serif text-xl text-stone-900 italic">Residence Inquiry #{activeChat.property_id}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Messages Container */}
+                <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar bg-stone-50/30">
+                  {messages.map((msg, idx) => {
+                    const isOwn = msg.sender_id === user.id;
+                    return (
+                      <motion.div
+                        key={msg.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: idx * 0.05 }}
+                        className={`flex ${isOwn ? "justify-end" : "justify-start"}`}
+                      >
+                        <div className={`max-w-[70%] ${isOwn ? "text-right" : "text-left"}`}>
+                          {!isOwn && (
+                            <p className="text-[9px] uppercase tracking-widest font-bold text-stone-400 mb-2 ml-1">
+                              {msg.is_host ? "Host Concierge" : msg.sender_name}
+                            </p>
+                          )}
+                          <div className={`px-6 py-4 rounded-sm text-sm leading-relaxed shadow-sm ${
+                            isOwn 
+                              ? "bg-stone-900 text-[#f5f2ee]" 
+                              : "bg-white text-stone-800 border border-stone-100"
+                          }`}>
+                            {msg.content}
+                          </div>
+                          <p className="text-[9px] mt-2 text-stone-400 font-medium tracking-tighter uppercase">
+                            {formatTime(msg.timestamp)}
+                          </p>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                  <div ref={messagesEndRef} />
+                </div>
+
+                {/* Input Area */}
+                <div className="p-6 bg-white border-t border-stone-100">
+                  <form onSubmit={handleSendMessage} className="relative flex items-center">
+                    <input
+                      type="text"
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      placeholder="Ask us anything..."
+                      className="w-full bg-stone-50 border-none px-6 py-4 rounded-sm text-sm focus:ring-1 focus:ring-stone-200 transition-all placeholder:text-stone-400 placeholder:italic font-light"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!newMessage.trim()}
+                      className="absolute right-3 p-3 bg-stone-900 text-white rounded-sm hover:bg-stone-800 transition-all disabled:opacity-20 flex items-center gap-2"
+                    >
+                      <IoSend size={16} />
+                    </button>
+                  </form>
+                  <p className="text-center text-[9px] text-stone-400 uppercase tracking-widest mt-4 font-bold">
+                    Typically replies in under 15 minutes
+                  </p>
+                </div>
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-center p-12">
+                <div>
+                  <div className="w-20 h-20 bg-stone-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <IoChatbubblesOutline className="text-stone-300" size={40} />
+                  </div>
+                  <h3 className="font-serif text-2xl text-stone-900 mb-2">Select a Residence</h3>
+                  <p className="text-stone-500 font-light text-sm max-w-xs mx-auto">
+                    Choose a conversation on the left to speak with our concierge team.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
+
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #d1d5db; }
+      `}</style>
     </div>
   );
 }

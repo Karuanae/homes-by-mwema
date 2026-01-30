@@ -1,4 +1,4 @@
-import { motion, AnimatePresence, useAnimation, useMotionValue, useTransform } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useState, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
 import api from "../services/api";
@@ -6,8 +6,7 @@ import api from "../services/api";
 // --- SUB-COMPONENT: 3D LUXURY CAROUSEL ---
 const LuxuryCarousel = ({ slides }) => {
   const [rotation, setRotation] = useState(0);
-  const containerRef = useRef(null);
-  
+
   // Auto-rotate logic
   useEffect(() => {
     const interval = setInterval(() => {
@@ -17,8 +16,8 @@ const LuxuryCarousel = ({ slides }) => {
   }, []);
 
   return (
-    <div className="relative w-full h-[450px] perspective-1000 flex items-center justify-center overflow-visible">
-       {/* 3D Scene Container */}
+    <div className="relative w-full h-[450px] perspective-1000 flex items-center justify-center overflow-visible z-10">
+      {/* 3D Scene Container */}
       <motion.div
         className="relative w-[260px] h-[360px] preserve-3d transition-transform duration-1000 ease-in-out"
         style={{ 
@@ -41,16 +40,13 @@ const LuxuryCarousel = ({ slides }) => {
               }}
             >
               {/* Card Content */}
-              <div className="w-full h-full bg-stone-200 rounded-sm overflow-hidden shadow-2xl relative group">
+              <div className="w-full h-full bg-stone-200 rounded-sm overflow-hidden shadow-2xl relative group border-[4px] border-white">
                 <img 
                   src={slide.bgImage} 
                   alt={slide.title}
                   className="w-full h-full object-cover filter brightness-90 group-hover:brightness-110 transition-all duration-500"
                 />
                 
-                {/* Overlay Text - Only visible when facing roughly front? 
-                    Actually, let's keep it visible but subtle 
-                */}
                 <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/80 to-transparent text-white">
                   <p className="text-[10px] tracking-[0.3em] uppercase opacity-80 mb-1">{slide.subtitle}</p>
                   <h3 className="font-serif text-2xl leading-none">{slide.title}</h3>
@@ -62,10 +58,53 @@ const LuxuryCarousel = ({ slides }) => {
       </motion.div>
       
       {/* Floor Shadow for realism */}
-      <div className="absolute bottom-10 w-[200px] h-[20px] bg-black/20 blur-xl rounded-[100%]" />
+      <div className="absolute bottom-10 w-[200px] h-[20px] bg-black/30 blur-xl rounded-[100%]" />
     </div>
   );
 };
+
+// --- SUB-COMPONENT: ROTATING DECORATIVE BADGE ---
+const RotatingBadge = () => (
+  <motion.div 
+    animate={{ rotate: 360 }}
+    transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+    className="absolute -top-12 -left-12 opacity-10 md:opacity-15 pointer-events-none z-0"
+  >
+    <svg width="200" height="200" viewBox="0 0 200 200">
+      <defs>
+        <path id="circlePath" d="M 100, 100 m -75, 0 a 75,75 0 1,1 150,0 a 75,75 0 1,1 -150,0" />
+      </defs>
+      <text fill="#44403C" fontSize="12" fontWeight="bold" letterSpacing="4">
+        <textPath xlinkHref="#circlePath" className="uppercase">
+          • Luxury Living • Nairobi • Est. 2024 • Verified Stays
+        </textPath>
+      </text>
+    </svg>
+  </motion.div>
+);
+
+// --- SUB-COMPONENT: AVATAR SOCIAL PROOF ---
+const SocialProof = () => (
+  <div className="flex items-center gap-4 mt-8 mb-8 pl-1">
+    <div className="flex -space-x-3">
+      {[1,2,3].map(i => (
+        <div key={i} className="w-10 h-10 rounded-full border-2 border-[#f5f2ee] bg-stone-300 overflow-hidden relative">
+           {/* Using placeholder avatars, replace with real ones if available */}
+           <img src={`https://i.pravatar.cc/100?img=${i + 25}`} alt="Guest" className="w-full h-full object-cover grayscale" />
+        </div>
+      ))}
+      <div className="w-10 h-10 rounded-full border-2 border-[#f5f2ee] bg-stone-900 text-white text-[10px] flex items-center justify-center font-bold">
+        50+
+      </div>
+    </div>
+    <div className="flex flex-col justify-center">
+      <div className="flex text-amber-500 text-xs gap-0.5">
+        <span>★</span><span>★</span><span>★</span><span>★</span><span>★</span>
+      </div>
+      <span className="text-xs text-stone-500 font-medium tracking-wide">Trusted by 500+ Guests</span>
+    </div>
+  </div>
+);
 
 export default function Home() {
   /* ================= DATE & LOGIC STATE ================= */
@@ -112,29 +151,30 @@ export default function Home() {
     { id: 3, number: "III", title: "Curated Design", description: "Interiors selected for their aesthetic value and comfort." }
   ];
 
-const testimonials = [
-  { 
-    id: 1, 
-    name: "Amina K.", 
-    location: "Mombasa", 
-    content: "Capital Rise 2-Bedroom offered the perfect blend of modern luxury and authentic Kenyan hospitality. Truly exceptional.", 
-    rating: "5.0" 
-  },
-  { 
-    id: 2, 
-    name: "James M.", 
-    location: "Nairobi", 
-    content: "The 2-bedroom in Kilimani was ideal for business hosting. Central, luxurious, and impressed all our international guests.", 
-    rating: "5.0" 
-  },
-  { 
-    id: 3, 
-    name: "Lilian W.", 
-    location: "Kisumu", 
-    content: "Our stay at the house in Langata was magical. Spacious, serene, and perfect for our family retreat to Nairobi.", 
-    rating: "4.9" 
-  }
-];
+  const testimonials = [
+    { 
+      id: 1, 
+      name: "Amina K.", 
+      location: "Mombasa", 
+      content: "Capital Rise 2-Bedroom offered the perfect blend of modern luxury and authentic Kenyan hospitality. Truly exceptional.", 
+      rating: "5.0" 
+    },
+    { 
+      id: 2, 
+      name: "James M.", 
+      location: "Nairobi", 
+      content: "The 2-bedroom in Kilimani was ideal for business hosting. Central, luxurious, and impressed all our international guests.", 
+      rating: "5.0" 
+    },
+    { 
+      id: 3, 
+      name: "Lilian W.", 
+      location: "Kisumu", 
+      content: "Our stay at the house in Langata was magical. Spacious, serene, and perfect for our family retreat to Nairobi.", 
+      rating: "4.9" 
+    }
+  ];
+
   const faqData = [
     { id: 1, question: "Cancellation Policy", answer: "Cancel up to 24 hours before check-in for a full refund. Specific policies are detailed on each booking page." },
     { id: 2, question: "Check-in Process", answer: "You will receive secure access codes and detailed directions upon confirmation. We offer seamless self check-in." },
@@ -163,7 +203,6 @@ const testimonials = [
         setProperties(res.data || []);
       } catch (error) {
         console.error('Error fetching properties:', error);
-        console.error('Error details:', error.response?.data || error.message);
         setError('Unable to load residences. Please check if the server is running.');
       } finally {
         setLoading(false);
@@ -190,72 +229,89 @@ const testimonials = [
   return (
     <div className="bg-[#f5f2ee] font-sans text-stone-900 overflow-x-hidden selection:bg-stone-200">
       
-      {/* GLOBAL STYLES FOR 3D */}
+      {/* GLOBAL STYLES & NOISE */}
       <style>{`
         .perspective-1000 { perspective: 1000px; }
         .preserve-3d { transform-style: preserve-3d; }
         .backface-hidden { backface-visibility: hidden; }
-        /* Old Money Texture */
         .bg-noise {
-          position: fixed;
-          top: 0; left: 0; width: 100%; height: 100%;
-          pointer-events: none;
-          z-index: 50;
-          opacity: 0.03;
+          position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+          pointer-events: none; z-index: 50; opacity: 0.04;
           background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
         }
+        .animate-marquee { animation: marquee 40s linear infinite; }
+        @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
       `}</style>
-
-      {/* NOISE OVERLAY */}
       <div className="bg-noise" />
 
-      {/* ================= HERO SECTION ================= */}
-      <div className="relative min-h-screen w-full flex flex-col pt-32 pb-0 px-6 lg:px-16 z-20">
+      {/* ================= HERO SECTION (UPDATED) ================= */}
+      <div className="relative min-h-[110vh] w-full flex flex-col pt-32 pb-12 px-6 lg:px-16 overflow-hidden">
         
-        {/* Background Gradient */}
-        <div className="absolute inset-0 bg-gradient-to-b from-[#f7f5f2] to-[#ebe5de] -z-20" />
+        {/* ANIMATED BACKGROUND BLOBS (LAVA LAMP EFFECT) */}
+        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-orange-200/20 rounded-full blur-[120px] animate-pulse" />
+        <div className="absolute bottom-[10%] right-[-5%] w-[40%] h-[60%] bg-stone-300/30 rounded-full blur-[100px]" />
 
-        <div className="max-w-[1400px] mx-auto w-full grid grid-cols-1 lg:grid-cols-2 gap-12 items-center z-10">
+        <div className="max-w-[1400px] mx-auto w-full grid grid-cols-1 lg:grid-cols-2 gap-12 items-center relative z-10">
           
           {/* Left: Typography & Search */}
-          <div className="flex flex-col justify-center order-2 lg:order-1">
+          <div className="flex flex-col justify-center order-2 lg:order-1 relative">
+            
+            {/* Rotating Decorative Badge */}
+            <RotatingBadge />
+
             <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+              initial={{ opacity: 0, x: -30 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 1, ease: "easeOut" }}
             >
-              <span className="block text-xs font-bold tracking-[0.3em] text-stone-500 mb-4 uppercase pl-1">
-                Est. 2024 • Luxury Rentals
-              </span>
-              <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl text-stone-900 mb-8 leading-[0.9]" style={{ fontFamily: "'Playfair Display', serif" }}>
-                Homes By <br/>
-                <span className="italic font-light text-stone-600">Mwema.</span>
+              {/* Tagline Pill */}
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-stone-300 bg-white/50 backdrop-blur-sm mb-6 w-fit">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                </span>
+                <span className="text-[10px] font-bold tracking-widest uppercase text-stone-600">Now hosting in Nairobi</span>
+              </div>
+
+              <h1 className="text-6xl sm:text-7xl md:text-8xl text-stone-900 mb-6 leading-[0.9]" style={{ fontFamily: "'Playfair Display', serif" }}>
+                Homes <span className="font-light italic text-stone-400">by</span> <br/>
+                Mwema.
               </h1>
+              
+              <p className="text-lg text-stone-600 max-w-md leading-relaxed font-light mb-2">
+                Curated sanctuaries for the modern traveler. Experience Kenya with unmatched privacy and style.
+              </p>
+
+              {/* Social Proof Section */}
+              <SocialProof />
+
             </motion.div>
 
-            {/* FLOATING SEARCH BAR */}
+            {/* GLASSMORPHISM SEARCH BAR */}
             <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.2, duration: 0.6 }}
-              className="bg-white rounded-none shadow-[0_20px_40px_-15px_rgba(0,0,0,0.1)] border border-stone-100 p-2 max-w-xl"
+              initial={{ opacity: 0, y: 40 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3, duration: 0.8 }}
+              className="bg-white/80 backdrop-blur-lg rounded-xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] border border-white/50 p-2 max-w-xl relative z-20"
             >
-              <div className="flex flex-col sm:flex-row divide-y sm:divide-y-0 sm:divide-x divide-stone-100">
+              <div className="flex flex-col sm:flex-row divide-y sm:divide-y-0 sm:divide-x divide-stone-200/50">
                 {/* Dates */}
                 <div 
-                  className="flex-1 p-4 hover:bg-stone-50 transition-colors cursor-pointer group relative"
+                  className="flex-1 p-4 hover:bg-white/50 transition-colors cursor-pointer rounded-lg relative"
                   onClick={() => setShowCalendar(!showCalendar)}
                 >
-                  <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-bold mb-1 group-hover:text-stone-900">Check In - Out</label>
-                  <div className="text-stone-900 font-medium text-sm truncate">{formatDateDisplay()}</div>
+                  <label className="block text-[9px] uppercase tracking-widest text-stone-500 font-bold mb-1">Check In - Out</label>
+                  <div className="text-stone-900 font-serif text-lg leading-none truncate">{formatDateDisplay()}</div>
                   
                   {/* Calendar Dropdown */}
                   <AnimatePresence>
                     {showCalendar && (
                       <motion.div 
                         ref={calendarRef}
-                        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
-                        className="absolute top-full left-0 mt-4 bg-white p-4 shadow-xl border border-stone-100 w-72 z-[9999]"
+                        initial={{ opacity: 0, y: 10, scale: 0.95 }} 
+                        animate={{ opacity: 1, y: 0, scale: 1 }} 
+                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                        className="absolute top-full left-0 mt-4 bg-white p-4 shadow-2xl rounded-xl border border-stone-100 w-72 z-[9999]"
                       >
                          <div className="flex justify-between items-center mb-4">
                             <button onClick={(e) => {e.stopPropagation(); setCurrentMonth(m => Math.max(0, m - 1))}} className="text-stone-400 hover:text-black">←</button>
@@ -273,7 +329,7 @@ const testimonials = [
                               const isSel = dateStr === startDate || dateStr === endDate;
                               return (
                                 <button key={i} onClick={(e) => {e.stopPropagation(); handleDateSelect(d);}}
-                                  className={`h-8 w-8 text-xs flex items-center justify-center transition-all ${isSel ? 'bg-stone-900 text-white' : 'hover:bg-stone-100'}`}>
+                                  className={`h-8 w-8 text-xs rounded-full flex items-center justify-center transition-all ${isSel ? 'bg-stone-900 text-white' : 'hover:bg-stone-100'}`}>
                                   {d}
                                 </button>
                               );
@@ -286,11 +342,11 @@ const testimonials = [
 
                 {/* Residence Type */}
                 <div 
-                  className="flex-1 p-4 hover:bg-stone-50 transition-colors cursor-pointer group relative"
+                  className="flex-1 p-4 hover:bg-white/50 transition-colors cursor-pointer rounded-lg relative"
                   onClick={() => setShowRooms(!showRooms)}
                 >
-                  <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-bold mb-1 group-hover:text-stone-900">Residence</label>
-                  <div className="text-stone-900 font-medium text-sm truncate">{roomType}</div>
+                  <label className="block text-[9px] uppercase tracking-widest text-stone-500 font-bold mb-1">Residence</label>
+                  <div className="text-stone-900 font-serif text-lg leading-none truncate">{roomType}</div>
                   
                   {/* Residence Dropdown */}
                   <AnimatePresence>
@@ -298,17 +354,13 @@ const testimonials = [
                       <motion.div 
                         ref={roomsRef}
                         initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
-                        className="absolute top-full left-0 mt-4 bg-white shadow-xl border border-stone-100 w-48 z-[9999]"
+                        className="absolute top-full left-0 mt-4 bg-white shadow-2xl rounded-xl border border-stone-100 w-48 z-[9999] overflow-hidden"
                       >
                         {["Studio", "1 Bedroom", "2 Bedroom", "3 Bedroom"].map((type) => (
                           <button 
                             key={type}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setRoomType(type);
-                              setShowRooms(false);
-                            }}
-                            className={`w-full text-left px-4 py-3 text-sm hover:bg-stone-50 transition-colors ${roomType === type ? 'bg-stone-100 font-medium' : ''}`}
+                            onClick={(e) => { e.stopPropagation(); setRoomType(type); setShowRooms(false); }}
+                            className="w-full text-left px-4 py-3 text-sm hover:bg-stone-50 transition-colors"
                           >
                             {type}
                           </button>
@@ -320,11 +372,11 @@ const testimonials = [
 
                 {/* Guests */}
                 <div 
-                  className="flex-1 p-4 hover:bg-stone-50 transition-colors cursor-pointer group relative"
+                  className="flex-1 p-4 hover:bg-white/50 transition-colors cursor-pointer rounded-lg relative"
                   onClick={() => setShowGuests(!showGuests)}
                 >
-                  <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-bold mb-1 group-hover:text-stone-900">Guests</label>
-                  <div className="text-stone-900 font-medium text-sm">{guests.adults + guests.children > 1 ? `${guests.adults + guests.children} Travelers` : "Add guests"}</div>
+                  <label className="block text-[9px] uppercase tracking-widest text-stone-500 font-bold mb-1">Guests</label>
+                  <div className="text-stone-900 font-serif text-lg leading-none">{guests.adults + guests.children} Guest(s)</div>
                   
                   {/* Guests Dropdown */}
                   <AnimatePresence>
@@ -332,15 +384,14 @@ const testimonials = [
                       <motion.div 
                         ref={guestsRef}
                         initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
-                        className="absolute top-full left-0 mt-4 bg-white p-4 shadow-xl border border-stone-100 w-60 z-[9999]"
+                        className="absolute top-full left-0 mt-4 bg-white p-4 shadow-2xl rounded-xl border border-stone-100 w-60 z-[9999]"
                       >
-                         {/* Simple guest controls */}
                          <div className="flex justify-between items-center py-2">
                            <span className="text-sm">Adults</span>
                            <div className="flex gap-3 items-center">
-                             <button onClick={(e)=>{e.stopPropagation(); setGuests(g=>({...g, adults:Math.max(1,g.adults-1)}))}} className="w-6 h-6 border flex items-center justify-center text-stone-500 hover:border-black">-</button>
+                             <button onClick={(e)=>{e.stopPropagation(); setGuests(g=>({...g, adults:Math.max(1,g.adults-1)}))}} className="w-6 h-6 rounded-full border flex items-center justify-center hover:bg-stone-100">-</button>
                              <span className="text-sm w-3 text-center">{guests.adults}</span>
-                             <button onClick={(e)=>{e.stopPropagation(); setGuests(g=>({...g, adults:g.adults+1}))}} className="w-6 h-6 border flex items-center justify-center text-stone-500 hover:border-black">+</button>
+                             <button onClick={(e)=>{e.stopPropagation(); setGuests(g=>({...g, adults:g.adults+1}))}} className="w-6 h-6 rounded-full border flex items-center justify-center hover:bg-stone-100">+</button>
                            </div>
                          </div>
                       </motion.div>
@@ -350,16 +401,21 @@ const testimonials = [
 
                 {/* Button */}
                 <div className="p-2 flex items-center">
-                  <button className="w-full h-full min-h-[44px] bg-stone-900 hover:bg-stone-800 text-white px-6 transition-colors flex items-center justify-center gap-2 group">
-                    <span className="text-xs uppercase tracking-widest font-medium">Search</span>
+                  <button className="w-full h-full min-h-[50px] bg-stone-900 hover:bg-stone-800 text-white rounded-lg px-6 transition-all duration-300 shadow-lg hover:shadow-xl flex items-center justify-center gap-2 group">
+                    <span className="text-xs uppercase tracking-widest font-bold">Search</span>
                   </button>
                 </div>
               </div>
             </motion.div>
           </div>
 
-          {/* Right: 3D Carousel */}
-          <div className="relative order-1 lg:order-2 h-[450px] flex items-center justify-center mt-0">
+          {/* Right: 3D Carousel with backdrop element */}
+          <div className="relative order-1 lg:order-2 h-[500px] flex items-center justify-center mt-0">
+             {/* Abstract shape behind carousel */}
+             <motion.div 
+               animate={{ rotate: -5 }}
+               className="absolute top-10 right-10 w-[300px] h-[400px] bg-stone-200/50 rounded-full blur-3xl -z-10" 
+             />
              <LuxuryCarousel slides={carouselSlides} />
           </div>
 
@@ -367,20 +423,15 @@ const testimonials = [
       </div>
 
       {/* ================= MARQUEE STRIP ================= */}
-      <div className="w-full bg-stone-900 text-stone-400 overflow-hidden py-3 border-y border-stone-800">
+      <div className="w-full bg-stone-900 text-stone-400 overflow-hidden py-3 border-y border-stone-800 z-20 relative">
         <div className="whitespace-nowrap animate-marquee flex gap-12 text-xs font-medium tracking-[0.2em] uppercase">
-          {/* Repeated items for infinite scroll effect */}
           {Array(10).fill("Concierge • Privacy • Luxury • Comfort • Design • ").map((text, i) => (
              <span key={i}>{text}</span>
           ))}
         </div>
       </div>
-      <style>{`
-        .animate-marquee { animation: marquee 30s linear infinite; }
-        @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
-      `}</style>
 
-      {/* ================= PROPERTIES COLLECTION (MOVED BELOW MARQUEE) ================= */}
+      {/* ================= PROPERTIES COLLECTION ================= */}
       <section className="py-16 px-6 relative z-10 bg-white">
         <div className="max-w-[1400px] mx-auto">
           <div className="flex flex-col justify-center items-center mb-16 pb-0">
@@ -419,7 +470,7 @@ const testimonials = [
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-12">
             {properties.slice(0, visibleProperties).map((property, idx) => (
               <Link to={`/booking/${property.id}`} key={property.id || idx} className="group block">
-                <div className="relative aspect-[3/4] overflow-hidden bg-stone-100 mb-4 cursor-none">
+                <div className="relative aspect-[3/4] overflow-hidden bg-stone-100 mb-4 cursor-none rounded-sm">
                    {/* Property Image with Zoom Effect */}
                    <motion.img
                       whileHover={{ scale: 1.05 }}
@@ -427,12 +478,12 @@ const testimonials = [
                       src={property.images?.[0]}
                       alt={property.name}
                       className="w-full h-full object-cover grayscale-[20%] group-hover:grayscale-0 transition-all duration-500"
-                   />
-                   {property.tag && (
-                     <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm px-2 py-1 text-[10px] uppercase tracking-widest font-bold text-stone-900">
-                       {property.tag}
-                     </div>
-                   )}
+                    />
+                    {property.tag && (
+                      <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm px-2 py-1 text-[10px] uppercase tracking-widest font-bold text-stone-900">
+                        {property.tag}
+                      </div>
+                    )}
                 </div>
                 
                 <div className="flex justify-between items-start">
@@ -548,7 +599,7 @@ const testimonials = [
       </section>
 
       {/* ================= CTA FOOTER ================= */}
-      <section className="py-20 bg-stone-900 text-[#f5f2ee] text-center px-6">
+      <section className="py-20 bg-stone-900 text-[#f5f2ee] text-center px-6 relative z-10">
         <h2 className="text-4xl md:text-6xl font-serif mb-6">Ready to Book?</h2>
         <p className="text-stone-400 max-w-lg mx-auto mb-10 font-light">Experience the finest homes Kenya has to offer. Book your sanctuary today.</p>
         <div className="flex justify-center gap-6">
@@ -560,8 +611,9 @@ const testimonials = [
       {/* ================= FLOATING ACTION ================= */}
       <motion.a 
         href="#"
-        className="fixed bottom-8 right-8 z-50 bg-stone-900 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-2xl hover:scale-110 transition-transform cursor-pointer"
-        whileHover={{ rotate: 15 }}
+        className="fixed bottom-8 right-8 z-50 bg-stone-900 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-2xl cursor-pointer"
+        whileHover={{ scale: 1.1, rotate: 15 }}
+        whileTap={{ scale: 0.9 }}
       >
         <span className="text-2xl">✉</span>
       </motion.a>

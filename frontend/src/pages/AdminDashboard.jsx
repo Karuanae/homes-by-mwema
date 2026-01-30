@@ -1,229 +1,259 @@
-import { useState, useEffect } from "react";
-import { 
-  FaHome, FaCalendarAlt, FaUsers, FaChartBar, FaEnvelope, 
-  FaCog, FaPlus, FaEdit, FaTrash, FaEye, FaFilter,
-  FaSearch, FaSort, FaFileExport, FaBell, FaUserCircle,
-  FaCheckCircle, FaTimesCircle, FaClock, FaMoneyBillWave,
-  FaWhatsapp, FaSync, FaImage, FaUpload, FaTag,
-  FaBed, FaBath, FaRuler, FaLocationArrow, FaStar,
-  FaMapMarkerAlt, FaDollarSign, FaPercentage,
-  FaBars, FaTimes, FaSignOutAlt, FaList, FaBuilding
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  FaHome,
+  FaBuilding,
+  FaCalendarAlt,
+  FaUsers,
+  FaEnvelope,
+  FaSignOutAlt,
+  FaPlus,
+  FaTrash,
+  FaEdit,
+  FaSync,
+  FaEye,
+  FaSearch,
+  FaBed,
+  FaBath,
+  FaRulerCombined,
+  FaMapMarkerAlt,
+  FaCheck,
+  FaTimes
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
-import { Line, Bar } from "react-chartjs-2";
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-} from 'chart.js';
 import api from "../services/api";
-
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-);
+import { useAuth } from "../context/AuthContext";
 
 export default function AdminDashboard() {
+  const navigate = useNavigate();
+  const { logout, user } = useAuth();
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    totalProperties: 0,
+    activeBookings: 0,
+    totalCustomers: 0,
+    totalRevenue: 0,
+  });
+
+  // Data States
   const [properties, setProperties] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [messages, setMessages] = useState([]);
-  const [stats, setStats] = useState({
-    totalProperties: 0,
-    activeBookings: 0,
-    revenue: 0,
-    occupancyRate: 0,
-    pendingPayments: 0
-  });
-  
+  const [loadingMessages, setLoadingMessages] = useState(false);
+
+  // Modal States
   const [showAddProperty, setShowAddProperty] = useState(false);
   const [showEditProperty, setShowEditProperty] = useState(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [loadingBookings, setLoadingBookings] = useState(false);
-  const [loadingCustomers, setLoadingCustomers] = useState(false);
-  const [loadingMessages, setLoadingMessages] = useState(false);
-  
+
+  // Form State
   const [newProperty, setNewProperty] = useState({
     name: "",
     type: "studio",
     price: "",
     location: "",
     description: "",
+    coverImage: "",
+    galleryImages: [],
+    amenities: [],
     rooms: 1,
     bathrooms: 1,
-    area: "",
     maxGuests: 2,
-    images: [],
-    amenities: [],
-    tags: []
+    area: "",
   });
 
-  // Load initial data from API
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-          window.location.href = '/login';
-          return;
-        }
-
-        const [propertiesResponse, statsResponse] = await Promise.all([
-          api.admin.getProperties(),
-          api.admin.getStats()
-        ]);
-
-        setProperties(propertiesResponse.data);
-        setStats(statsResponse.data);
-
-      } catch (error) {
-        console.error('Error fetching admin data:', error);
-        if (error.response?.status === 401) {
-          localStorage.removeItem('token');
-          window.location.href = '/login';
-        }
-        setProperties([]);
-        setStats({
-          totalProperties: 0,
-          activeBookings: 0,
-          revenue: 0,
-          occupancyRate: 0,
-          pendingPayments: 0
-        });
-      }
-    };
-
-    fetchData();
+    fetchStats();
+    fetchProperties();
+    fetchBookings();
+    fetchCustomers();
   }, []);
 
-  // Fetch bookings when tab is clicked
-  const fetchBookings = async () => {
-    setLoadingBookings(true);
+  useEffect(() => {
+    if (activeTab === "messages") {
+      fetchMessages();
+    }
+  }, [activeTab]);
+
+  const fetchStats = async () => {
     try {
-      const response = await api.bookings.getAll();
-      setBookings(response.data || []);
+      const response = await api.admin.getStats();
+      if (response.data) {
+        setStats({
+          totalProperties: response.data.total_properties || 0,
+          activeBookings: response.data.active_bookings || 0,
+          totalCustomers: response.data.total_users || 0,
+          totalRevenue: response.data.total_revenue || 0,
+        });
+      }
     } catch (error) {
-      console.error('Error fetching bookings:', error);
-      setBookings([]);
+      console.error("Error fetching stats:", error);
     } finally {
-      setLoadingBookings(false);
+      setLoading(false);
     }
   };
 
-  // Fetch customers/users when tab is clicked
+  const fetchProperties = async () => {
+    try {
+      const response = await api.properties.getAll();
+      setProperties(response.data || []);
+      if (stats.totalProperties === 0 && response.data) {
+        setStats(prev => ({ ...prev, totalProperties: response.data.length }));
+      }
+    } catch (error) {
+      console.error("Error fetching properties:", error);
+    }
+  };
+
+  const fetchBookings = async () => {
+    try {
+      const response = await api.admin.getBookings();
+      setBookings(response.data || []);
+      const activeCount = (response.data || []).filter(b => b.status === 'confirmed' || b.status === 'pending').length;
+      const revenue = (response.data || []).reduce((sum, b) => sum + (b.total_amount || 0), 0);
+      setStats(prev => ({ 
+        ...prev, 
+        activeBookings: activeCount,
+        totalRevenue: revenue 
+      }));
+    } catch (error) {
+      console.error("Error fetching bookings:", error);
+    }
+  };
+
   const fetchCustomers = async () => {
-    setLoadingCustomers(true);
     try {
       const response = await api.admin.getUsers();
-      setCustomers(response.data || []);
+      const users = response.data || [];
+      const customerList = users.filter(u => u.role !== 'admin');
+      setCustomers(customerList);
+      setStats(prev => ({ ...prev, totalCustomers: customerList.length }));
     } catch (error) {
-      console.error('Error fetching customers:', error);
-      setCustomers([]);
-    } finally {
-      setLoadingCustomers(false);
+      console.error("Error fetching customers:", error);
     }
   };
 
-  // Fetch messages/chats when tab is clicked
   const fetchMessages = async () => {
     setLoadingMessages(true);
     try {
-      const response = await api.chats.getAll();
+      const response = await api.chats.getChats();
       setMessages(response.data || []);
     } catch (error) {
-      console.error('Error fetching messages:', error);
-      setMessages([]);
+      console.error("Error fetching messages:", error);
     } finally {
       setLoadingMessages(false);
     }
   };
 
-  // Trigger fetching when tab changes
-  useEffect(() => {
-    if (activeTab === "bookings") {
-      fetchBookings();
-    } else if (activeTab === "customers") {
-      fetchCustomers();
-    } else if (activeTab === "messages") {
-      fetchMessages();
-    }
-  }, [activeTab]);
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
 
-  // Property Management Functions
-  const handleAddProperty = async () => {
-    try {
-      const response = await api.admin.createProperty(newProperty);
-      setProperties([...properties, response.data]);
-      setShowAddProperty(false);
-      resetPropertyForm();
-      alert('Property added successfully!');
-    } catch (error) {
-      console.error('Error adding property:', error);
-      alert('Failed to add property');
+  const handleDeleteProperty = async (id) => {
+    if (window.confirm("Are you sure you want to delete this property?")) {
+      try {
+        await api.admin.deleteProperty(id);
+        fetchProperties();
+        fetchStats();
+      } catch (error) {
+        alert("Error deleting property: " + (error.response?.data?.error || error.message));
+      }
     }
   };
 
-  const handleEditProperty = (property) => {
-    setShowEditProperty(property);
+  const handleAddProperty = async () => {
+    try {
+      // Combine cover image with gallery images (cover first)
+      const allImages = newProperty.coverImage 
+        ? [newProperty.coverImage, ...newProperty.galleryImages]
+        : newProperty.galleryImages;
+      
+      const propertyData = {
+        name: newProperty.name,
+        title: newProperty.name,
+        type: newProperty.type,
+        price: parseFloat(newProperty.price),
+        location: newProperty.location,
+        description: newProperty.description,
+        images: allImages,
+        amenities: newProperty.amenities.map(a => typeof a === 'string' ? { name: a } : a),
+        bedrooms: newProperty.rooms,
+        bathrooms: newProperty.bathrooms,
+        max_guests: newProperty.maxGuests,
+        area: newProperty.area,
+        specs: {
+          bedrooms: newProperty.rooms,
+          bathrooms: newProperty.bathrooms,
+          guests: newProperty.maxGuests
+        }
+      };
+
+      await api.admin.createProperty(propertyData);
+      
+      setShowAddProperty(false);
+      resetPropertyForm();
+      fetchProperties();
+      fetchStats();
+    } catch (error) {
+      alert("Error adding property: " + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleEditClick = (property) => {
+    const images = property.images || [];
     setNewProperty({
       name: property.name,
       type: property.type,
       price: property.price,
       location: property.location,
       description: property.description || "",
-      rooms: property.rooms,
-      bathrooms: property.bathrooms,
-      area: property.area || "",
-      maxGuests: property.max_guests || 2,
-      images: property.images || [],
+      coverImage: images[0] || "",
+      galleryImages: images.slice(1) || [],
       amenities: property.amenities || [],
-      tags: property.tags || []
+      rooms: property.rooms || property.bedrooms || 1,
+      bathrooms: property.bathrooms || 1,
+      maxGuests: property.max_guests || property.specs?.guests || 2,
+      area: property.area || ""
     });
+    setShowEditProperty(property.id);
   };
 
   const updateProperty = async () => {
     try {
-      const response = await api.admin.updateProperty(showEditProperty.id, newProperty);
-      setProperties(properties.map(p => 
-        p.id === showEditProperty.id ? response.data : p
-      ));
+      // Combine cover image with gallery images (cover first)
+      const allImages = newProperty.coverImage 
+        ? [newProperty.coverImage, ...newProperty.galleryImages]
+        : newProperty.galleryImages;
+      
+      const propertyData = {
+        name: newProperty.name,
+        title: newProperty.name,
+        type: newProperty.type,
+        price: parseFloat(newProperty.price),
+        location: newProperty.location,
+        description: newProperty.description,
+        images: allImages,
+        amenities: newProperty.amenities.map(a => typeof a === 'string' ? { name: a } : a),
+        bedrooms: newProperty.rooms,
+        bathrooms: newProperty.bathrooms,
+        max_guests: newProperty.maxGuests,
+        area: newProperty.area,
+        specs: {
+          bedrooms: newProperty.rooms,
+          bathrooms: newProperty.bathrooms,
+          guests: newProperty.maxGuests
+        }
+      };
+
+      await api.admin.updateProperty(showEditProperty, propertyData);
+
       setShowEditProperty(null);
       resetPropertyForm();
-      alert('Property updated successfully!');
+      fetchProperties();
     } catch (error) {
-      console.error('Error updating property:', error);
-      alert('Failed to update property');
-    }
-  };
-
-  const deleteProperty = async (propertyId) => {
-    if (!window.confirm("Are you sure you want to delete this property?")) return;
-    
-    try {
-      await api.admin.deleteProperty(propertyId);
-      setProperties(properties.filter(p => p.id !== propertyId));
-      alert('Property deleted successfully!');
-    } catch (error) {
-      console.error('Error deleting property:', error);
-      alert('Failed to delete property');
+      alert("Error updating property: " + (error.response?.data?.error || error.message));
     }
   };
 
@@ -234,722 +264,403 @@ export default function AdminDashboard() {
       price: "",
       location: "",
       description: "",
+      coverImage: "",
+      galleryImages: [],
+      amenities: [],
       rooms: 1,
       bathrooms: 1,
-      area: "",
       maxGuests: 2,
-      images: [],
-      amenities: [],
-      tags: []
+      area: "",
     });
   };
 
-  const handleImageUpload = (e) => {
-    // Removed blob URL creation - now using direct URL input
-    // This prevents blob URLs from being saved to the database
-  };
-
-  // Chart Data
-  const revenueData = {
-    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
-    datasets: [{
-      label: 'Revenue (Ksh)',
-      data: [450000, 520000, 480000, 610000, 700000, 680000],
-      borderColor: '#0d9488',
-      backgroundColor: 'rgba(13, 148, 136, 0.1)',
-      fill: true,
-      tension: 0.4
-    }]
-  };
-
-  const occupancyData = {
-    labels: properties.slice(0, 5).map(p => p.name),
-    datasets: [{
-      label: 'Occupancy Rate (%)',
-      data: properties.slice(0, 5).map(p => Math.random() * 100),
-      backgroundColor: '#0d9488'
-    }]
-  };
-
-  // Format currency
-  const formatCurrency = (amount) => {
-    return `Ksh ${amount?.toLocaleString() || '0'}`;
-  };
-
-  // Filter properties based on search
-  const filteredProperties = properties.filter(property => 
-    property.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    property.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    property.type.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  // Navigation items
   const navItems = [
-    { id: "dashboard", label: "Dashboard", icon: FaChartBar },
-    { id: "properties", label: "Properties", icon: FaHome },
-    { id: "bookings", label: "Bookings", icon: FaCalendarAlt },
-    { id: "customers", label: "Customers", icon: FaUsers },
-    { id: "reports", label: "Reports", icon: FaFileExport },
-    { id: "messages", label: "Messages", icon: FaEnvelope },
-    { id: "settings", label: "Settings", icon: FaCog }
+    { id: "dashboard", label: "Overview", icon: FaHome },
+    { id: "properties", label: "Properties", icon: FaBuilding },
+    { id: "bookings", label: "Reservations", icon: FaCalendarAlt }, // Changed "Bookings" to "Reservations" for prestige
+    { id: "customers", label: "Clientele", icon: FaUsers }, // Changed "Customers" to "Clientele"
+    { id: "messages", label: "Concierge", icon: FaEnvelope }, // Changed "Messages" to "Concierge"
   ];
 
-  const quickActions = [
-    { 
-      id: "add-property", 
-      label: "Add New Property", 
-      icon: FaPlus,
-      onClick: () => setShowAddProperty(true)
-    },
-    { 
-      id: "view-bookings", 
-      label: "View Bookings", 
-      icon: FaCalendarAlt,
-      onClick: () => setActiveTab("bookings")
-    },
-    { 
-      id: "generate-report", 
-      label: "Generate Report", 
-      icon: FaFileExport,
-      onClick: () => console.log("Generate Report")
-    }
-  ];
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    window.location.href = '/login';
-  };
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#F9F8F6] flex items-center justify-center">
+        <div className="text-center">
+            <div className="w-16 h-16 border-4 border-stone-200 border-t-stone-800 rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="font-serif text-stone-600 tracking-widest uppercase text-sm">Loading Estate Data...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-stone-50 font-sans flex">
-      {/* Sidebar */}
-      <motion.aside
-        initial={{ x: -300 }}
-        animate={{ x: sidebarOpen ? 0 : -300 }}
-        transition={{ type: "spring", damping: 25 }}
-        className={`fixed lg:relative z-40 w-64 h-screen bg-teal-900 text-white flex flex-col shadow-xl ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
-      >
-        {/* Logo Section */}
-        <div className="p-6 border-b border-teal-800">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-teal-800 rounded-lg">
-              <FaBuilding className="text-xl" />
+    <div className="flex h-screen bg-[#F9F8F6] font-sans text-stone-800 overflow-hidden">
+      {/* Sidebar - "Old Money" Aesthetics: Dark Charcoal/Green background, Serif fonts */}
+      <aside className="w-72 bg-[#1C2321] text-[#E5E5E0] flex flex-col shadow-2xl z-20">
+        <div className="p-10 border-b border-stone-700/50">
+          <h1 className="text-2xl font-serif tracking-wider text-white">
+            MWEMA<span className="text-stone-400">.</span>
+          </h1>
+          <p className="text-[10px] uppercase tracking-[0.2em] text-stone-500 mt-2">Estate Administration</p>
+        </div>
+
+        <nav className="flex-1 py-8 px-4 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-stone-600 scrollbar-track-transparent hover:scrollbar-thumb-stone-500">
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              className={`w-full flex items-center gap-4 px-6 py-4 transition-all duration-500 ease-out group ${
+                activeTab === item.id
+                  ? "bg-white/5 text-white border-r-2 border-[#D4AF37]" // Gold accent border
+                  : "text-stone-400 hover:text-stone-100 hover:bg-white/[0.02]"
+              }`}
+            >
+              <item.icon className={`text-lg transition-transform duration-500 ${activeTab === item.id ? "scale-110 text-[#D4AF37]" : "group-hover:text-stone-300"}`} />
+              <span className={`font-serif tracking-wide ${activeTab === item.id ? "font-medium" : "font-light"}`}>{item.label}</span>
+            </button>
+          ))}
+        </nav>
+
+        <div className="p-8 border-t border-stone-700/50 space-y-4">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-8 h-8 rounded-full bg-stone-700 flex items-center justify-center text-sm">
+              {user?.name?.charAt(0) || 'A'}
             </div>
-            <div>
-              <h1 className="text-xl font-serif font-bold">Homes by Mwema</h1>
-              <p className="text-teal-200 text-xs">Admin Panel</p>
-            </div>
+            <span className="text-sm text-stone-300">{user?.name || 'Admin'}</span>
           </div>
-        </div>
-
-        {/* User Profile */}
-        <div className="p-4 border-b border-teal-800">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-teal-800 flex items-center justify-center">
-              <FaUserCircle className="text-xl" />
-            </div>
-            <div>
-              <p className="font-medium">Admin User</p>
-              <p className="text-xs text-teal-300">Super Admin</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="p-4 border-b border-teal-800">
-          <h3 className="text-xs uppercase text-teal-300 tracking-wider mb-3">Quick Actions</h3>
-          <div className="space-y-2">
-            {quickActions.map((action) => (
-              <button
-                key={action.id}
-                onClick={action.onClick}
-                className="w-full flex items-center gap-3 p-3 text-sm rounded-lg hover:bg-teal-800 transition-colors"
-              >
-                <action.icon className="text-teal-300" />
-                <span>{action.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Main Navigation */}
-        <div className="flex-1 p-4 overflow-y-auto">
-          <h3 className="text-xs uppercase text-teal-300 tracking-wider mb-3">Navigation</h3>
-          <nav className="space-y-1">
-            {navItems.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center gap-3 p-3 text-sm rounded-lg transition-colors ${
-                  activeTab === item.id
-                    ? "bg-teal-800 text-white"
-                    : "text-teal-200 hover:bg-teal-800/50"
-                }`}
-              >
-                <item.icon />
-                <span>{item.label}</span>
-              </button>
-            ))}
-          </nav>
-        </div>
-
-        {/* Logout Section */}
-        <div className="p-4 border-t border-teal-800">
+          
+          <button
+            onClick={() => navigate('/')}
+            className="w-full flex items-center gap-3 text-stone-400 hover:text-white transition-colors uppercase tracking-widest text-xs py-2"
+          >
+            <FaHome /> Back to Home
+          </button>
+          
           <button
             onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 p-3 text-sm rounded-lg bg-teal-800 hover:bg-teal-700 transition-colors"
+            className="w-full flex items-center gap-3 text-stone-400 hover:text-red-300 transition-colors uppercase tracking-widest text-xs py-2"
           >
-            <FaSignOutAlt />
-            <span>Logout</span>
+            <FaSignOutAlt /> Sign Out
           </button>
         </div>
-      </motion.aside>
+      </aside>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col">
-        {/* Top Header */}
-        <header className="bg-white border-b border-stone-200 p-4 lg:p-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="lg:hidden p-2 hover:bg-stone-100 rounded-lg"
-              >
-                {sidebarOpen ? <FaTimes /> : <FaBars />}
-              </button>
-              <div>
-                <h1 className="text-xl lg:text-2xl font-serif text-teal-950">
-                  {navItems.find(item => item.id === activeTab)?.label || "Dashboard"}
-                </h1>
-                <p className="text-stone-500 text-sm">
-                  Welcome back! Here's what's happening today.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <button className="p-2 hover:bg-stone-100 rounded-lg relative">
-                <FaBell className="text-xl text-stone-600" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-              </button>
-              
-              <div className="hidden lg:flex items-center gap-3">
-                <div className="text-right">
-                  <p className="text-sm font-medium">Admin User</p>
-                  <p className="text-xs text-stone-500">admin@example.com</p>
-                </div>
-                <div className="w-10 h-10 rounded-full bg-teal-100 flex items-center justify-center">
-                  <FaUserCircle className="text-xl text-teal-700" />
-                </div>
-              </div>
-            </div>
+      <main className="flex-1 overflow-y-auto p-12 relative">
+        {/* Background Texture/Grain can be added here via CSS if desired */}
+        
+        {/* Header Section */}
+        <header className="flex justify-between items-end mb-12 border-b border-stone-200 pb-6">
+          <div>
+            <h2 className="text-4xl font-serif text-[#1C2321] mb-2">
+              {navItems.find((item) => item.id === activeTab)?.label}
+            </h2>
+            <p className="text-stone-500 font-serif italic">
+              {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            </p>
+          </div>
+          
+          <div className="flex items-center gap-6">
+             {/* Search Bar - Minimalist Underline */}
+             <div className="relative group">
+                <FaSearch className="absolute left-0 top-3 text-stone-400" />
+                <input 
+                    type="text" 
+                    placeholder="Search records..." 
+                    className="pl-8 pr-4 py-2 bg-transparent border-b border-stone-300 focus:border-[#1C2321] outline-none w-64 transition-all placeholder-stone-400 text-stone-800"
+                />
+             </div>
+             <div className="w-10 h-10 rounded-full bg-[#1C2321] text-[#D4AF37] flex items-center justify-center font-serif text-lg">
+                A
+             </div>
           </div>
         </header>
 
-        {/* Main Content Area */}
-        <main className="flex-1 p-4 lg:p-6 overflow-y-auto">
-          {/* Stats Overview */}
-          {activeTab === "dashboard" && (
-            <>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-                {[
-                  { label: "Properties", value: stats.totalProperties, icon: FaHome, color: "teal" },
-                  { label: "Active Bookings", value: stats.activeBookings, icon: FaCalendarAlt, color: "blue" },
-                  { label: "Total Revenue", value: formatCurrency(stats.revenue), icon: FaMoneyBillWave, color: "emerald" },
-                  { label: "Occupancy Rate", value: `${stats.occupancyRate}%`, icon: FaPercentage, color: "purple" },
-                  { label: "Pending Payments", value: formatCurrency(stats.pendingPayments), icon: FaClock, color: "red" }
-                ].map((stat, i) => (
-                  <div key={i} className="bg-white p-4 rounded-xl shadow border border-stone-100">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="text-xs text-stone-500 uppercase tracking-wider">{stat.label}</p>
-                        <p className="text-2xl font-bold text-teal-900 mt-1">{stat.value}</p>
-                      </div>
-                      <div className={`p-2 ${
-                        stat.color === 'teal' ? 'bg-teal-50' :
-                        stat.color === 'blue' ? 'bg-blue-50' :
-                        stat.color === 'emerald' ? 'bg-emerald-50' :
-                        stat.color === 'purple' ? 'bg-purple-50' :
-                        'bg-red-50'
-                      } rounded-lg`}>
-                        <stat.icon className={`${
-                          stat.color === 'teal' ? 'text-teal-600' :
-                          stat.color === 'blue' ? 'text-blue-600' :
-                          stat.color === 'emerald' ? 'text-emerald-600' :
-                          stat.color === 'purple' ? 'text-purple-600' :
-                          'text-red-600'
-                        } text-lg`} />
-                      </div>
-                    </div>
+        {/* Dashboard Overview */}
+        {activeTab === "dashboard" && (
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            className="space-y-12"
+          >
+            {/* Stats Grid - Card style: White bg, subtle shadow, serif numbers */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+              {[
+                { label: "Total Properties", value: stats.totalProperties, icon: FaBuilding },
+                { label: "Active Reservations", value: stats.activeBookings, icon: FaCalendarAlt },
+                { label: "Total Clientele", value: stats.totalCustomers, icon: FaUsers },
+                { label: "Revenue (YTD)", value: `Ksh ${stats.totalRevenue.toLocaleString()}`, icon: null },
+              ].map((stat, idx) => (
+                <div key={idx} className="bg-white p-8 border border-stone-100 shadow-sm hover:shadow-md transition-shadow duration-500">
+                  <div className="flex justify-between items-start mb-4">
+                     <p className="text-xs uppercase tracking-widest text-stone-500 font-medium">{stat.label}</p>
+                     {stat.icon && <stat.icon className="text-stone-300 text-xl" />}
                   </div>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-                <div className="bg-white p-6 rounded-xl border border-stone-200">
-                  <h3 className="font-medium text-stone-700 mb-4">Revenue Trend</h3>
-                  <div className="h-64">
-                    <Line
-                      data={revenueData}
-                      options={{
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { position: 'top' } }
-                      }}
-                    />
-                  </div>
+                  <h3 className="text-3xl font-serif text-[#1C2321]">{stat.value}</h3>
                 </div>
-                
-                <div className="bg-white p-6 rounded-xl border border-stone-200">
-                  <h3 className="font-medium text-stone-700 mb-4">Top Properties by Occupancy</h3>
-                  <div className="h-64">
-                    <Bar
-                      data={occupancyData}
-                      options={{
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { position: 'top' } }
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* Properties Tab */}
-          {activeTab === "properties" && (
-            <div>
-              <div className="flex justify-between items-center mb-6">
-                <div>
-                  <h2 className="text-2xl font-serif text-teal-950">Property Management</h2>
-                  <p className="text-stone-500">Add, edit, and manage your properties</p>
-                </div>
-                <div className="flex gap-3">
-                  <div className="relative">
-                    <FaSearch className="absolute left-3 top-3 text-stone-400" />
-                    <input
-                      type="text"
-                      placeholder="Search properties..."
-                      className="pl-10 pr-4 py-2 border border-stone-300 rounded-lg w-64"
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                  </div>
-                  <button
-                    onClick={() => setShowAddProperty(true)}
-                    className="bg-teal-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-800 transition-colors"
-                  >
-                    <FaPlus /> Add Property
-                  </button>
-                  <button 
-                    onClick={() => window.location.reload()}
-                    className="bg-white border border-teal-700 text-teal-700 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-50"
-                  >
-                    <FaSync /> Refresh
-                  </button>
-                </div>
-              </div>
-
-              {/* Properties Grid */}
-              {filteredProperties.length === 0 ? (
-                <div className="text-center py-12 border border-stone-200 rounded-xl">
-                  <FaHome className="text-4xl text-stone-300 mx-auto mb-4" />
-                  <h3 className="text-xl font-serif text-teal-950 mb-2">No properties found</h3>
-                  <p className="text-stone-500 mb-6">Add your first property to get started</p>
-                  <button
-                    onClick={() => setShowAddProperty(true)}
-                    className="bg-teal-700 text-white px-6 py-3 rounded-lg flex items-center gap-2 mx-auto hover:bg-teal-800"
-                  >
-                    <FaPlus /> Add Property
-                  </button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                  {filteredProperties.map((property) => (
-                    <div key={property.id} className="border border-stone-200 rounded-xl overflow-hidden bg-white hover:shadow-lg transition-shadow">
-                      <div className="relative h-48">
-                        <img
-                          src={property.images?.[0] || "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb"}
-                          alt={property.name}
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute top-3 right-3 bg-teal-700 text-white px-2 py-1 rounded text-sm">
-                          {formatCurrency(property.price)}/night
-                        </div>
-                        <div className={`absolute top-3 left-3 px-2 py-1 rounded text-xs font-bold ${
-                          property.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                        }`}>
-                          {property.status.toUpperCase()}
-                        </div>
-                      </div>
-                      <div className="p-5">
-                        <div className="flex justify-between items-start mb-3">
-                          <div>
-                            <h3 className="text-lg font-serif text-teal-950">{property.name}</h3>
-                            <p className="text-stone-500 text-sm flex items-center gap-1">
-                              <FaMapMarkerAlt className="text-xs" />
-                              {property.location}
-                            </p>
-                          </div>
-                          <div className="text-amber-500 flex items-center gap-1">
-                            <FaStar className="text-sm" />
-                            <span className="font-medium">{property.rating || 'New'}</span>
-                          </div>
-                        </div>
-                        
-                        <div className="flex gap-4 text-sm text-stone-600 mb-4">
-                          <span className="flex items-center gap-1">
-                            <FaBed /> {property.rooms} {property.rooms === 1 ? 'Room' : 'Rooms'}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <FaBath /> {property.bathrooms} Bath
-                          </span>
-                          {property.area && <span>{property.area}</span>}
-                        </div>
-
-                        {property.description && (
-                          <div className="mb-4">
-                            <p className="text-sm text-stone-600 line-clamp-2">{property.description}</p>
-                          </div>
-                        )}
-
-                        {property.amenities?.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mb-4">
-                            {property.amenities.slice(0, 3).map((amenity, idx) => (
-                              <span key={idx} className="text-xs bg-stone-100 text-stone-600 px-2 py-1 rounded">
-                                {amenity}
-                              </span>
-                            ))}
-                            {property.amenities.length > 3 && (
-                              <span className="text-xs bg-stone-100 text-stone-600 px-2 py-1 rounded">
-                                +{property.amenities.length - 3} more
-                              </span>
-                            )}
-                          </div>
-                        )}
-                        
-                        <div className="flex justify-between items-center">
-                          <div className="text-xs text-stone-500">
-                            <p>Type: {property.type.replace('_', ' ')}</p>
-                            <p>Max Guests: {property.max_guests || 2}</p>
-                          </div>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleEditProperty(property)}
-                              className="p-2 text-teal-600 hover:bg-teal-50 rounded-lg"
-                              title="Edit"
-                            >
-                              <FaEdit />
-                            </button>
-                            <button
-                              onClick={() => deleteProperty(property.id)}
-                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                              title="Delete"
-                            >
-                              <FaTrash />
-                            </button>
-                            <a
-                              href={`/property/${property.id}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
-                              title="View"
-                            >
-                              <FaEye />
-                            </a>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              ))}
             </div>
-          )}
 
-          {/* Bookings Tab */}
-          {activeTab === "bookings" && (
-            <div>
-              <div className="flex justify-between items-center mb-6">
-                <div>
-                  <h2 className="text-2xl font-serif text-teal-950">Bookings Management</h2>
-                  <p className="text-stone-500">View and manage all bookings</p>
+            {/* Recent Activity Section Placeholder */}
+            <div className="grid grid-cols-3 gap-8">
+                <div className="col-span-2 bg-white p-8 border border-stone-100 shadow-sm">
+                    <h3 className="font-serif text-xl text-[#1C2321] mb-6 border-b border-stone-100 pb-4">Performance Overview</h3>
+                    <div className="h-64 flex items-center justify-center bg-[#F9F8F6] text-stone-400 italic font-serif">
+                        Chart integration requires visualization library
+                    </div>
                 </div>
-                <button 
-                  onClick={fetchBookings}
-                  className="bg-white border border-teal-700 text-teal-700 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-50"
-                >
-                  <FaSync /> Refresh
-                </button>
-              </div>
-
-              {loadingBookings ? (
-                <div className="bg-white rounded-xl border border-stone-200 p-8 text-center">
-                  <FaSync className="text-4xl text-teal-600 mx-auto mb-4 animate-spin" />
-                  <p className="text-stone-500">Loading bookings...</p>
-                </div>
-              ) : bookings.length === 0 ? (
-                <div className="bg-white rounded-xl border border-stone-200 p-8 text-center">
-                  <FaCalendarAlt className="text-4xl text-stone-300 mx-auto mb-4" />
-                  <h3 className="text-xl font-serif text-teal-950 mb-2">No bookings found</h3>
-                  <p className="text-stone-500">There are currently no bookings</p>
-                </div>
-              ) : (
-                <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-stone-200 bg-stone-50">
-                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Booking ID</th>
-                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Guest</th>
-                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Property</th>
-                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Check-In</th>
-                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Check-Out</th>
-                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Amount</th>
-                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Status</th>
-                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {bookings.map((booking) => (
-                          <tr key={booking.id} className="border-b border-stone-100 hover:bg-stone-50 transition-colors">
-                            <td className="px-6 py-4 text-sm text-stone-600">#{booking.id}</td>
-                            <td className="px-6 py-4 text-sm">
-                              <div>
-                                <p className="font-medium text-stone-900">{booking.guest_name || booking.user_name || 'N/A'}</p>
-                                <p className="text-xs text-stone-500">{booking.guest_email || booking.user_email}</p>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 text-sm text-stone-600">{booking.property_name || booking.property?.name || 'N/A'}</td>
-                            <td className="px-6 py-4 text-sm text-stone-600">
-                              {new Date(booking.check_in).toLocaleDateString()}
-                            </td>
-                            <td className="px-6 py-4 text-sm text-stone-600">
-                              {new Date(booking.check_out).toLocaleDateString()}
-                            </td>
-                            <td className="px-6 py-4 text-sm font-semibold text-teal-900">
-                              {formatCurrency(booking.total_amount)}
-                            </td>
-                            <td className="px-6 py-4 text-sm">
-                              <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                                booking.status === 'confirmed' ? 'bg-green-100 text-green-800' :
-                                booking.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                                booking.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                                'bg-gray-100 text-gray-800'
-                              }`}>
-                                {booking.status?.toUpperCase() || 'PENDING'}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 text-sm">
-                              <button className="text-teal-600 hover:text-teal-800 font-medium">
-                                <FaEye />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Customers Tab */}
-          {activeTab === "customers" && (
-            <div>
-              <div className="flex justify-between items-center mb-6">
-                <div>
-                  <h2 className="text-2xl font-serif text-teal-950">Customers Management</h2>
-                  <p className="text-stone-500">View all registered customers</p>
-                </div>
-                <button 
-                  onClick={fetchCustomers}
-                  className="bg-white border border-teal-700 text-teal-700 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-50"
-                >
-                  <FaSync /> Refresh
-                </button>
-              </div>
-
-              {loadingCustomers ? (
-                <div className="bg-white rounded-xl border border-stone-200 p-8 text-center">
-                  <FaSync className="text-4xl text-teal-600 mx-auto mb-4 animate-spin" />
-                  <p className="text-stone-500">Loading customers...</p>
-                </div>
-              ) : customers.length === 0 ? (
-                <div className="bg-white rounded-xl border border-stone-200 p-8 text-center">
-                  <FaUsers className="text-4xl text-stone-300 mx-auto mb-4" />
-                  <h3 className="text-xl font-serif text-teal-950 mb-2">No customers found</h3>
-                  <p className="text-stone-500">There are currently no registered customers</p>
-                </div>
-              ) : (
-                <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-stone-200 bg-stone-50">
-                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Name</th>
-                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Email</th>
-                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Phone</th>
-                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Role</th>
-                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Joined</th>
-                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {customers.map((customer) => (
-                          <tr key={customer.id} className="border-b border-stone-100 hover:bg-stone-50 transition-colors">
-                            <td className="px-6 py-4 text-sm">
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-xs font-bold">
-                                  {customer.name?.charAt(0) || customer.email?.charAt(0)}
+                <div className="bg-white p-8 border border-stone-100 shadow-sm">
+                    <h3 className="font-serif text-xl text-[#1C2321] mb-6 border-b border-stone-100 pb-4">Recent Inquiries</h3>
+                    <div className="space-y-4">
+                        {[1,2,3].map(i => (
+                            <div key={i} className="flex items-center gap-3 pb-3 border-b border-stone-50 last:border-0">
+                                <div className="w-2 h-2 rounded-full bg-[#D4AF37]"></div>
+                                <div>
+                                    <p className="text-sm font-medium text-stone-800">New Booking Request</p>
+                                    <p className="text-xs text-stone-500">Villa Serenity • 2 mins ago</p>
                                 </div>
-                                <span className="font-medium text-stone-900">{customer.name}</span>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 text-sm text-stone-600">{customer.email}</td>
-                            <td className="px-6 py-4 text-sm text-stone-600">{customer.phone || 'N/A'}</td>
-                            <td className="px-6 py-4 text-sm">
-                              <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                                customer.role === 'admin' ? 'bg-purple-100 text-purple-800' :
-                                customer.role === 'host' ? 'bg-blue-100 text-blue-800' :
-                                'bg-gray-100 text-gray-800'
-                              }`}>
-                                {customer.role?.toUpperCase() || 'USER'}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 text-sm text-stone-600">
-                              {new Date(customer.created_at).toLocaleDateString()}
-                            </td>
-                            <td className="px-6 py-4 text-sm">
-                              <button className="text-teal-600 hover:text-teal-800 font-medium">
-                                <FaEye />
-                              </button>
-                            </td>
-                          </tr>
+                            </div>
                         ))}
-                      </tbody>
-                    </table>
-                  </div>
+                    </div>
                 </div>
-              )}
             </div>
-          )}
+          </motion.div>
+        )}
 
-          {/* Messages/Chats Tab */}
-          {activeTab === "messages" && (
-            <div>
-              <div className="flex justify-between items-center mb-6">
-                <div>
-                  <h2 className="text-2xl font-serif text-teal-950">Messages & Chats</h2>
-                  <p className="text-stone-500">View all customer messages and conversations</p>
-                </div>
-                <button 
-                  onClick={fetchMessages}
-                  className="bg-white border border-teal-700 text-teal-700 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-teal-50"
+        {/* Properties Tab */}
+        {activeTab === "properties" && (
+          <div className="space-y-8">
+            <div className="flex justify-end">
+              <button
+                onClick={() => setShowAddProperty(true)}
+                className="bg-[#1C2321] text-white px-8 py-3 hover:bg-[#2C3632] transition-colors duration-300 flex items-center gap-2 uppercase tracking-widest text-xs font-medium"
+              >
+                <FaPlus /> Add Residence
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {properties.map((property) => (
+                <motion.div
+                  key={property.id}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="bg-white group cursor-pointer border border-stone-100 hover:border-stone-300 transition-all duration-500"
                 >
-                  <FaSync /> Refresh
-                </button>
+                  <div className="relative aspect-[4/3] overflow-hidden">
+                    <img
+                      src={property.images?.[0] || "https://via.placeholder.com/400x300"}
+                      alt={property.name}
+                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 saturate-[0.85] group-hover:saturate-100"
+                    />
+                    <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm px-3 py-1">
+                      <span className="text-xs font-serif font-bold tracking-wide text-[#1C2321]">
+                        Ksh {property.price.toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="p-6">
+                    <h3 className="font-serif text-xl text-[#1C2321] mb-2">{property.name}</h3>
+                    <div className="flex items-center gap-1 text-stone-500 text-xs tracking-wide uppercase mb-4">
+                        <FaMapMarkerAlt /> {property.location}
+                    </div>
+                    
+                    <div className="flex items-center justify-between py-4 border-t border-b border-stone-100 text-stone-600 text-sm">
+                        <span className="flex items-center gap-2"><FaBed className="text-stone-400"/> {property.rooms}</span>
+                        <span className="flex items-center gap-2"><FaBath className="text-stone-400"/> {property.bathrooms}</span>
+                        <span className="flex items-center gap-2"><FaRulerCombined className="text-stone-400"/> {property.area || 'N/A'}</span>
+                    </div>
+
+                    <div className="flex justify-between items-center mt-6 pt-2">
+                      <span className={`text-[10px] uppercase tracking-widest px-2 py-1 border ${
+                        property.status === 'booked' 
+                            ? 'border-stone-300 text-stone-400' 
+                            : 'border-[#1C2321] text-[#1C2321]'
+                      }`}>
+                        {property.status || 'Available'}
+                      </span>
+                      
+                      <div className="flex gap-4">
+                        <button 
+                            onClick={() => handleEditClick(property)}
+                            className="text-stone-400 hover:text-[#1C2321] transition-colors"
+                        >
+                            <FaEdit />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteProperty(property.id)}
+                          className="text-stone-400 hover:text-red-800 transition-colors"
+                        >
+                          <FaTrash />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Bookings/Reservations Tab - Editorial Table Style */}
+        {activeTab === "bookings" && (
+            <div className="bg-white border border-stone-100 p-8">
+                <table className="w-full text-left border-collapse">
+                    <thead>
+                        <tr className="border-b-2 border-[#1C2321]">
+                            {["Property", "Guest", "Dates", "Status", "Amount", "Actions"].map(head => (
+                                <th key={head} className="py-4 px-4 font-serif text-[#1C2321] text-lg font-normal">{head}</th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody className="text-stone-600">
+                        {bookings.map((booking) => (
+                            <tr key={booking.id} className="border-b border-stone-100 hover:bg-[#F9F8F6] transition-colors">
+                                <td className="py-6 px-4">
+                                    <p className="font-serif text-[#1C2321] text-lg">{booking.properties?.name}</p>
+                                    <p className="text-xs uppercase tracking-widest text-stone-400">ID: {booking.id.slice(0,6)}</p>
+                                </td>
+                                <td className="py-6 px-4">
+                                    <p className="font-medium">{booking.profiles?.full_name || 'Guest'}</p>
+                                    <p className="text-sm font-light text-stone-400">{booking.profiles?.email}</p>
+                                </td>
+                                <td className="py-6 px-4 font-light text-sm">
+                                    {new Date(booking.check_in).toLocaleDateString()} — {new Date(booking.check_out).toLocaleDateString()}
+                                </td>
+                                <td className="py-6 px-4">
+                                    <span className={`text-xs uppercase tracking-widest font-medium ${
+                                        booking.status === 'confirmed' ? 'text-[#1C2321]' : 
+                                        booking.status === 'pending' ? 'text-[#D4AF37]' : 'text-stone-400'
+                                    }`}>
+                                        {booking.status}
+                                    </span>
+                                </td>
+                                <td className="py-6 px-4 font-serif text-lg">
+                                    Ksh {booking.total_price?.toLocaleString()}
+                                </td>
+                                <td className="py-6 px-4">
+                                    <button className="text-stone-400 hover:text-[#1C2321] uppercase text-xs tracking-widest">View</button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+                {bookings.length === 0 && (
+                    <div className="text-center py-20">
+                        <FaCalendarAlt className="text-4xl text-stone-200 mx-auto mb-4" />
+                        <p className="font-serif text-stone-400 italic">No reservations found in the registry.</p>
+                    </div>
+                )}
+            </div>
+        )}
+
+        {/* Clientele Tab */}
+        {activeTab === "customers" && (
+           <div className="bg-white border border-stone-100 p-8">
+              {customers.length === 0 ? (
+                <div className="text-center py-20">
+                    <FaUsers className="text-4xl text-stone-200 mx-auto mb-4" />
+                    <p className="font-serif text-stone-400 italic">Registry is currently empty.</p>
+                </div>
+              ) : (
+                <table className="w-full text-left border-collapse">
+                    <thead>
+                        <tr className="border-b-2 border-[#1C2321]">
+                            <th className="py-4 px-4 font-serif text-[#1C2321] text-lg font-normal">Identity</th>
+                            <th className="py-4 px-4 font-serif text-[#1C2321] text-lg font-normal">Contact</th>
+                            <th className="py-4 px-4 font-serif text-[#1C2321] text-lg font-normal">Role</th>
+                            <th className="py-4 px-4 font-serif text-[#1C2321] text-lg font-normal">Member Since</th>
+                            <th className="py-4 px-4 font-serif text-[#1C2321] text-lg font-normal">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {customers.map((customer) => (
+                            <tr key={customer.id} className="border-b border-stone-100 hover:bg-[#F9F8F6] transition-colors">
+                                <td className="py-6 px-4">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-10 h-10 rounded-full bg-[#1C2321] text-white flex items-center justify-center font-serif text-sm">
+                                            {customer.name?.charAt(0) || customer.email?.charAt(0)}
+                                        </div>
+                                        <span className="font-serif text-[#1C2321]">{customer.name}</span>
+                                    </div>
+                                </td>
+                                <td className="py-6 px-4 text-stone-600 font-light">{customer.email}</td>
+                                <td className="py-6 px-4">
+                                    <span className="text-xs uppercase tracking-widest border border-stone-200 px-2 py-1 text-stone-500">
+                                        {customer.role || 'Guest'}
+                                    </span>
+                                </td>
+                                <td className="py-6 px-4 text-stone-500 font-light text-sm">
+                                    {new Date(customer.created_at).toLocaleDateString()}
+                                </td>
+                                <td className="py-6 px-4">
+                                    <button className="text-stone-400 hover:text-[#1C2321]">
+                                        <FaEye />
+                                    </button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+              )}
+           </div>
+        )}
+
+        {/* Concierge/Messages Tab */}
+        {activeTab === "messages" && (
+            <div>
+              <div className="flex justify-between items-center mb-8">
+                 <h2 className="text-2xl font-serif text-[#1C2321]">Concierge Desk</h2>
+                 <button onClick={fetchMessages} className="text-stone-500 hover:text-[#1C2321] flex items-center gap-2 text-sm uppercase tracking-widest">
+                    <FaSync /> Refresh
+                 </button>
               </div>
 
               {loadingMessages ? (
-                <div className="bg-white rounded-xl border border-stone-200 p-8 text-center">
-                  <FaSync className="text-4xl text-teal-600 mx-auto mb-4 animate-spin" />
-                  <p className="text-stone-500">Loading messages...</p>
-                </div>
+                 <div className="text-center py-20 font-serif italic text-stone-400">Retrieving correspondence...</div>
               ) : messages.length === 0 ? (
-                <div className="bg-white rounded-xl border border-stone-200 p-8 text-center">
-                  <FaEnvelope className="text-4xl text-stone-300 mx-auto mb-4" />
-                  <h3 className="text-xl font-serif text-teal-950 mb-2">No messages found</h3>
-                  <p className="text-stone-500">There are currently no messages</p>
-                </div>
+                 <div className="bg-white border border-stone-100 p-20 text-center">
+                    <FaEnvelope className="text-4xl text-stone-200 mx-auto mb-4" />
+                    <p className="font-serif text-stone-400 italic">No pending correspondence.</p>
+                 </div>
               ) : (
-                <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-stone-200 bg-stone-50">
-                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Chat ID</th>
-                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">From</th>
-                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">To</th>
-                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Last Message</th>
-                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Date</th>
-                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Status</th>
-                          <th className="px-6 py-4 text-left text-sm font-semibold text-stone-700">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {messages.map((chat) => (
-                          <tr key={chat.id} className="border-b border-stone-100 hover:bg-stone-50 transition-colors">
-                            <td className="px-6 py-4 text-sm text-stone-600">#{chat.id}</td>
-                            <td className="px-6 py-4 text-sm">
-                              <p className="font-medium text-stone-900">{chat.user_name || chat.from_name || 'N/A'}</p>
-                              <p className="text-xs text-stone-500">{chat.user_email || chat.from_email}</p>
-                            </td>
-                            <td className="px-6 py-4 text-sm">
-                              <p className="font-medium text-stone-900">{chat.host_name || chat.to_name || 'Admin'}</p>
-                              <p className="text-xs text-stone-500">{chat.host_email || chat.to_email || 'admin@example.com'}</p>
-                            </td>
-                            <td className="px-6 py-4 text-sm text-stone-600 max-w-xs truncate">
-                              {chat.last_message || 'No messages'}
-                            </td>
-                            <td className="px-6 py-4 text-sm text-stone-600">
-                              {chat.updated_at ? new Date(chat.updated_at).toLocaleDateString() : 'N/A'}
-                            </td>
-                            <td className="px-6 py-4 text-sm">
-                              <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                                chat.unread_count > 0 ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-green-100 text-green-800'
-                              }`}>
-                                {chat.unread_count > 0 ? `${chat.unread_count} Unread` : 'Read'}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 text-sm">
-                              <button className="text-teal-600 hover:text-teal-800 font-medium">
-                                <FaEye />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                <div className="bg-white border border-stone-100">
+                    {messages.map((chat) => (
+                        <div key={chat.id} className="p-6 border-b border-stone-100 hover:bg-[#F9F8F6] transition-colors flex justify-between items-center cursor-pointer group">
+                            <div className="flex items-center gap-4">
+                                <div className={`w-2 h-2 rounded-full ${chat.unread_count > 0 ? 'bg-[#D4AF37]' : 'bg-transparent'}`}></div>
+                                <div>
+                                    <p className="font-serif text-lg text-[#1C2321]">{chat.user_name || 'Guest'}</p>
+                                    <p className="text-sm text-stone-500 font-light truncate max-w-md">{chat.last_message}</p>
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-xs uppercase tracking-widest text-stone-400 mb-1">
+                                    {chat.updated_at ? new Date(chat.updated_at).toLocaleDateString() : ''}
+                                </p>
+                                <span className="opacity-0 group-hover:opacity-100 text-xs font-serif italic text-[#1C2321] transition-opacity">
+                                    Open thread &rarr;
+                                </span>
+                            </div>
+                        </div>
+                    ))}
                 </div>
               )}
             </div>
-          )}
+        )}
 
-          {/* Other Tabs Placeholder */}
-          {!["dashboard", "properties", "bookings", "customers", "messages"].includes(activeTab) && (
-            <div className="bg-white rounded-xl border border-stone-200 p-8 text-center">
-              <div className="text-5xl text-stone-300 mb-4">
-                {navItems.find(item => item.id === activeTab)?.icon && 
-                  React.createElement(navItems.find(item => item.id === activeTab).icon)
-                }
-              </div>
-              <h3 className="text-2xl font-serif text-teal-950 mb-2">
-                {navItems.find(item => item.id === activeTab)?.label}
-              </h3>
-              <p className="text-stone-500">
-                This section is under development. Coming soon!
-              </p>
-            </div>
-          )}
-        </main>
-      </div>
+      </main>
 
-      {/* Add/Edit Property Modal */}
+      {/* Add/Edit Property Modal - Glassmorphism & Clean Lines */}
       <AnimatePresence>
         {(showAddProperty || showEditProperty) && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            className="fixed inset-0 bg-[#1C2321]/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
             onClick={() => {
               setShowAddProperty(false);
               setShowEditProperty(null);
@@ -957,16 +668,16 @@ export default function AdminDashboard() {
             }}
           >
             <motion.div
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.9, y: 20 }}
-              className="bg-white rounded-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto"
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#F9F8F6] w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl border border-white/20"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="p-6">
-                <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-xl font-serif text-teal-950">
-                    {showEditProperty ? "Edit Property" : "Add New Property"}
+              <div className="p-10">
+                <div className="flex justify-between items-center mb-10 border-b border-stone-200 pb-4">
+                  <h3 className="text-3xl font-serif text-[#1C2321]">
+                    {showEditProperty ? "Edit Residence" : "New Residence"}
                   </h3>
                   <button
                     onClick={() => {
@@ -974,213 +685,239 @@ export default function AdminDashboard() {
                       setShowEditProperty(null);
                       resetPropertyForm();
                     }}
-                    className="text-stone-400 hover:text-stone-600 text-xl"
+                    className="text-stone-400 hover:text-[#1C2321] text-2xl font-light"
                   >
                     ✕
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-2">
-                      Property Name *
-                    </label>
-                    <input
-                      type="text"
-                      value={newProperty.name}
-                      onChange={(e) => setNewProperty({...newProperty, name: e.target.value})}
-                      className="w-full p-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                      placeholder="Enter property name"
-                      required
-                    />
-                  </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
+                  {/* Custom Input Component for consistency */}
+                  {[
+                    { label: "Property Name", key: "name", type: "text", placeholder: "e.g. The Kensington Suite" },
+                    { label: "Price per Night (Ksh)", key: "price", type: "number", placeholder: "0.00" },
+                    { label: "Location", key: "location", type: "text", placeholder: "District, City" },
+                    { label: "Floor Area (sq ft)", key: "area", type: "text", placeholder: "e.g. 2,400" },
+                  ].map((field) => (
+                    <div key={field.key}>
+                        <label className="block text-xs uppercase tracking-widest text-stone-500 mb-2">{field.label}</label>
+                        <input
+                            type={field.type}
+                            value={newProperty[field.key]}
+                            onChange={(e) => setNewProperty({...newProperty, [field.key]: e.target.value})}
+                            className="w-full py-3 bg-transparent border-b border-stone-300 focus:border-[#1C2321] outline-none font-serif text-lg text-[#1C2321] placeholder-stone-300 transition-colors"
+                            placeholder={field.placeholder}
+                        />
+                    </div>
+                  ))}
 
                   <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-2">
-                      Property Type *
-                    </label>
-                    <select
-                      value={newProperty.type}
-                      onChange={(e) => setNewProperty({...newProperty, type: e.target.value})}
-                      className="w-full p-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                      required
-                    >
-                      <option value="studio">Studio</option>
-                      <option value="1_bedroom">1 Bedroom</option>
-                      <option value="2_bedroom">2 Bedroom</option>
-                      <option value="3_bedroom">3 Bedroom</option>
-                      <option value="penthouse">Penthouse</option>
-                      <option value="villa">Villa</option>
-                    </select>
+                     <label className="block text-xs uppercase tracking-widest text-stone-500 mb-2">Residence Type</label>
+                     <select 
+                        value={newProperty.type}
+                        onChange={(e) => setNewProperty({...newProperty, type: e.target.value})}
+                        className="w-full py-3 bg-transparent border-b border-stone-300 focus:border-[#1C2321] outline-none font-serif text-lg text-[#1C2321]"
+                     >
+                        <option value="studio">Studio Apartment</option>
+                        <option value="1_bedroom">One Bedroom Suite</option>
+                        <option value="2_bedroom">Two Bedroom Suite</option>
+                        <option value="3_bedroom">Three Bedroom Suite</option>
+                        <option value="penthouse">Penthouse</option>
+                        <option value="villa">Private Villa</option>
+                     </select>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-2">
-                      Price per Night (Ksh) *
-                    </label>
-                    <input
-                      type="number"
-                      value={newProperty.price}
-                      onChange={(e) => setNewProperty({...newProperty, price: e.target.value})}
-                      className="w-full p-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                      placeholder="5000"
-                      required
-                      min="0"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-2">
-                      Location *
-                    </label>
-                    <input
-                      type="text"
-                      value={newProperty.location}
-                      onChange={(e) => setNewProperty({...newProperty, location: e.target.value})}
-                      className="w-full p-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                      placeholder="Enter location"
-                      required
-                    />
+                  <div className="md:col-span-2 grid grid-cols-3 gap-8">
+                     {["rooms", "bathrooms", "maxGuests"].map(k => (
+                        <div key={k}>
+                            <label className="block text-xs uppercase tracking-widest text-stone-500 mb-2">{k.replace(/([A-Z])/g, ' $1')}</label>
+                            <input
+                                type="number"
+                                value={newProperty[k]}
+                                onChange={(e) => setNewProperty({...newProperty, [k]: parseInt(e.target.value) || 1})}
+                                className="w-full py-3 bg-transparent border-b border-stone-300 focus:border-[#1C2321] outline-none font-serif text-lg text-[#1C2321]"
+                                min="1"
+                            />
+                        </div>
+                     ))}
                   </div>
 
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-stone-700 mb-2">
-                      Description
-                    </label>
+                    <label className="block text-xs uppercase tracking-widest text-stone-500 mb-2">Description</label>
                     <textarea
                       value={newProperty.description}
                       onChange={(e) => setNewProperty({...newProperty, description: e.target.value})}
-                      className="w-full p-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                      placeholder="Describe the property..."
-                      rows="3"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-2">
-                      Number of Rooms
-                    </label>
-                    <input
-                      type="number"
-                      value={newProperty.rooms}
-                      onChange={(e) => setNewProperty({...newProperty, rooms: parseInt(e.target.value) || 1})}
-                      className="w-full p-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                      min="1"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-2">
-                      Number of Bathrooms
-                    </label>
-                    <input
-                      type="number"
-                      value={newProperty.bathrooms}
-                      onChange={(e) => setNewProperty({...newProperty, bathrooms: parseInt(e.target.value) || 1})}
-                      className="w-full p-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                      min="1"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-2">
-                      Maximum Guests
-                    </label>
-                    <input
-                      type="number"
-                      value={newProperty.maxGuests}
-                      onChange={(e) => setNewProperty({...newProperty, maxGuests: parseInt(e.target.value) || 2})}
-                      className="w-full p-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                      min="1"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-2">
-                      Area (sq ft)
-                    </label>
-                    <input
-                      type="text"
-                      value={newProperty.area}
-                      onChange={(e) => setNewProperty({...newProperty, area: e.target.value})}
-                      className="w-full p-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                      placeholder="e.g., 1200 sq ft"
+                      className="w-full p-4 bg-white border border-stone-200 focus:border-[#1C2321] outline-none font-sans font-light text-stone-600 leading-relaxed mt-2"
+                      placeholder="Detail the property's features and atmosphere..."
+                      rows="4"
                     />
                   </div>
 
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-stone-700 mb-2">
-                      Amenities (comma separated)
-                    </label>
+                    <label className="block text-xs uppercase tracking-widest text-stone-500 mb-2">Amenities (Comma Separated)</label>
                     <input
-                      type="text"
-                      value={newProperty.amenities.join(', ')}
-                      onChange={(e) => setNewProperty({...newProperty, amenities: e.target.value.split(',').map(a => a.trim()).filter(a => a)})}
-                      className="w-full p-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                      placeholder="e.g., WiFi, Kitchen, TV, Air Conditioning"
+                        type="text"
+                        value={newProperty.amenities.join(', ')}
+                        onChange={(e) => setNewProperty({...newProperty, amenities: e.target.value.split(',').map(a => a.trim()).filter(a => a)})}
+                        className="w-full py-3 bg-transparent border-b border-stone-300 focus:border-[#1C2321] outline-none font-sans text-stone-600"
+                        placeholder="Concierge, Valet, Spa, Private Pool..."
                     />
                   </div>
 
+                  {/* Cover Image - For Home Page */}
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-stone-700 mb-2">
-                      Image URLs (comma separated)
+                    <label className="block text-xs uppercase tracking-widest text-stone-500 mb-2">
+                      Cover Image <span className="text-stone-400 normal-case">(displayed on Home Page)</span>
                     </label>
-                    <textarea
-                      value={newProperty.images.join(', ')}
-                      onChange={(e) => setNewProperty({...newProperty, images: e.target.value.split(',').map(url => url.trim()).filter(url => url)})}
-                      className="w-full p-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                      placeholder="https://images.unsplash.com/photo-xxx, https://images.unsplash.com/photo-yyy"
-                      rows="3"
+                    <input
+                      type="text"
+                      value={newProperty.coverImage}
+                      onChange={(e) => setNewProperty({...newProperty, coverImage: e.target.value.trim()})}
+                      className="w-full py-3 bg-transparent border-b border-stone-300 focus:border-[#1C2321] outline-none font-sans text-xs text-stone-600"
+                      placeholder="https://example.com/cover-image.jpg"
                     />
-                    <p className="text-xs text-stone-500 mt-2">
-                      <span className="font-semibold text-teal-700">📌 First URL = Home Page Thumbnail</span> | Enter image URLs separated by commas. The first URL will be shown on the home page, all URLs will appear in the booking page gallery.
-                    </p>
-                    {newProperty.images.length > 0 && (
+                    
+                    {/* Cover Image Preview */}
+                    {newProperty.coverImage && (
                       <div className="mt-4">
-                        <p className="text-xs font-medium text-stone-600 mb-2">Preview ({newProperty.images.length} images)</p>
-                        <div className="flex flex-wrap gap-2">
-                          {newProperty.images.map((url, idx) => (
-                            <div key={idx} className="relative w-24 h-24 rounded-lg overflow-hidden border-2 border-stone-200">
-                              <img src={url} alt={`Preview ${idx + 1}`} className="w-full h-full object-cover" />
-                              {idx === 0 && (
-                                <div className="absolute top-0 left-0 right-0 bg-teal-600 text-white text-[10px] font-bold py-1 text-center">
-                                  HOME PAGE
-                                </div>
-                              )}
-                              <button
-                                onClick={() => setNewProperty({...newProperty, images: newProperty.images.filter((_, i) => i !== idx)})}
-                                className="absolute bottom-0 right-0 bg-red-500 text-white p-1 rounded-tl text-xs hover:bg-red-600"
-                              >
-                                ×
-                              </button>
-                              <div className="absolute bottom-0 left-0 bg-black/60 text-white text-[10px] px-2 py-1">
-                                #{idx + 1}
-                              </div>
-                            </div>
-                          ))}
+                        <div className="relative w-full max-w-md aspect-[16/10] border border-stone-200 overflow-hidden">
+                          <img 
+                            src={newProperty.coverImage} 
+                            alt="Cover" 
+                            className="w-full h-full object-cover"
+                            onError={(e) => e.target.src = 'https://via.placeholder.com/400x250?text=Invalid+URL'}
+                          />
+                          <span className="absolute bottom-0 left-0 right-0 bg-[#1C2321] text-white text-[10px] uppercase text-center py-2 tracking-widest">
+                            Home Page Cover
+                          </span>
                         </div>
                       </div>
                     )}
                   </div>
+
+                  {/* Gallery Images - For Booking Page */}
+                  <div className="md:col-span-2">
+                    <label className="block text-xs uppercase tracking-widest text-stone-500 mb-2">
+                      Gallery Images <span className="text-stone-400 normal-case">(displayed on Booking Page - rooms, amenities, views)</span>
+                    </label>
+                    {/* Live Booking Page Image Grid Preview */}
+                    <div className="my-6">
+                      <span className="block text-[10px] uppercase tracking-widest text-stone-400 mb-2">Booking Page Preview</span>
+                      {(() => {
+                        const imgs = [newProperty.coverImage, ...newProperty.galleryImages].filter(Boolean);
+                        if (imgs.length === 0) return (
+                          <div className="h-40 w-full rounded-xl bg-stone-100 flex items-center justify-center text-stone-300 text-xs italic">No images added</div>
+                        );
+                        if (imgs.length === 1) {
+                          return (
+                            <div className="h-40 md:h-60 w-full rounded-xl overflow-hidden bg-stone-100">
+                              <img src={imgs[0]} alt="Main" className="w-full h-full object-cover" onError={e => e.target.src = 'https://via.placeholder.com/400x250?text=Invalid+URL'} />
+                            </div>
+                          );
+                        }
+                        return (
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-2 h-40 md:h-60 rounded-xl overflow-hidden">
+                            {/* Main Large Image */}
+                            <div className="md:col-span-2 md:row-span-2 relative h-full bg-stone-100">
+                              <img src={imgs[0]} alt="Main" className="w-full h-full object-cover" onError={e => e.target.src = 'https://via.placeholder.com/400x250?text=Invalid+URL'} />
+                            </div>
+                            {/* Side Images */}
+                            <div className="hidden md:grid md:col-span-2 md:row-span-2 grid-cols-2 gap-2 h-full">
+                              {imgs.slice(1, 5).map((img, i) => (
+                                <div key={i} className="relative h-full bg-stone-100">
+                                  <img src={img} alt={`View ${i}`} className="w-full h-full object-cover" onError={e => e.target.src = 'https://via.placeholder.com/100?text=Error'} />
+                                  {/* Overlay if more than 5 images */}
+                                  {i === 3 && imgs.length > 5 && (
+                                    <div className="absolute inset-0 bg-stone-900/40 flex items-center justify-center">
+                                      <span className="text-white text-xs font-bold uppercase tracking-widest border-b border-white pb-1">View All Photos</span>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                    {/* Gallery Grid with Add Button */}
+                    <div className="mt-4">
+                      <div className="flex flex-wrap gap-4">
+                        {/* Existing Gallery Images */}
+                        {newProperty.galleryImages.map((url, idx) => (
+                          <div key={idx} className="relative w-28 h-28 flex-shrink-0 border border-stone-200 group">
+                            {url ? (
+                              <>
+                                <img 
+                                  src={url} 
+                                  alt={`Gallery ${idx + 1}`} 
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => e.target.src = 'https://via.placeholder.com/100?text=Error'}
+                                />
+                                <span className="absolute bottom-0 left-0 right-0 bg-stone-800/80 text-white text-[8px] uppercase text-center py-1 tracking-widest">
+                                  {idx === 0 ? 'Bedroom' : idx === 1 ? 'Bathroom' : idx === 2 ? 'Living' : `Image ${idx + 1}`}
+                                </span>
+                              </>
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center bg-stone-100">
+                                <span className="text-stone-400 text-xs">Empty</span>
+                              </div>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = newProperty.galleryImages.filter((_, i) => i !== idx);
+                                setNewProperty({...newProperty, galleryImages: updated});
+                              }}
+                              className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                        {/* Add Image Button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const url = prompt('Enter image URL:');
+                            if (url && url.trim()) {
+                              setNewProperty({
+                                ...newProperty, 
+                                galleryImages: [...newProperty.galleryImages, url.trim()]
+                              });
+                            }
+                          }}
+                          className="w-28 h-28 border-2 border-dashed border-stone-300 hover:border-[#1C2321] bg-white hover:bg-stone-50 transition-all flex flex-col items-center justify-center gap-2 group cursor-pointer"
+                        >
+                          <FaPlus className="text-stone-400 group-hover:text-[#1C2321] text-lg transition-colors" />
+                          <span className="text-[10px] uppercase tracking-widest text-stone-400 group-hover:text-[#1C2321] transition-colors">Add Image</span>
+                        </button>
+                      </div>
+                      {newProperty.galleryImages.length > 0 && (
+                        <p className="text-[10px] uppercase tracking-widest text-stone-400 mt-4">
+                          {newProperty.galleryImages.length} image{newProperty.galleryImages.length !== 1 ? 's' : ''} added
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
-                <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-stone-200">
+                <div className="flex justify-end gap-6 mt-12 pt-6 border-t border-stone-200">
                   <button
                     onClick={() => {
                       setShowAddProperty(false);
                       setShowEditProperty(null);
                       resetPropertyForm();
                     }}
-                    className="px-6 py-3 border border-stone-300 text-stone-700 rounded-lg hover:bg-stone-50 transition-colors"
+                    className="px-8 py-3 text-stone-500 hover:text-[#1C2321] transition-colors uppercase tracking-widest text-xs"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={showEditProperty ? updateProperty : handleAddProperty}
                     disabled={!newProperty.name || !newProperty.price || !newProperty.location}
-                    className="px-6 py-3 bg-teal-700 text-white rounded-lg hover:bg-teal-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="px-10 py-3 bg-[#1C2321] text-white hover:bg-[#2C3632] transition-colors disabled:opacity-50 uppercase tracking-widest text-xs font-medium"
                   >
-                    {showEditProperty ? "Update Property" : "Add Property"}
+                    {showEditProperty ? "Update Residence" : "Confirm Addition"}
                   </button>
                 </div>
               </div>
