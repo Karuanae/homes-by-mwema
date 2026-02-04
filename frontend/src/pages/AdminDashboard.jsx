@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+// admindashboard.jsx - COMPLETE SIMPLIFIED VERSION
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FaHome,
@@ -17,8 +18,9 @@ import {
   FaBath,
   FaRulerCombined,
   FaMapMarkerAlt,
-  FaCheck,
-  FaTimes
+  FaUpload,
+  FaImage,
+  FaCamera
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 import api from "../services/api";
@@ -30,10 +32,10 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
-    totalProperties: 0,
-    activeBookings: 0,
-    totalCustomers: 0,
-    totalRevenue: 0,
+    total_properties: 0,
+    active_bookings: 0,
+    total_users: 0,
+    total_revenue: 0,
   });
 
   // Data States
@@ -47,21 +49,58 @@ export default function AdminDashboard() {
   const [showAddProperty, setShowAddProperty] = useState(false);
   const [showEditProperty, setShowEditProperty] = useState(null);
 
-  // Form State
+  // Upload States
+  const [uploading, setUploading] = useState(false);
+
+  // Form State - Simplified approach
   const [newProperty, setNewProperty] = useState({
     name: "",
     type: "studio",
     price: "",
     location: "",
     description: "",
-    coverImage: "",
-    galleryImages: [],
+    coverImage: null,        // File object
+    coverPreview: "",        // Preview URL (blob)
+    galleryImages: [],       // Array of File objects
+    galleryPreviews: [],     // Array of preview URLs
     amenities: [],
     rooms: 1,
     bathrooms: 1,
     maxGuests: 2,
     area: "",
   });
+
+  // Predefined amenities with icons
+  const predefinedAmenities = [
+    { label: 'WiFi', value: 'wifi', icon: '📶' },
+    { label: 'Pool', value: 'pool', icon: '🏊' },
+    { label: 'Parking', value: 'parking', icon: '🅿️' },
+    { label: 'AC', value: 'ac', icon: '❄️' },
+    { label: 'Kitchen', value: 'kitchen', icon: '👨‍🍳' },
+    { label: 'TV', value: 'tv', icon: '📺' },
+    { label: 'Gym', value: 'gym', icon: '💪' },
+    { label: 'Spa', value: 'spa', icon: '🧖' },
+    { label: 'Concierge', value: 'concierge', icon: '🎩' },
+    { label: 'Security', value: 'security', icon: '👮' },
+    { label: 'Laundry', value: 'laundry', icon: '👕' },
+    { label: 'Breakfast', value: 'breakfast', icon: '🍳' },
+    { label: 'Elevator', value: 'elevator', icon: '⬆️' },
+    { label: 'Fireplace', value: 'fireplace', icon: '🔥' },
+    { label: 'BBQ Grill', value: 'bbq', icon: '🍖' },
+    { label: 'Balcony', value: 'balcony', icon: '🌇' },
+  ];
+
+  // Clean up blob URLs when component unmounts or modal closes
+  const cleanupBlobUrls = useCallback(() => {
+    if (newProperty.coverPreview && newProperty.coverPreview.startsWith('blob:')) {
+      URL.revokeObjectURL(newProperty.coverPreview);
+    }
+    newProperty.galleryPreviews.forEach(url => {
+      if (url && url.startsWith('blob:')) {
+        URL.revokeObjectURL(url);
+      }
+    });
+  }, [newProperty.coverPreview, newProperty.galleryPreviews]);
 
   useEffect(() => {
     fetchStats();
@@ -76,15 +115,21 @@ export default function AdminDashboard() {
     }
   }, [activeTab]);
 
+  useEffect(() => {
+    return () => {
+      cleanupBlobUrls();
+    };
+  }, [cleanupBlobUrls]);
+
   const fetchStats = async () => {
     try {
       const response = await api.admin.getStats();
       if (response.data) {
         setStats({
-          totalProperties: response.data.total_properties || 0,
-          activeBookings: response.data.active_bookings || 0,
-          totalCustomers: response.data.total_users || 0,
-          totalRevenue: response.data.total_revenue || 0,
+          total_properties: response.data.total_properties || 0,
+          active_bookings: response.data.active_bookings || 0,
+          total_users: response.data.total_users || 0,
+          total_revenue: response.data.total_revenue || 0,
         });
       }
     } catch (error) {
@@ -98,9 +143,6 @@ export default function AdminDashboard() {
     try {
       const response = await api.properties.getAll();
       setProperties(response.data || []);
-      if (stats.totalProperties === 0 && response.data) {
-        setStats(prev => ({ ...prev, totalProperties: response.data.length }));
-      }
     } catch (error) {
       console.error("Error fetching properties:", error);
     }
@@ -110,13 +152,6 @@ export default function AdminDashboard() {
     try {
       const response = await api.admin.getBookings();
       setBookings(response.data || []);
-      const activeCount = (response.data || []).filter(b => b.status === 'confirmed' || b.status === 'pending').length;
-      const revenue = (response.data || []).reduce((sum, b) => sum + (b.total_amount || 0), 0);
-      setStats(prev => ({ 
-        ...prev, 
-        activeBookings: activeCount,
-        totalRevenue: revenue 
-      }));
     } catch (error) {
       console.error("Error fetching bookings:", error);
     }
@@ -128,7 +163,6 @@ export default function AdminDashboard() {
       const users = response.data || [];
       const customerList = users.filter(u => u.role !== 'admin');
       setCustomers(customerList);
-      setStats(prev => ({ ...prev, totalCustomers: customerList.length }));
     } catch (error) {
       console.error("Error fetching customers:", error);
     }
@@ -137,7 +171,7 @@ export default function AdminDashboard() {
   const fetchMessages = async () => {
     setLoadingMessages(true);
     try {
-      const response = await api.chats.getChats();
+      const response = await api.chats.getUserChats();
       setMessages(response.data || []);
     } catch (error) {
       console.error("Error fetching messages:", error);
@@ -163,58 +197,79 @@ export default function AdminDashboard() {
     }
   };
 
+  // SIMPLIFIED: Single API call with FormData
   const handleAddProperty = async () => {
     try {
-      // Combine cover image with gallery images (cover first)
-      const allImages = newProperty.coverImage 
-        ? [newProperty.coverImage, ...newProperty.galleryImages]
-        : newProperty.galleryImages;
+      setUploading(true);
       
-      const propertyData = {
-        name: newProperty.name,
-        title: newProperty.name,
-        type: newProperty.type,
-        price: parseFloat(newProperty.price),
-        location: newProperty.location,
-        description: newProperty.description,
-        images: allImages,
-        amenities: newProperty.amenities.map(a => typeof a === 'string' ? { name: a } : a),
+      // Prepare FormData with everything
+      const formData = new FormData();
+      
+      // Add property data
+      formData.append('name', newProperty.name);
+      formData.append('type', newProperty.type);
+      formData.append('price', newProperty.price);
+      formData.append('location', newProperty.location);
+      formData.append('description', newProperty.description);
+      formData.append('rooms', newProperty.rooms);
+      formData.append('bathrooms', newProperty.bathrooms);
+      formData.append('maxGuests', newProperty.maxGuests);
+      formData.append('area', newProperty.area);
+      formData.append('amenities', JSON.stringify(newProperty.amenities));
+      formData.append('specs', JSON.stringify({
+        guests: newProperty.maxGuests,
         bedrooms: newProperty.rooms,
-        bathrooms: newProperty.bathrooms,
-        max_guests: newProperty.maxGuests,
-        area: newProperty.area,
-        specs: {
-          bedrooms: newProperty.rooms,
-          bathrooms: newProperty.bathrooms,
-          guests: newProperty.maxGuests
+        beds: newProperty.rooms,
+        bathrooms: newProperty.bathrooms
+      }));
+      formData.append('tags', JSON.stringify([]));
+      
+      // Add cover image if exists
+      if (newProperty.coverImage) {
+        formData.append('coverImage', newProperty.coverImage);
+      }
+      
+      // Add gallery images
+      newProperty.galleryImages.forEach((image, index) => {
+        if (image) {
+          formData.append('galleryImages', image);
         }
-      };
-
-      await api.admin.createProperty(propertyData);
+      });
+      
+      // Single API call to create property with images
+      const response = await api.admin.createPropertyWithImages(formData);
+      
+      // Clean up blob URLs
+      cleanupBlobUrls();
       
       setShowAddProperty(false);
       resetPropertyForm();
       fetchProperties();
       fetchStats();
+      
     } catch (error) {
       alert("Error adding property: " + (error.response?.data?.error || error.message));
+    } finally {
+      setUploading(false);
     }
   };
 
   const handleEditClick = (property) => {
-    const images = property.images || [];
+    // For editing, we'll use a different approach
     setNewProperty({
       name: property.name,
       type: property.type,
       price: property.price,
       location: property.location,
       description: property.description || "",
-      coverImage: images[0] || "",
-      galleryImages: images.slice(1) || [],
+      coverImage: null,
+      coverPreview: property.cover_image || "",
+      galleryImages: [],
+      galleryPreviews: property.images?.slice(1) || [],
       amenities: property.amenities || [],
-      rooms: property.rooms || property.bedrooms || 1,
+      rooms: property.rooms || 1,
       bathrooms: property.bathrooms || 1,
-      maxGuests: property.max_guests || property.specs?.guests || 2,
+      maxGuests: property.max_guests || 2,
       area: property.area || ""
     });
     setShowEditProperty(property.id);
@@ -222,11 +277,7 @@ export default function AdminDashboard() {
 
   const updateProperty = async () => {
     try {
-      // Combine cover image with gallery images (cover first)
-      const allImages = newProperty.coverImage 
-        ? [newProperty.coverImage, ...newProperty.galleryImages]
-        : newProperty.galleryImages;
-      
+      // For updates, we can send updated property data
       const propertyData = {
         name: newProperty.name,
         title: newProperty.name,
@@ -234,38 +285,62 @@ export default function AdminDashboard() {
         price: parseFloat(newProperty.price),
         location: newProperty.location,
         description: newProperty.description,
-        images: allImages,
-        amenities: newProperty.amenities.map(a => typeof a === 'string' ? { name: a } : a),
+        amenities: newProperty.amenities,
         bedrooms: newProperty.rooms,
         bathrooms: newProperty.bathrooms,
         max_guests: newProperty.maxGuests,
         area: newProperty.area,
         specs: {
+          guests: newProperty.maxGuests,
           bedrooms: newProperty.rooms,
-          bathrooms: newProperty.bathrooms,
-          guests: newProperty.maxGuests
+          beds: newProperty.rooms,
+          bathrooms: newProperty.bathrooms
         }
       };
 
       await api.admin.updateProperty(showEditProperty, propertyData);
 
+      // If there are new images, upload them separately
+      if (newProperty.coverImage || newProperty.galleryImages.length > 0) {
+        const imageFormData = new FormData();
+        if (newProperty.coverImage) {
+          imageFormData.append('coverImage', newProperty.coverImage);
+        }
+        newProperty.galleryImages.forEach(image => {
+          if (image) {
+            imageFormData.append('galleryImages', image);
+          }
+        });
+        
+        await api.admin.addPropertyImages(showEditProperty, imageFormData);
+      }
+
+      // Clean up blob URLs
+      cleanupBlobUrls();
+
       setShowEditProperty(null);
       resetPropertyForm();
       fetchProperties();
+      
     } catch (error) {
       alert("Error updating property: " + (error.response?.data?.error || error.message));
     }
   };
 
   const resetPropertyForm = () => {
+    // Clean up any existing blob URLs
+    cleanupBlobUrls();
+    
     setNewProperty({
       name: "",
       type: "studio",
       price: "",
       location: "",
       description: "",
-      coverImage: "",
+      coverImage: null,
+      coverPreview: "",
       galleryImages: [],
+      galleryPreviews: [],
       amenities: [],
       rooms: 1,
       bathrooms: 1,
@@ -274,12 +349,119 @@ export default function AdminDashboard() {
     });
   };
 
+  // Simple image handlers - just store Files and create previews
+  const handleCoverImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    // Clean up previous preview if exists
+    if (newProperty.coverPreview && newProperty.coverPreview.startsWith('blob:')) {
+      URL.revokeObjectURL(newProperty.coverPreview);
+    }
+    
+    // Create preview URL for UI only
+    const previewUrl = URL.createObjectURL(file);
+    setNewProperty({...newProperty, 
+      coverImage: file,
+      coverPreview: previewUrl
+    });
+  };
+
+  const handleGalleryUpload = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+    
+    // Create previews for UI
+    const previewUrls = files.map(file => URL.createObjectURL(file));
+    
+    setNewProperty({
+      ...newProperty,
+      galleryImages: [...newProperty.galleryImages, ...files],
+      galleryPreviews: [...newProperty.galleryPreviews, ...previewUrls]
+    });
+  };
+
+  const removeGalleryImage = (index) => {
+    // Clean up the blob URL
+    const removedUrl = newProperty.galleryPreviews[index];
+    if (removedUrl && removedUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(removedUrl);
+    }
+    
+    // Update arrays
+    const updatedImages = [...newProperty.galleryImages];
+    const updatedPreviews = [...newProperty.galleryPreviews];
+    
+    updatedImages.splice(index, 1);
+    updatedPreviews.splice(index, 1);
+    
+    setNewProperty({
+      ...newProperty,
+      galleryImages: updatedImages,
+      galleryPreviews: updatedPreviews
+    });
+  };
+
+  const removeCoverImage = () => {
+    // Clean up blob URL
+    if (newProperty.coverPreview && newProperty.coverPreview.startsWith('blob:')) {
+      URL.revokeObjectURL(newProperty.coverPreview);
+    }
+    
+    setNewProperty({
+      ...newProperty,
+      coverImage: null,
+      coverPreview: ""
+    });
+  };
+
+  const toggleAmenity = (amenityValue) => {
+    const currentAmenities = newProperty.amenities;
+    const updatedAmenities = currentAmenities.includes(amenityValue)
+      ? currentAmenities.filter(a => a !== amenityValue)
+      : [...currentAmenities, amenityValue];
+    
+    setNewProperty({...newProperty, amenities: updatedAmenities});
+  };
+
+  const addCustomAmenity = () => {
+    const input = document.getElementById('custom-amenity-input');
+    if (input && input.value.trim()) {
+      const value = input.value.trim();
+      if (!newProperty.amenities.includes(value)) {
+        setNewProperty({
+          ...newProperty,
+          amenities: [...newProperty.amenities, value]
+        });
+      }
+      input.value = '';
+    }
+  };
+
+  const removeAmenity = (index) => {
+    const updated = [...newProperty.amenities];
+    updated.splice(index, 1);
+    setNewProperty({...newProperty, amenities: updated});
+  };
+
+  // Helper function to get image URL for display
+  const getImageUrl = (property) => {
+    if (property.cover_image) {
+      return property.cover_image;
+    }
+    if (property.images && property.images.length > 0) {
+      return property.images[0];
+    }
+    // Data URL placeholder
+    return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iI2Y1ZjVmNSIvPjx0ZXh0IHg9IjIwMCIgeT0iMTUwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiNjY2MiPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==';
+  };
+
   const navItems = [
     { id: "dashboard", label: "Overview", icon: FaHome },
     { id: "properties", label: "Properties", icon: FaBuilding },
-    { id: "bookings", label: "Reservations", icon: FaCalendarAlt }, // Changed "Bookings" to "Reservations" for prestige
-    { id: "customers", label: "Clientele", icon: FaUsers }, // Changed "Customers" to "Clientele"
-    { id: "messages", label: "Concierge", icon: FaEnvelope }, // Changed "Messages" to "Concierge"
+    { id: "bookings", label: "Reservations", icon: FaCalendarAlt },
+    { id: "customers", label: "Clientele", icon: FaUsers },
+    { id: "messages", label: "Concierge", icon: FaEnvelope },
   ];
 
   if (loading) {
@@ -295,7 +477,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="flex h-screen bg-[#F9F8F6] font-sans text-stone-800 overflow-hidden">
-      {/* Sidebar - "Old Money" Aesthetics: Dark Charcoal/Green background, Serif fonts */}
+      {/* Sidebar */}
       <aside className="w-72 bg-[#1C2321] text-[#E5E5E0] flex flex-col shadow-2xl z-20">
         <div className="p-10 border-b border-stone-700/50">
           <h1 className="text-2xl font-serif tracking-wider text-white">
@@ -311,7 +493,7 @@ export default function AdminDashboard() {
               onClick={() => setActiveTab(item.id)}
               className={`w-full flex items-center gap-4 px-6 py-4 transition-all duration-500 ease-out group ${
                 activeTab === item.id
-                  ? "bg-white/5 text-white border-r-2 border-[#D4AF37]" // Gold accent border
+                  ? "bg-white/5 text-white border-r-2 border-[#D4AF37]"
                   : "text-stone-400 hover:text-stone-100 hover:bg-white/[0.02]"
               }`}
             >
@@ -347,9 +529,6 @@ export default function AdminDashboard() {
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto p-12 relative">
-        {/* Background Texture/Grain can be added here via CSS if desired */}
-        
-        {/* Header Section */}
         <header className="flex justify-between items-end mb-12 border-b border-stone-200 pb-6">
           <div>
             <h2 className="text-4xl font-serif text-[#1C2321] mb-2">
@@ -361,7 +540,6 @@ export default function AdminDashboard() {
           </div>
           
           <div className="flex items-center gap-6">
-             {/* Search Bar - Minimalist Underline */}
              <div className="relative group">
                 <FaSearch className="absolute left-0 top-3 text-stone-400" />
                 <input 
@@ -384,13 +562,12 @@ export default function AdminDashboard() {
             transition={{ duration: 0.6 }}
             className="space-y-12"
           >
-            {/* Stats Grid - Card style: White bg, subtle shadow, serif numbers */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
               {[
-                { label: "Total Properties", value: stats.totalProperties, icon: FaBuilding },
-                { label: "Active Reservations", value: stats.activeBookings, icon: FaCalendarAlt },
-                { label: "Total Clientele", value: stats.totalCustomers, icon: FaUsers },
-                { label: "Revenue (YTD)", value: `Ksh ${stats.totalRevenue.toLocaleString()}`, icon: null },
+                { label: "Total Properties", value: stats.total_properties, icon: FaBuilding },
+                { label: "Active Reservations", value: stats.active_bookings, icon: FaCalendarAlt },
+                { label: "Total Clientele", value: stats.total_users, icon: FaUsers },
+                { label: "Revenue (YTD)", value: `Ksh ${stats.total_revenue.toLocaleString()}`, icon: null },
               ].map((stat, idx) => (
                 <div key={idx} className="bg-white p-8 border border-stone-100 shadow-sm hover:shadow-md transition-shadow duration-500">
                   <div className="flex justify-between items-start mb-4">
@@ -402,7 +579,6 @@ export default function AdminDashboard() {
               ))}
             </div>
 
-            {/* Recent Activity Section Placeholder */}
             <div className="grid grid-cols-3 gap-8">
                 <div className="col-span-2 bg-white p-8 border border-stone-100 shadow-sm">
                     <h3 className="font-serif text-xl text-[#1C2321] mb-6 border-b border-stone-100 pb-4">Performance Overview</h3>
@@ -450,9 +626,12 @@ export default function AdminDashboard() {
                 >
                   <div className="relative aspect-[4/3] overflow-hidden">
                     <img
-                      src={property.images?.[0] || "https://via.placeholder.com/400x300"}
+                      src={getImageUrl(property)}
                       alt={property.name}
                       className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 saturate-[0.85] group-hover:saturate-100"
+                      onError={(e) => {
+                        e.target.src = "https://via.placeholder.com/400x300";
+                      }}
                     />
                     <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm px-3 py-1">
                       <span className="text-xs font-serif font-bold tracking-wide text-[#1C2321]">
@@ -504,7 +683,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Bookings/Reservations Tab - Editorial Table Style */}
+        {/* Bookings/Reservations Tab */}
         {activeTab === "bookings" && (
             <div className="bg-white border border-stone-100 p-8">
                 <table className="w-full text-left border-collapse">
@@ -519,15 +698,15 @@ export default function AdminDashboard() {
                         {bookings.map((booking) => (
                             <tr key={booking.id} className="border-b border-stone-100 hover:bg-[#F9F8F6] transition-colors">
                                 <td className="py-6 px-4">
-                                    <p className="font-serif text-[#1C2321] text-lg">{booking.properties?.name}</p>
-                                    <p className="text-xs uppercase tracking-widest text-stone-400">ID: {booking.id.slice(0,6)}</p>
+                                    <p className="font-serif text-[#1C2321] text-lg">{booking.property_name}</p>
+                                    <p className="text-xs uppercase tracking-widest text-stone-400">ID: {booking.id}</p>
                                 </td>
                                 <td className="py-6 px-4">
-                                    <p className="font-medium">{booking.profiles?.full_name || 'Guest'}</p>
-                                    <p className="text-sm font-light text-stone-400">{booking.profiles?.email}</p>
+                                    <p className="font-medium">{booking.guest_name}</p>
+                                    <p className="text-sm font-light text-stone-400">{booking.email}</p>
                                 </td>
                                 <td className="py-6 px-4 font-light text-sm">
-                                    {new Date(booking.check_in).toLocaleDateString()} — {new Date(booking.check_out).toLocaleDateString()}
+                                    {booking.check_in} — {booking.check_out}
                                 </td>
                                 <td className="py-6 px-4">
                                     <span className={`text-xs uppercase tracking-widest font-medium ${
@@ -538,7 +717,7 @@ export default function AdminDashboard() {
                                     </span>
                                 </td>
                                 <td className="py-6 px-4 font-serif text-lg">
-                                    Ksh {booking.total_price?.toLocaleString()}
+                                    Ksh {booking.total_amount?.toLocaleString()}
                                 </td>
                                 <td className="py-6 px-4">
                                     <button className="text-stone-400 hover:text-[#1C2321] uppercase text-xs tracking-widest">View</button>
@@ -653,7 +832,7 @@ export default function AdminDashboard() {
 
       </main>
 
-      {/* Add/Edit Property Modal - Glassmorphism & Clean Lines */}
+      {/* Add/Edit Property Modal - SIMPLIFIED */}
       <AnimatePresence>
         {(showAddProperty || showEditProperty) && (
           <motion.div
@@ -662,9 +841,9 @@ export default function AdminDashboard() {
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-[#1C2321]/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
             onClick={() => {
+              resetPropertyForm();
               setShowAddProperty(false);
               setShowEditProperty(null);
-              resetPropertyForm();
             }}
           >
             <motion.div
@@ -681,9 +860,9 @@ export default function AdminDashboard() {
                   </h3>
                   <button
                     onClick={() => {
+                      resetPropertyForm();
                       setShowAddProperty(false);
                       setShowEditProperty(null);
-                      resetPropertyForm();
                     }}
                     className="text-stone-400 hover:text-[#1C2321] text-2xl font-light"
                   >
@@ -692,7 +871,7 @@ export default function AdminDashboard() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
-                  {/* Custom Input Component for consistency */}
+                  {/* Basic Information */}
                   {[
                     { label: "Property Name", key: "name", type: "text", placeholder: "e.g. The Kensington Suite" },
                     { label: "Price per Night (Ksh)", key: "price", type: "number", placeholder: "0.00" },
@@ -712,34 +891,38 @@ export default function AdminDashboard() {
                   ))}
 
                   <div>
-                     <label className="block text-xs uppercase tracking-widest text-stone-500 mb-2">Residence Type</label>
-                     <select 
-                        value={newProperty.type}
-                        onChange={(e) => setNewProperty({...newProperty, type: e.target.value})}
-                        className="w-full py-3 bg-transparent border-b border-stone-300 focus:border-[#1C2321] outline-none font-serif text-lg text-[#1C2321]"
-                     >
-                        <option value="studio">Studio Apartment</option>
-                        <option value="1_bedroom">One Bedroom Suite</option>
-                        <option value="2_bedroom">Two Bedroom Suite</option>
-                        <option value="3_bedroom">Three Bedroom Suite</option>
-                        <option value="penthouse">Penthouse</option>
-                        <option value="villa">Private Villa</option>
-                     </select>
+                    <label className="block text-xs uppercase tracking-widest text-stone-500 mb-2">Residence Type</label>
+                    <select 
+                      value={newProperty.type}
+                      onChange={(e) => setNewProperty({...newProperty, type: e.target.value})}
+                      className="w-full py-3 bg-transparent border-b border-stone-300 focus:border-[#1C2321] outline-none font-serif text-lg text-[#1C2321]"
+                    >
+                      <option value="studio">Studio Apartment</option>
+                      <option value="1_bedroom">One Bedroom Suite</option>
+                      <option value="2_bedroom">Two Bedroom Suite</option>
+                      <option value="3_bedroom">Three Bedroom Suite</option>
+                      <option value="penthouse">Penthouse</option>
+                      <option value="villa">Private Villa</option>
+                    </select>
                   </div>
 
                   <div className="md:col-span-2 grid grid-cols-3 gap-8">
-                     {["rooms", "bathrooms", "maxGuests"].map(k => (
-                        <div key={k}>
-                            <label className="block text-xs uppercase tracking-widest text-stone-500 mb-2">{k.replace(/([A-Z])/g, ' $1')}</label>
-                            <input
-                                type="number"
-                                value={newProperty[k]}
-                                onChange={(e) => setNewProperty({...newProperty, [k]: parseInt(e.target.value) || 1})}
-                                className="w-full py-3 bg-transparent border-b border-stone-300 focus:border-[#1C2321] outline-none font-serif text-lg text-[#1C2321]"
-                                min="1"
-                            />
-                        </div>
-                     ))}
+                    {["rooms", "bathrooms", "maxGuests"].map(k => (
+                      <div key={k}>
+                          <label className="block text-xs uppercase tracking-widest text-stone-500 mb-2">
+                            {k === 'rooms' ? 'Bedrooms' : 
+                             k === 'bathrooms' ? 'Bathrooms' : 
+                             'Max Guests'}
+                          </label>
+                          <input
+                              type="number"
+                              value={newProperty[k]}
+                              onChange={(e) => setNewProperty({...newProperty, [k]: parseInt(e.target.value) || 1})}
+                              className="w-full py-3 bg-transparent border-b border-stone-300 focus:border-[#1C2321] outline-none font-serif text-lg text-[#1C2321]"
+                              min="1"
+                          />
+                      </div>
+                    ))}
                   </div>
 
                   <div className="md:col-span-2">
@@ -753,149 +936,204 @@ export default function AdminDashboard() {
                     />
                   </div>
 
+                  {/* Amenities Section */}
                   <div className="md:col-span-2">
-                    <label className="block text-xs uppercase tracking-widest text-stone-500 mb-2">Amenities (Comma Separated)</label>
-                    <input
-                        type="text"
-                        value={newProperty.amenities.join(', ')}
-                        onChange={(e) => setNewProperty({...newProperty, amenities: e.target.value.split(',').map(a => a.trim()).filter(a => a)})}
-                        className="w-full py-3 bg-transparent border-b border-stone-300 focus:border-[#1C2321] outline-none font-sans text-stone-600"
-                        placeholder="Concierge, Valet, Spa, Private Pool..."
-                    />
-                  </div>
-
-                  {/* Cover Image - For Home Page */}
-                  <div className="md:col-span-2">
-                    <label className="block text-xs uppercase tracking-widest text-stone-500 mb-2">
-                      Cover Image <span className="text-stone-400 normal-case">(displayed on Home Page)</span>
+                    <label className="block text-xs uppercase tracking-widest text-stone-500 mb-4">
+                      Amenities
                     </label>
-                    <input
-                      type="text"
-                      value={newProperty.coverImage}
-                      onChange={(e) => setNewProperty({...newProperty, coverImage: e.target.value.trim()})}
-                      className="w-full py-3 bg-transparent border-b border-stone-300 focus:border-[#1C2321] outline-none font-sans text-xs text-stone-600"
-                      placeholder="https://example.com/cover-image.jpg"
-                    />
                     
-                    {/* Cover Image Preview */}
-                    {newProperty.coverImage && (
-                      <div className="mt-4">
-                        <div className="relative w-full max-w-md aspect-[16/10] border border-stone-200 overflow-hidden">
-                          <img 
-                            src={newProperty.coverImage} 
-                            alt="Cover" 
-                            className="w-full h-full object-cover"
-                            onError={(e) => e.target.src = 'https://via.placeholder.com/400x250?text=Invalid+URL'}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                      {predefinedAmenities.map((amenity) => (
+                        <div key={amenity.value} className="flex items-center">
+                          <input
+                            type="checkbox"
+                            id={`amenity-${amenity.value}`}
+                            checked={newProperty.amenities.includes(amenity.value)}
+                            onChange={() => toggleAmenity(amenity.value)}
+                            className="hidden"
                           />
-                          <span className="absolute bottom-0 left-0 right-0 bg-[#1C2321] text-white text-[10px] uppercase text-center py-2 tracking-widest">
-                            Home Page Cover
-                          </span>
+                          <label
+                            htmlFor={`amenity-${amenity.value}`}
+                            className={`flex items-center gap-2 px-3 py-2 rounded-full border cursor-pointer transition-all flex-1 justify-center ${
+                              newProperty.amenities.includes(amenity.value)
+                                ? 'bg-[#1C2321] text-white border-[#1C2321]'
+                                : 'bg-white text-stone-600 border-stone-300 hover:border-[#1C2321]'
+                            }`}
+                          >
+                            <span className="text-sm">{amenity.icon}</span>
+                            <span className="text-xs font-medium">{amenity.label}</span>
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                    
+                    {/* Custom Amenities Input */}
+                    <div className="mt-4">
+                      <label className="block text-xs uppercase tracking-widest text-stone-500 mb-2">
+                        Custom Amenities (Add one at a time)
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          id="custom-amenity-input"
+                          placeholder="e.g., Fireplace, Wine Cellar"
+                          className="flex-1 py-2 px-3 border border-stone-300 rounded focus:border-[#1C2321] outline-none"
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter' && e.target.value.trim()) {
+                              e.preventDefault();
+                              addCustomAmenity();
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={addCustomAmenity}
+                          className="px-4 py-2 bg-stone-800 text-white rounded hover:bg-[#1C2321] transition-colors"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {/* Selected Amenities Display */}
+                    {newProperty.amenities.length > 0 && (
+                      <div className="mt-6">
+                        <p className="text-xs uppercase tracking-widest text-stone-500 mb-2">
+                          Selected Amenities ({newProperty.amenities.length})
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {newProperty.amenities.map((amenity, index) => (
+                            <div
+                              key={index}
+                              className="flex items-center gap-1 px-3 py-1 bg-stone-100 rounded-full text-sm text-stone-700"
+                            >
+                              <span>{amenity}</span>
+                              <button
+                                type="button"
+                                onClick={() => removeAmenity(index)}
+                                className="ml-1 text-stone-500 hover:text-red-500 text-xs"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )}
                   </div>
 
-                  {/* Gallery Images - For Booking Page */}
+                  {/* Cover Image Upload - SIMPLIFIED */}
                   <div className="md:col-span-2">
-                    <label className="block text-xs uppercase tracking-widest text-stone-500 mb-2">
-                      Gallery Images <span className="text-stone-400 normal-case">(displayed on Booking Page - rooms, amenities, views)</span>
+                    <label className="block text-xs uppercase tracking-widest text-stone-500 mb-4">
+                      Cover Image <span className="text-stone-400 normal-case">(displayed on Home Page)</span>
                     </label>
-                    {/* Live Booking Page Image Grid Preview */}
-                    <div className="my-6">
-                      <span className="block text-[10px] uppercase tracking-widest text-stone-400 mb-2">Booking Page Preview</span>
-                      {(() => {
-                        const imgs = [newProperty.coverImage, ...newProperty.galleryImages].filter(Boolean);
-                        if (imgs.length === 0) return (
-                          <div className="h-40 w-full rounded-xl bg-stone-100 flex items-center justify-center text-stone-300 text-xs italic">No images added</div>
-                        );
-                        if (imgs.length === 1) {
-                          return (
-                            <div className="h-40 md:h-60 w-full rounded-xl overflow-hidden bg-stone-100">
-                              <img src={imgs[0]} alt="Main" className="w-full h-full object-cover" onError={e => e.target.src = 'https://via.placeholder.com/400x250?text=Invalid+URL'} />
-                            </div>
-                          );
-                        }
-                        return (
-                          <div className="grid grid-cols-1 md:grid-cols-4 gap-2 h-40 md:h-60 rounded-xl overflow-hidden">
-                            {/* Main Large Image */}
-                            <div className="md:col-span-2 md:row-span-2 relative h-full bg-stone-100">
-                              <img src={imgs[0]} alt="Main" className="w-full h-full object-cover" onError={e => e.target.src = 'https://via.placeholder.com/400x250?text=Invalid+URL'} />
-                            </div>
-                            {/* Side Images */}
-                            <div className="hidden md:grid md:col-span-2 md:row-span-2 grid-cols-2 gap-2 h-full">
-                              {imgs.slice(1, 5).map((img, i) => (
-                                <div key={i} className="relative h-full bg-stone-100">
-                                  <img src={img} alt={`View ${i}`} className="w-full h-full object-cover" onError={e => e.target.src = 'https://via.placeholder.com/100?text=Error'} />
-                                  {/* Overlay if more than 5 images */}
-                                  {i === 3 && imgs.length > 5 && (
-                                    <div className="absolute inset-0 bg-stone-900/40 flex items-center justify-center">
-                                      <span className="text-white text-xs font-bold uppercase tracking-widest border-b border-white pb-1">View All Photos</span>
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                    {/* Gallery Grid with Add Button */}
-                    <div className="mt-4">
-                      <div className="flex flex-wrap gap-4">
-                        {/* Existing Gallery Images */}
-                        {newProperty.galleryImages.map((url, idx) => (
-                          <div key={idx} className="relative w-28 h-28 flex-shrink-0 border border-stone-200 group">
-                            {url ? (
-                              <>
-                                <img 
-                                  src={url} 
-                                  alt={`Gallery ${idx + 1}`} 
-                                  className="w-full h-full object-cover"
-                                  onError={(e) => e.target.src = 'https://via.placeholder.com/100?text=Error'}
-                                />
-                                <span className="absolute bottom-0 left-0 right-0 bg-stone-800/80 text-white text-[8px] uppercase text-center py-1 tracking-widest">
-                                  {idx === 0 ? 'Bedroom' : idx === 1 ? 'Bathroom' : idx === 2 ? 'Living' : `Image ${idx + 1}`}
-                                </span>
-                              </>
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center bg-stone-100">
-                                <span className="text-stone-400 text-xs">Empty</span>
-                              </div>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const updated = newProperty.galleryImages.filter((_, i) => i !== idx);
-                                setNewProperty({...newProperty, galleryImages: updated});
-                              }}
-                              className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-                            >
-                              ×
-                            </button>
-                          </div>
-                        ))}
-                        {/* Add Image Button */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const url = prompt('Enter image URL:');
-                            if (url && url.trim()) {
-                              setNewProperty({
-                                ...newProperty, 
-                                galleryImages: [...newProperty.galleryImages, url.trim()]
-                              });
-                            }
-                          }}
-                          className="w-28 h-28 border-2 border-dashed border-stone-300 hover:border-[#1C2321] bg-white hover:bg-stone-50 transition-all flex flex-col items-center justify-center gap-2 group cursor-pointer"
+                    
+                    <div className="flex flex-col gap-4">
+                      {/* Upload Button */}
+                      <div className="relative">
+                        <input
+                          type="file"
+                          id="cover-upload"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleCoverImageUpload}
+                        />
+                        <label
+                          htmlFor="cover-upload"
+                          className="flex items-center justify-center gap-3 px-6 py-4 border-2 border-dashed border-stone-300 rounded-lg cursor-pointer hover:border-[#1C2321] transition-colors group"
                         >
-                          <FaPlus className="text-stone-400 group-hover:text-[#1C2321] text-lg transition-colors" />
-                          <span className="text-[10px] uppercase tracking-widest text-stone-400 group-hover:text-[#1C2321] transition-colors">Add Image</span>
-                        </button>
+                          <FaCamera className="text-stone-400 group-hover:text-[#1C2321]" />
+                          <span className="text-stone-600 font-medium">
+                            {newProperty.coverPreview ? "Change Cover Image" : "Upload Cover Image"}
+                          </span>
+                        </label>
                       </div>
-                      {newProperty.galleryImages.length > 0 && (
-                        <p className="text-[10px] uppercase tracking-widest text-stone-400 mt-4">
-                          {newProperty.galleryImages.length} image{newProperty.galleryImages.length !== 1 ? 's' : ''} added
-                        </p>
+                      
+                      {/* Preview */}
+                      {newProperty.coverPreview && (
+                        <div className="relative w-full max-w-md aspect-[16/10] border border-stone-200 rounded-lg overflow-hidden">
+                          <img 
+                            src={newProperty.coverPreview} 
+                            alt="Cover" 
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-4">
+                            <div className="flex justify-between items-center">
+                              <span className="text-white text-sm font-medium">Cover Image Preview</span>
+                              <button
+                                type="button"
+                                onClick={removeCoverImage}
+                                className="text-white bg-black/50 hover:bg-black/70 w-6 h-6 rounded-full flex items-center justify-center"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Gallery Images Upload - SIMPLIFIED */}
+                  <div className="md:col-span-2">
+                    <label className="block text-xs uppercase tracking-widest text-stone-500 mb-4">
+                      Gallery Images <span className="text-stone-400 normal-case">(displayed on Booking Page)</span>
+                    </label>
+                    
+                    {/* Upload Multiple Button */}
+                    <div className="mb-6">
+                      <input
+                        type="file"
+                        id="gallery-upload"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={handleGalleryUpload}
+                      />
+                      <label
+                        htmlFor="gallery-upload"
+                        className="inline-flex items-center gap-2 px-6 py-3 bg-[#1C2321] text-white rounded-lg cursor-pointer hover:bg-[#2C3632] transition-colors"
+                      >
+                        <FaUpload />
+                        <span>Upload Multiple Images</span>
+                      </label>
+                      <p className="text-xs text-stone-500 mt-2">
+                        {newProperty.galleryPreviews.length} image(s) selected
+                      </p>
+                    </div>
+                    
+                    {/* Gallery Grid */}
+                    <div className="mb-6">
+                      <p className="text-xs uppercase tracking-widest text-stone-500 mb-3">
+                        Image Gallery ({newProperty.galleryPreviews.length} images)
+                      </p>
+                      
+                      {newProperty.galleryPreviews.length === 0 ? (
+                        <div className="text-center py-12 border-2 border-dashed border-stone-200 rounded-lg">
+                          <FaImage className="text-4xl text-stone-300 mx-auto mb-3" />
+                          <p className="text-stone-400">No gallery images added yet</p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          {newProperty.galleryPreviews.map((url, idx) => (
+                            <div key={idx} className="relative aspect-square rounded-lg overflow-hidden group">
+                              <img
+                                src={url}
+                                alt={`Gallery ${idx + 1}`}
+                                className="w-full h-full object-cover"
+                              />
+                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                <button
+                                  type="button"
+                                  onClick={() => removeGalleryImage(idx)}
+                                  className="text-white bg-red-500 hover:bg-red-600 w-8 h-8 rounded-full flex items-center justify-center transform translate-y-4 group-hover:translate-y-0 transition-all"
+                                >
+                                  <FaTrash className="text-xs" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -904,9 +1142,9 @@ export default function AdminDashboard() {
                 <div className="flex justify-end gap-6 mt-12 pt-6 border-t border-stone-200">
                   <button
                     onClick={() => {
+                      resetPropertyForm();
                       setShowAddProperty(false);
                       setShowEditProperty(null);
-                      resetPropertyForm();
                     }}
                     className="px-8 py-3 text-stone-500 hover:text-[#1C2321] transition-colors uppercase tracking-widest text-xs"
                   >
@@ -914,10 +1152,10 @@ export default function AdminDashboard() {
                   </button>
                   <button
                     onClick={showEditProperty ? updateProperty : handleAddProperty}
-                    disabled={!newProperty.name || !newProperty.price || !newProperty.location}
-                    className="px-10 py-3 bg-[#1C2321] text-white hover:bg-[#2C3632] transition-colors disabled:opacity-50 uppercase tracking-widest text-xs font-medium"
+                    disabled={!newProperty.name || !newProperty.price || !newProperty.location || uploading}
+                    className="px-10 py-3 bg-[#1C2321] text-white hover:bg-[#2C3632] transition-colors disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-widest text-xs font-medium"
                   >
-                    {showEditProperty ? "Update Residence" : "Confirm Addition"}
+                    {uploading ? 'Saving...' : showEditProperty ? "Update Residence" : "Save Property"}
                   </button>
                 </div>
               </div>

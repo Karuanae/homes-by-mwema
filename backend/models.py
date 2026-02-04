@@ -1,8 +1,9 @@
+# models.py - COMPLETE UPDATED VERSION
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import MetaData
 from werkzeug.security import generate_password_hash, check_password_hash
-
+import json
 
 metadata = MetaData()
 db = SQLAlchemy(metadata=metadata)
@@ -50,7 +51,6 @@ class Property(db.Model):
     host_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     specs = db.Column(db.JSON)  # {'guests': 2, 'bedrooms': 1, 'beds': 1, 'bathrooms': 1}
     amenities = db.Column(db.JSON)  # List of amenities
-    images = db.Column(db.JSON)  # List of image URLs
     tags = db.Column(db.JSON)  # List of tags
     status = db.Column(db.String(20), default='active')  # 'active', 'inactive', 'maintenance'
     rating = db.Column(db.Numeric(3, 2), default=0)
@@ -65,6 +65,41 @@ class Property(db.Model):
     bookings = db.relationship('Booking', backref='property', lazy=True)
     payments = db.relationship('Payment', backref='property', lazy=True)
     chats = db.relationship('Chat', backref='property', lazy=True)
+    images = db.relationship('PropertyImage', backref='property', lazy=True, cascade='all, delete-orphan')
+    
+    # Helper method to get image URLs
+    def get_image_urls(self):
+        """Get list of image API URLs"""
+        return [f"/api/admin/property-image/{img.id}" for img in self.images]
+    
+    def get_cover_image_url(self):
+        """Get cover image URL"""
+        cover_image = PropertyImage.query.filter_by(property_id=self.id, is_cover=True).first()
+        if cover_image:
+            return f"/api/admin/property-image/{cover_image.id}"
+        return None
+
+class PropertyImage(db.Model):
+    __tablename__ = 'property_images'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    property_id = db.Column(db.Integer, db.ForeignKey('properties.id'), nullable=True)
+    image_data = db.Column(db.LargeBinary, nullable=False)  # Store actual image binary
+    filename = db.Column(db.String(255))
+    mime_type = db.Column(db.String(50))
+    is_cover = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'property_id': self.property_id,
+            'filename': self.filename,
+            'mime_type': self.mime_type,
+            'is_cover': self.is_cover,
+            'url': f"/api/admin/property-image/{self.id}",
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
 
 class Booking(db.Model):
     __tablename__ = 'bookings'

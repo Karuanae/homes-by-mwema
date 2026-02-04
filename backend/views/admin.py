@@ -1,11 +1,24 @@
-from flask import Blueprint, request, jsonify
+# admin.py - COMPLETE UPDATED VERSION
+from flask import Blueprint, request, jsonify, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import db, User, Property, Booking, Payment, Lead, HomepageContent, AdminStats
+from models import db, User, Property, Booking, Payment, Lead, HomepageContent, AdminStats, PropertyImage
 from werkzeug.exceptions import Forbidden
 from datetime import datetime, timedelta
 from decimal import Decimal
+import os
+from werkzeug.utils import secure_filename
+import uuid
+import base64
+import json
 
 admin_bp = Blueprint('admin', __name__)
+
+# Upload configuration
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def require_admin():
     """Check if current user is admin"""
@@ -13,6 +26,384 @@ def require_admin():
     user = User.query.get(user_id)
     if not user or user.role != 'admin':
         raise Forbidden('Admin access required')
+
+# ========== NEW: SINGLE ENDPOINT FOR PROPERTY WITH IMAGES ==========
+@admin_bp.route('/properties/with-images', methods=['POST'])
+@jwt_required()
+def create_property_with_images():
+    """Create property with images in one request"""
+    require_admin()
+    
+    user_id = get_jwt_identity()
+    
+    # Check if request is multipart/form-data
+    if not request.content_type or 'multipart/form-data' not in request.content_type:
+        return jsonify({'error': 'Content-Type must be multipart/form-data'}), 400
+    
+    try:
+        # Get form data
+        name = request.form.get('name')
+        type = request.form.get('type')
+        price = request.form.get('price')
+        location = request.form.get('location')
+        
+        # Validate required fields
+        if not all([name, type, price, location]):
+            return jsonify({'error': 'Missing required fields: name, type, price, location'}), 400
+        
+        # Parse JSON fields
+        description = request.form.get('description', '')
+        amenities_json = request.form.get('amenities', '[]')
+        specs_json = request.form.get('specs', '{}')
+        tags_json = request.form.get('tags', '[]')
+        
+        try:
+            amenities = json.loads(amenities_json)
+            specs = json.loads(specs_json)
+            tags = json.loads(tags_json)
+        except json.JSONDecodeError:
+            amenities = []
+            specs = {}
+            tags = []
+        
+        # Create property first
+        new_property = Property(
+            name=name,
+            title=request.form.get('title', name),
+            type=type,
+            price=Decimal(str(price)),
+            location=location,
+            description=description,
+            rooms=int(request.form.get('rooms', 1)),
+            bathrooms=int(request.form.get('bathrooms', 1)),
+            max_guests=int(request.form.get('max_guests', request.form.get('maxGuests', 2))),
+            area=request.form.get('area', ''),
+            host_id=user_id,
+            specs=specs if specs else {
+                'guests': int(request.form.get('max_guests', request.form.get('maxGuests', 2))),
+                'bedrooms': int(request.form.get('rooms', 1)),
+                'beds': int(request.form.get('rooms', 1)),
+                'bathrooms': int(request.form.get('bathrooms', 1))
+            },
+            amenities=amenities,
+            tags=tags,
+            status='active'
+        )
+        
+        db.session.add(new_property)
+        db.session.flush()  # Get property ID
+        
+        # Handle cover image
+        cover_image = request.files.get('coverImage')
+        cover_image_saved = False
+        if cover_image and allowed_file(cover_image.filename):
+            try:
+                # Read image binary data
+                image_data = cover_image.read()
+                filename = secure_filename(cover_image.filename)
+                
+                # Store in database
+                property_image = PropertyImage(
+                    image_data=image_data,
+                    filename=filename,
+                    mime_type=cover_image.mimetype,
+                    property_id=new_property.id,
+                    is_cover=True
+                )
+                db.session.add(property_image)
+                cover_image_saved = True
+            except Exception as e:
+                print(f"Error saving cover image: {str(e)}")
+        
+        # Handle gallery images
+        gallery_images = request.files.getlist('galleryImages')
+        gallery_images_saved = 0
+        
+        for i, image in enumerate(gallery_images):
+            if image and image.filename and allowed_file(image.filename):
+                try:
+                    # Read image binary data
+                    image_data = image.read()
+                    filename = secure_filename(image.filename)
+                    
+                    # Store in database
+                    property_image = PropertyImage(
+                        image_data=image_data,
+                        filename=filename,
+                        mime_type=image.mimetype,
+                        property_id=new_property.id,
+                        is_cover=False  # Only cover image is marked as cover
+                    )
+                    db.session.add(property_image)
+                    gallery_images_saved += 1
+                except Exception as e:
+                    print(f"Error saving gallery image {i}: {str(e)}")
+        
+        # If no cover image was saved but we have gallery images, mark the first one as cover
+        if not cover_image_saved and gallery_images_saved > 0:
+            first_image = PropertyImage.query.filter_by(
+                property_id=new_property.id,
+                is_cover=False
+            ).first()
+            if first_image:
+                first_image.is_cover = True
+        
+        db.session.commit()
+        
+        # Get the updated property with images
+        property_with_images = Property.query.get(new_property.id)
+        
+        return jsonify({
+            'id': new_property.id,
+            'name': new_property.name,
+            'type': new_property.type,
+            'price': float(new_property.price) if new_property.price else 0,
+            'location': new_property.location,
+            'description': new_property.description,
+            'rooms': new_property.rooms,
+            'bathrooms': new_property.bathrooms,
+            'max_guests': new_property.max_guests,
+            'area': new_property.area,
+            'specs': new_property.specs,
+            'amenities': new_property.amenities,
+            'tags': new_property.tags,
+            'status': new_property.status,
+            'images': [f"/api/admin/property-image/{img.id}" for img in property_with_images.images],
+            'cover_image': property_with_images.get_cover_image_url(),
+            'created_at': new_property.created_at.isoformat() if new_property.created_at else None
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error creating property with images: {str(e)}")
+        return jsonify({'error': f'Failed to create property: {str(e)}'}), 500
+
+# ========== NEW: ADD IMAGES TO EXISTING PROPERTY ==========
+@admin_bp.route('/properties/<int:property_id>/images', methods=['POST'])
+@jwt_required()
+def add_property_images(property_id):
+    """Add images to existing property"""
+    require_admin()
+    
+    property = Property.query.get(property_id)
+    if not property:
+        return jsonify({'error': 'Property not found'}), 404
+    
+    try:
+        images_added = []
+        
+        # Handle cover image replacement
+        cover_image = request.files.get('coverImage')
+        if cover_image and allowed_file(cover_image.filename):
+            try:
+                # First, unset any existing cover
+                PropertyImage.query.filter_by(
+                    property_id=property_id,
+                    is_cover=True
+                ).update({'is_cover': False})
+                
+                # Read image binary data
+                image_data = cover_image.read()
+                filename = secure_filename(cover_image.filename)
+                
+                # Store in database
+                property_image = PropertyImage(
+                    image_data=image_data,
+                    filename=filename,
+                    mime_type=cover_image.mimetype,
+                    property_id=property.id,
+                    is_cover=True
+                )
+                db.session.add(property_image)
+                images_added.append({'type': 'cover', 'filename': filename})
+            except Exception as e:
+                print(f"Error saving cover image: {str(e)}")
+        
+        # Handle gallery images addition
+        gallery_images = request.files.getlist('galleryImages')
+        for i, image in enumerate(gallery_images):
+            if image and image.filename and allowed_file(image.filename):
+                try:
+                    # Read image binary data
+                    image_data = image.read()
+                    filename = secure_filename(image.filename)
+                    
+                    # Store in database
+                    property_image = PropertyImage(
+                        image_data=image_data,
+                        filename=filename,
+                        mime_type=image.mimetype,
+                        property_id=property.id,
+                        is_cover=False
+                    )
+                    db.session.add(property_image)
+                    images_added.append({'type': 'gallery', 'filename': filename})
+                except Exception as e:
+                    print(f"Error saving gallery image {i}: {str(e)}")
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Added {len(images_added)} image(s) to property',
+            'images_added': images_added,
+            'total_images': len(property.images)
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error adding images to property: {str(e)}")
+        return jsonify({'error': f'Failed to add images: {str(e)}'}), 500
+
+# ========== IMAGE UPLOAD TO DATABASE ==========
+@admin_bp.route('/upload/property-image', methods=['POST'])
+@jwt_required()
+def upload_property_image_db():
+    """Upload image and store in database (returns image ID)"""
+    require_admin()
+    
+    if 'image' not in request.files:
+        return jsonify({'error': 'No image file'}), 400
+    
+    file = request.files['image']
+    
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+    
+    if not allowed_file(file.filename):
+        return jsonify({'error': 'Invalid file type'}), 400
+    
+    try:
+        # Get property_id from form data (optional for temporary uploads)
+        property_id = request.form.get('property_id')
+        
+        # Validate property exists if property_id is provided
+        if property_id and property_id.strip():
+            try:
+                property_id_int = int(property_id)
+                property = Property.query.get(property_id_int)
+                if not property:
+                    return jsonify({'error': f'Property with ID {property_id} not found'}), 404
+                property_id = property_id_int
+            except (ValueError, TypeError):
+                return jsonify({'error': 'Invalid property ID format'}), 400
+        else:
+            property_id = None  # Allow null for temporary uploads
+        
+        # Read image binary data
+        image_data = file.read()
+        filename = secure_filename(file.filename)
+        
+        # Check if this should be a cover image
+        is_cover = request.form.get('is_cover', 'false').lower() == 'true'
+        
+        # Store in database
+        property_image = PropertyImage(
+            image_data=image_data,
+            filename=filename,
+            mime_type=file.mimetype,
+            property_id=property_id,  # Can be None for temporary uploads
+            is_cover=is_cover
+        )
+        db.session.add(property_image)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'image_id': property_image.id,
+            'property_id': property_image.property_id,  # May be None
+            'filename': filename,
+            'mime_type': file.mimetype,
+            'is_cover': is_cover,
+            'url': f"/api/admin/property-image/{property_image.id}"
+        })
+    except Exception as e:
+        db.session.rollback()
+        print(f"Upload error: {str(e)}")
+        return jsonify({'error': f'Failed to save image: {str(e)}'}), 500
+
+@admin_bp.route('/upload/property-images', methods=['POST'])
+@jwt_required()
+def upload_property_images_db():
+    """Upload multiple images to database"""
+    require_admin()
+    
+    if 'images' not in request.files:
+        return jsonify({'error': 'No images uploaded'}), 400
+    
+    files = request.files.getlist('images')
+    if not files or files[0].filename == '':
+        return jsonify({'error': 'No selected files'}), 400
+    
+    # Get property_id from form data (optional)
+    property_id = request.form.get('property_id')
+    
+    # Validate property exists if property_id is provided
+    if property_id and property_id.strip():
+        try:
+            property_id_int = int(property_id)
+            property = Property.query.get(property_id_int)
+            if not property:
+                return jsonify({'error': f'Property with ID {property_id} not found'}), 404
+            property_id = property_id_int
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Invalid property ID format'}), 400
+    else:
+        property_id = None
+    
+    uploaded_images = []
+    errors = []
+    
+    for i, file in enumerate(files):
+        if file and allowed_file(file.filename):
+            try:
+                # Read image binary data
+                image_data = file.read()
+                filename = secure_filename(file.filename)
+                
+                # Check if first image should be cover
+                is_cover = (i == 0 and request.form.get('first_is_cover', 'false').lower() == 'true')
+                
+                # Store in database
+                property_image = PropertyImage(
+                    image_data=image_data,
+                    filename=filename,
+                    mime_type=file.mimetype,
+                    property_id=property_id,
+                    is_cover=is_cover
+                )
+                db.session.add(property_image)
+                uploaded_images.append({
+                    'image_id': property_image.id,
+                    'property_id': property_image.property_id,
+                    'filename': filename,
+                    'mime_type': file.mimetype,
+                    'is_cover': is_cover,
+                    'url': f"/api/admin/property-image/{property_image.id}"
+                })
+            except Exception as e:
+                errors.append(f"File {file.filename}: {str(e)}")
+                continue
+    
+    db.session.commit()
+    
+    if uploaded_images:
+        response = {'success': True, 'images': uploaded_images}
+        if errors:
+            response['warnings'] = errors
+        return jsonify(response)
+    else:
+        return jsonify({'error': 'No valid images uploaded', 'details': errors}), 400
+
+@admin_bp.route('/property-image/<int:image_id>')
+def get_property_image(image_id):
+    """Serve image from database"""
+    property_image = PropertyImage.query.get(image_id)
+    
+    if not property_image:
+        return jsonify({'error': 'Image not found'}), 404
+    
+    return Response(property_image.image_data, mimetype=property_image.mime_type)
 
 # ========== PROPERTY MANAGEMENT ==========
 @admin_bp.route('/properties', methods=['GET'])
@@ -24,6 +415,9 @@ def admin_get_properties():
     
     result = []
     for prop in properties:
+        # Get image URLs from database
+        image_urls = prop.get_image_urls()
+        
         result.append({
             'id': prop.id,
             'name': prop.name,
@@ -43,7 +437,8 @@ def admin_get_properties():
                 'bathrooms': prop.bathrooms
             },
             'amenities': prop.amenities or [],
-            'images': prop.images or [],
+            'images': image_urls,  # API URLs to get images
+            'cover_image': prop.get_cover_image_url(),
             'tags': prop.tags or [],
             'status': prop.status,
             'rating': float(prop.rating) if prop.rating else 0,
@@ -59,7 +454,7 @@ def admin_get_properties():
 @admin_bp.route('/properties', methods=['POST'])
 @jwt_required()
 def admin_create_property():
-    """Admin: Create new property"""
+    """Admin: Create new property with images stored in database"""
     require_admin()
     
     user_id = get_jwt_identity()
@@ -70,6 +465,13 @@ def admin_create_property():
     for field in required_fields:
         if field not in data or not data[field]:
             return jsonify({'error': f'Missing required field: {field}'}), 400
+    
+    # Process amenities - ensure it's a list
+    amenities = data.get('amenities', [])
+    if isinstance(amenities, str):
+        amenities = [amenities]
+    elif not isinstance(amenities, list):
+        amenities = []
     
     # Create new property
     new_property = Property(
@@ -90,14 +492,35 @@ def admin_create_property():
             'beds': data.get('rooms', 1),
             'bathrooms': data.get('bathrooms', 1)
         }),
-        amenities=data.get('amenities', []),
-        images=data.get('images', []),
+        amenities=amenities,
         tags=data.get('tags', []),
         status='active'
     )
     
     db.session.add(new_property)
+    db.session.flush()  # Get the property ID
+    
+    # Link images to property if image IDs provided
+    if 'image_ids' in data and isinstance(data['image_ids'], list):
+        image_ids = data['image_ids']
+        
+        for i, image_id in enumerate(image_ids):
+            property_image = PropertyImage.query.get(image_id)
+            if property_image:
+                property_image.property_id = new_property.id
+                # Mark first image as cover
+                if i == 0:
+                    # First, unset any existing cover
+                    PropertyImage.query.filter_by(
+                        property_id=new_property.id,
+                        is_cover=True
+                    ).update({'is_cover': False})
+                    property_image.is_cover = True
+    
     db.session.commit()
+    
+    # Get the updated property with images
+    property_with_images = Property.query.get(new_property.id)
     
     return jsonify({
         'id': new_property.id,
@@ -106,10 +529,12 @@ def admin_create_property():
         'price': float(new_property.price) if new_property.price else 0,
         'location': new_property.location,
         'status': new_property.status,
+        'images': [f"/api/admin/property-image/{img.id}" for img in property_with_images.images],
+        'cover_image': property_with_images.get_cover_image_url(),
         'created_at': new_property.created_at.isoformat() if new_property.created_at else None
     }), 201
 
-@admin_bp.route('/properties/<property_id>', methods=['PUT'])
+@admin_bp.route('/properties/<int:property_id>', methods=['PUT'])
 @jwt_required()
 def admin_update_property(property_id):
     """Admin: Update property"""
@@ -145,9 +570,14 @@ def admin_update_property(property_id):
     if 'specs' in data:
         property.specs = data['specs']
     if 'amenities' in data:
-        property.amenities = data['amenities']
-    if 'images' in data:
-        property.images = data['images']
+        # Ensure amenities is a list
+        amenities = data['amenities']
+        if isinstance(amenities, str):
+            property.amenities = [amenities]
+        elif isinstance(amenities, list):
+            property.amenities = amenities
+        else:
+            property.amenities = []
     if 'tags' in data:
         property.tags = data['tags']
     if 'status' in data:
@@ -156,6 +586,20 @@ def admin_update_property(property_id):
         property.rating = Decimal(str(data['rating'])) if data['rating'] else 0
     if 'is_featured' in data:
         property.is_featured = data['is_featured']
+    
+    # Update images if new image IDs provided
+    if 'image_ids' in data and isinstance(data['image_ids'], list):
+        # Clear existing image associations for this property
+        PropertyImage.query.filter_by(property_id=property.id).update({'property_id': None, 'is_cover': False})
+        
+        # Link new images
+        for i, image_id in enumerate(data['image_ids']):
+            property_image = PropertyImage.query.get(image_id)
+            if property_image:
+                property_image.property_id = property.id
+                # Mark first image as cover
+                if i == 0:
+                    property_image.is_cover = True
     
     db.session.commit()
     
@@ -166,20 +610,26 @@ def admin_update_property(property_id):
         'price': float(property.price) if property.price else 0,
         'location': property.location,
         'status': property.status,
+        'images': property.get_image_urls(),
+        'cover_image': property.get_cover_image_url(),
         'updated_at': property.updated_at.isoformat() if property.updated_at else None
     })
 
-@admin_bp.route('/properties/<property_id>', methods=['DELETE'])
+@admin_bp.route('/properties/<int:property_id>', methods=['DELETE'])
 @jwt_required()
 def admin_delete_property(property_id):
-    """Admin: Soft delete property (change status to inactive)"""
+    """Admin: Delete property and its images"""
     require_admin()
     
     property = Property.query.get(property_id)
     if not property:
         return jsonify({'error': 'Property not found'}), 404
     
-    property.status = 'inactive'
+    # Delete associated images from database
+    PropertyImage.query.filter_by(property_id=property_id).delete()
+    
+    # Delete property
+    db.session.delete(property)
     db.session.commit()
     
     return jsonify({'message': 'Property deleted successfully'})
@@ -194,28 +644,17 @@ def admin_get_stats():
     # Calculate stats
     total_properties = Property.query.filter_by(status='active').count()
     active_bookings = Booking.query.filter(Booking.status.in_(['upcoming', 'active'])).count()
-    pending_leads = Lead.query.filter_by(status='new').count()
+    total_users = User.query.filter(User.role != 'admin').count()
     
     # Calculate revenue from completed payments
     completed_payments = Payment.query.filter_by(status='completed').all()
     total_revenue = sum(float(p.amount) for p in completed_payments) if completed_payments else 0
     
-    # Simple occupancy rate calculation
-    total_booked_nights = sum(b.nights for b in Booking.query.filter_by(status='upcoming').all())
-    total_property_nights = total_properties * 30  # Assume 30 days per property
-    occupancy_rate = (total_booked_nights / total_property_nights * 100) if total_property_nights > 0 else 0
-    
-    # Pending payments
-    pending_payments = Payment.query.filter_by(status='pending').all()
-    total_pending = sum(float(p.amount) for p in pending_payments) if pending_payments else 0
-    
     return jsonify({
-        'totalProperties': total_properties,
-        'activeBookings': active_bookings,
-        'pendingLeads': pending_leads,
-        'revenue': total_revenue,
-        'occupancyRate': round(occupancy_rate, 2),
-        'pendingPayments': total_pending
+        'total_properties': total_properties,
+        'active_bookings': active_bookings,
+        'total_users': total_users,
+        'total_revenue': total_revenue
     })
 
 # ========== USER MANAGEMENT ==========
@@ -254,24 +693,21 @@ def admin_get_bookings():
     for booking in bookings:
         result.append({
             'id': booking.id,
-            'guestName': booking.user.name if booking.user else 'Guest',
+            'guest_name': booking.user.name if booking.user else 'Guest',
             'email': booking.user.email if booking.user else '',
-            'property': booking.property.name if booking.property else '',
-            'propertyName': booking.property.name if booking.property else '',
-            'propertyLocation': booking.property.location if booking.property else '',
-            'propertyImage': booking.property.images[0] if booking.property and booking.property.images else '',
-            'checkIn': booking.check_in.isoformat() if booking.check_in else None,
-            'checkOut': booking.check_out.isoformat() if booking.check_out else None,
+            'property_name': booking.property.name if booking.property else '',
+            'property_location': booking.property.location if booking.property else '',
+            'property_image': booking.property.get_cover_image_url() if booking.property else '',
+            'check_in': booking.check_in.isoformat() if booking.check_in else None,
+            'check_out': booking.check_out.isoformat() if booking.check_out else None,
             'nights': booking.nights,
             'guests': booking.guests or {'adults': 1, 'children': 0, 'infants': 0},
-            'amount': float(booking.base_amount) if booking.base_amount else 0,
-            'totalAmount': float(booking.total_amount) if booking.total_amount else 0,
-            'pendingAmount': float(booking.pending_amount) if booking.pending_amount else 0,
-            'paymentMethod': booking.payment_method,
-            'paymentStatus': booking.payment_status,
+            'total_amount': float(booking.total_amount) if booking.total_amount else 0,
+            'payment_method': booking.payment_method,
+            'payment_status': booking.payment_status,
             'confirmation': booking.confirmation,
             'status': booking.status,
-            'createdAt': booking.created_at.isoformat() if booking.created_at else None
+            'created_at': booking.created_at.isoformat() if booking.created_at else None
         })
     
     return jsonify(result)
@@ -288,14 +724,14 @@ def admin_get_payments():
     for payment in payments:
         result.append({
             'id': payment.id,
-            'bookingId': payment.booking_id,
-            'guestName': payment.user.name if payment.user else 'Guest',
-            'property': payment.property.name if payment.property else '',
+            'booking_id': payment.booking_id,
+            'guest_name': payment.user.name if payment.user else 'Guest',
+            'property_name': payment.property.name if payment.property else '',
             'amount': float(payment.amount) if payment.amount else 0,
             'method': payment.method,
             'status': payment.status,
             'date': payment.payment_date.strftime('%Y-%m-%d') if payment.payment_date else '',
-            'transactionId': payment.transaction_id or ''
+            'transaction_id': payment.transaction_id or ''
         })
     
     return jsonify(result)
@@ -318,20 +754,20 @@ def admin_get_leads():
             'source': lead.source,
             'status': lead.status,
             'priority': lead.priority,
-            'assignedTo': lead.assigned_to.name if lead.assigned_to else None,
-            'propertyInterest': lead.property_interest,
+            'assigned_to': lead.assigned_to.name if lead.assigned_to else None,
+            'property_interest': lead.property_interest,
             'message': lead.message,
-            'followUpDate': lead.follow_up_date.isoformat() if lead.follow_up_date else None,
-            'createdAt': lead.created_at.isoformat() if lead.created_at else None
+            'follow_up_date': lead.follow_up_date.isoformat() if lead.follow_up_date else None,
+            'created_at': lead.created_at.isoformat() if lead.created_at else None
         })
     
     return jsonify(result)
 
-# ========== HOMEPAGE CONTENT (Minimal) ==========
+# ========== HOMEPAGE CONTENT ==========
 @admin_bp.route('/homepage', methods=['GET'])
 @jwt_required()
 def admin_get_homepage():
-    """Admin: Get homepage content (read-only since it's static)"""
+    """Admin: Get homepage content"""
     require_admin()
     
     content = HomepageContent.query.first()

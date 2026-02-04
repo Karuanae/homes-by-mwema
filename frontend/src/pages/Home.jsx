@@ -465,48 +465,78 @@ export default function Home() {
             </div>
           )}
 
-          {/* Properties Grid */}
+          {/* Properties Grid - FIXED VERSION */}
           {!loading && !error && properties.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-12">
-            {properties.slice(0, visibleProperties).map((property, idx) => (
-              <Link to={`/booking/${property.id}`} key={property.id || idx} className="group block">
-                <div className="relative aspect-[3/4] overflow-hidden bg-stone-100 mb-4 cursor-none rounded-sm">
-                   {/* Property Image with Zoom Effect */}
-                   <motion.img
+              {properties.slice(0, visibleProperties).map((property, idx) => (
+                <Link 
+                  to={`/booking/${property.id}`} 
+                  key={property.id || idx} 
+                  className="group block relative overflow-hidden rounded-sm transition-all duration-300 hover:shadow-2xl hover:-translate-y-1"
+                >
+                  {/* Property Image with improved hover effects */}
+                  <div className="relative aspect-[3/4] overflow-hidden bg-stone-100 mb-4">
+                    <motion.img
                       whileHover={{ scale: 1.05 }}
                       transition={{ duration: 0.7, ease: "easeOut" }}
                       src={property.images?.[0]}
                       alt={property.name}
                       className="w-full h-full object-cover grayscale-[20%] group-hover:grayscale-0 transition-all duration-500"
                     />
+                    
+                    {/* Overlay on hover */}
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-all duration-500 flex items-center justify-center">
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        whileHover={{ opacity: 1, y: 0 }}
+                        className="bg-white/90 backdrop-blur-sm px-4 py-2 rounded-full"
+                      >
+                        <span className="text-xs font-bold uppercase tracking-widest">View Details</span>
+                      </motion.div>
+                    </div>
+                    
                     {property.tag && (
                       <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm px-2 py-1 text-[10px] uppercase tracking-widest font-bold text-stone-900">
                         {property.tag}
                       </div>
                     )}
-                </div>
-                
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="text-stone-900 text-lg font-serif leading-tight group-hover:italic transition-all">
-                      {property.name}
-                    </h3>
-                    <p className="text-stone-500 text-xs mt-1 uppercase tracking-wide">{property.location}</p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-stone-900 text-sm font-medium">
-                      Ksh {property.price?.toLocaleString()}
-                    </p>
+                  
+                  {/* Property Info with hover effects */}
+                  <div className="p-3 group-hover:bg-stone-50 transition-colors duration-300">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="text-stone-900 text-lg font-serif leading-tight group-hover:text-stone-700 transition-colors">
+                          {property.name}
+                        </h3>
+                        <p className="text-stone-500 text-xs mt-1 uppercase tracking-wide group-hover:text-stone-600 transition-colors">
+                          {property.location}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-stone-900 text-sm font-medium group-hover:text-stone-700 transition-colors">
+                          Ksh {property.price?.toLocaleString()}
+                        </p>
+                        <p className="text-stone-400 text-[10px] mt-1 uppercase">per night</p>
+                      </div>
+                    </div>
+                    
+                    {/* Hidden details that appear on hover */}
+                    <div className="mt-3 pt-3 border-t border-stone-100 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                      <div className="flex items-center text-xs text-stone-500">
+                        <span className="mr-4">⭐ {property.rating || "New"}</span>
+                        <span>🛏️ {property.bedrooms || "1"} Bed</span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              ))}
             </div>
           )}
 
           {!loading && !error && visibleProperties < properties.length && (
             <div className="mt-16 text-center">
-              <button onClick={() => setVisibleProperties(p => p + 4)} className="text-xs uppercase tracking-widest border-b border-stone-900 pb-1">
+              <button onClick={() => setVisibleProperties(p => p + 4)} className="text-xs uppercase tracking-widest border-b border-stone-900 pb-1 hover:text-stone-600 hover:border-stone-600 transition-colors">
                 Load More
               </button>
             </div>
@@ -577,10 +607,10 @@ export default function Home() {
                <div key={faq.id} className="group">
                  <button 
                    onClick={() => setOpenFaq(openFaq === faq.id ? null : faq.id)}
-                   className="w-full py-6 flex justify-between items-center text-left"
+                   className="w-full py-6 flex justify-between items-center text-left hover:text-stone-900 transition-colors cursor-pointer"
                  >
                    <span className="text-sm uppercase tracking-widest font-medium text-stone-700 group-hover:text-stone-900 transition-colors">{faq.question}</span>
-                   <span className="font-serif italic text-stone-400 text-xl">{openFaq === faq.id ? '−' : '+'}</span>
+                   <span className="font-serif italic text-stone-400 text-xl group-hover:text-stone-600 transition-colors">{openFaq === faq.id ? '−' : '+'}</span>
                  </button>
                  <AnimatePresence>
                    {openFaq === faq.id && (
@@ -603,8 +633,8 @@ export default function Home() {
         <h2 className="text-4xl md:text-6xl font-serif mb-6">Ready to Book?</h2>
         <p className="text-stone-400 max-w-lg mx-auto mb-10 font-light">Experience the finest homes Kenya has to offer. Book your sanctuary today.</p>
         <div className="flex justify-center gap-6">
-           <button className="px-8 py-3 bg-[#f5f2ee] text-stone-900 text-xs uppercase tracking-widest font-bold hover:bg-white transition-colors">Book Now</button>
-           <button className="px-8 py-3 border border-stone-700 text-[#f5f2ee] text-xs uppercase tracking-widest font-bold hover:border-[#f5f2ee] transition-colors">Contact</button>
+           <button className="px-8 py-3 bg-[#f5f2ee] text-stone-900 text-xs uppercase tracking-widest font-bold hover:bg-white transition-colors cursor-pointer">Book Now</button>
+           <button className="px-8 py-3 border border-stone-700 text-[#f5f2ee] text-xs uppercase tracking-widest font-bold hover:border-[#f5f2ee] transition-colors cursor-pointer">Contact</button>
         </div>
       </section>
 
