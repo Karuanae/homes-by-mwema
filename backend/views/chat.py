@@ -38,101 +38,187 @@ def serialize_message(m):
 
 @chat_bp.route('/', methods=['POST'])
 def start_chat():
-    data = request.get_json() or {}
-    user_id = data.get('user_id')
-    property_id = data.get('property_id')
+    """Create a new chat or return existing one"""
+    try:
+        data = request.get_json() or {}
+        user_id = data.get('user_id')
+        property_id = data.get('property_id')
+        
+        print(f"📨 Start chat request - user_id: {user_id}, property_id: {property_id}")
 
-    if not user_id:
-        return jsonify({'error': 'user_id is required'}), 400
+        if not user_id:
+            return jsonify({'error': 'user_id is required'}), 400
 
-    # Try to reuse an existing chat for same user & property
-    existing = None
-    if property_id:
-        existing = Chat.query.filter_by(user_id=user_id, property_id=property_id).first()
+        # Try to reuse an existing active chat for same user & property
+        existing = None
+        if property_id:
+            existing = Chat.query.filter_by(
+                user_id=user_id, 
+                property_id=property_id,
+                status='active'
+            ).first()
+        else:
+            # If no property_id, find any active chat for this user
+            existing = Chat.query.filter_by(
+                user_id=user_id,
+                status='active'
+            ).order_by(Chat.last_active.desc()).first()
 
-    if existing:
-        return jsonify({'chat': serialize_chat(existing)}), 200
+        if existing:
+            print(f"✅ Found existing chat: {existing.id}")
+            return jsonify({'chat': serialize_chat(existing)}), 200
 
-    chat = Chat(user_id=user_id, property_id=property_id, last_active=datetime.utcnow())
-    db.session.add(chat)
-    db.session.commit()
-
-    return jsonify({'chat': serialize_chat(chat)}), 201
+        # Create new chat
+        chat = Chat(
+            user_id=user_id, 
+            property_id=property_id, 
+            chat_type='inquiry',
+            status='active',
+            last_active=datetime.utcnow()
+        )
+        db.session.add(chat)
+        db.session.commit()
+        
+        print(f"✅ Created new chat: {chat.id}")
+        return jsonify({'chat': serialize_chat(chat)}), 201
+        
+    except Exception as e:
+        print(f"❌ Error creating chat: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
 
 @chat_bp.route('/user/<int:user_id>', methods=['GET'])
 def get_user_chats(user_id):
-    chats = Chat.query.filter_by(user_id=user_id).order_by(Chat.last_active.desc()).all()
-    return jsonify([serialize_chat(c) for c in chats]), 200
+    """Get all chats for a user"""
+    try:
+        chats = Chat.query.filter_by(
+            user_id=user_id
+        ).order_by(Chat.last_active.desc()).all()
+        
+        print(f"📋 Found {len(chats)} chats for user {user_id}")
+        return jsonify([serialize_chat(c) for c in chats]), 200
+    except Exception as e:
+        print(f"❌ Error getting user chats: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 
 @chat_bp.route('/<int:chat_id>/messages', methods=['GET'])
 def get_messages(chat_id):
-    chat = Chat.query.get(chat_id)
-    if not chat:
-        return jsonify({'error': 'Chat not found'}), 404
+    """Get all messages for a chat"""
+    try:
+        chat = Chat.query.get(chat_id)
+        if not chat:
+            return jsonify({'error': 'Chat not found'}), 404
 
-    messages = ChatMessage.query.filter_by(chat_id=chat_id).order_by(ChatMessage.timestamp).all()
-    return jsonify([serialize_message(m) for m in messages]), 200
+        messages = ChatMessage.query.filter_by(
+            chat_id=chat_id
+        ).order_by(ChatMessage.timestamp).all()
+        
+        print(f"📨 Found {len(messages)} messages for chat {chat_id}")
+        return jsonify([serialize_message(m) for m in messages]), 200
+    except Exception as e:
+        print(f"❌ Error getting messages: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 
 @chat_bp.route('/<int:chat_id>/messages', methods=['POST'])
 def post_message(chat_id):
-    data = request.get_json() or {}
-    content = data.get('message') or data.get('content')
-    sender_id = data.get('sender_id')
-    sender_name = data.get('sender_name') or 'Anonymous'
-    is_host = bool(data.get('is_host', False))
+    """Post a new message to a chat"""
+    try:
+        data = request.get_json() or {}
+        content = data.get('message') or data.get('content')
+        sender_id = data.get('sender_id')
+        sender_name = data.get('sender_name') or 'Anonymous'
+        is_host = bool(data.get('is_host', False))
 
-    if not content:
-        return jsonify({'error': 'message content is required'}), 400
+        print(f"📨 Post message to chat {chat_id}: {content[:50]}...")
 
-    chat = Chat.query.get(chat_id)
-    if not chat:
-        return jsonify({'error': 'Chat not found'}), 404
+        if not content:
+            return jsonify({'error': 'message content is required'}), 400
 
-    msg = ChatMessage(
-        chat_id=chat_id,
-        sender_id=sender_id,
-        sender_name=sender_name,
-        content=content,
-        is_host=is_host,
-        timestamp=datetime.utcnow(),
-    )
+        chat = Chat.query.get(chat_id)
+        if not chat:
+            return jsonify({'error': 'Chat not found'}), 404
 
-    db.session.add(msg)
-    # Update chat metadata
-    chat.last_message = content
-    chat.last_message_time = datetime.utcnow()
-    chat.last_active = datetime.utcnow()
-    chat.unread_count = (chat.unread_count or 0) + 1
+        # Create message
+        msg = ChatMessage(
+            chat_id=chat_id,
+            sender_id=sender_id,
+            sender_name=sender_name,
+            content=content,
+            is_host=is_host,
+            timestamp=datetime.utcnow(),
+        )
+        db.session.add(msg)
+        
+        # Update chat metadata
+        chat.last_message = content
+        chat.last_message_time = datetime.utcnow()
+        chat.last_active = datetime.utcnow()
+        chat.unread_count = (chat.unread_count or 0) + 1
 
-    db.session.commit()
-
-    return jsonify(serialize_message(msg)), 201
+        db.session.commit()
+        
+        print(f"✅ Message saved: {msg.id}")
+        return jsonify(serialize_message(msg)), 201
+        
+    except Exception as e:
+        print(f"❌ Error posting message: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
 
 @chat_bp.route('/<int:chat_id>/read', methods=['PUT'])
 def mark_read(chat_id):
-    chat = Chat.query.get(chat_id)
-    if not chat:
-        return jsonify({'error': 'Chat not found'}), 404
+    """Mark all messages in a chat as read"""
+    try:
+        chat = Chat.query.get(chat_id)
+        if not chat:
+            return jsonify({'error': 'Chat not found'}), 404
 
-    ChatMessage.query.filter_by(chat_id=chat_id, is_read=False).update({'is_read': True})
-    chat.unread_count = 0
-    db.session.commit()
-
-    return jsonify({'message': 'Marked as read'}), 200
+        ChatMessage.query.filter_by(
+            chat_id=chat_id, 
+            is_read=False
+        ).update({'is_read': True})
+        
+        chat.unread_count = 0
+        db.session.commit()
+        
+        print(f"✅ Marked chat {chat_id} as read")
+        return jsonify({'message': 'Marked as read'}), 200
+        
+    except Exception as e:
+        print(f"❌ Error marking as read: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
 
 @chat_bp.route('/unread/<int:user_id>', methods=['GET'])
 def unread_count(user_id):
-    total = db.session.query(db.func.coalesce(db.func.sum(Chat.unread_count), 0)).filter(Chat.user_id == user_id).scalar() or 0
-    return jsonify({'unread': int(total)}), 200
+    """Get total unread count for a user"""
+    try:
+        total = db.session.query(
+            db.func.coalesce(db.func.sum(Chat.unread_count), 0)
+        ).filter(Chat.user_id == user_id).scalar() or 0
+        
+        print(f"📊 User {user_id} has {total} unread messages")
+        return jsonify({'unread': int(total)}), 200
+    except Exception as e:
+        print(f"❌ Error getting unread count: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 
 @chat_bp.route('/', methods=['GET'])
 def list_chats():
-    # Return all chats (admin usage)
-    chats = Chat.query.order_by(Chat.last_active.desc()).all()
-    return jsonify([serialize_chat(c) for c in chats]), 200
+    """Get all chats (admin usage)"""
+    try:
+        chats = Chat.query.filter_by(
+            status='active'
+        ).order_by(Chat.last_active.desc()).all()
+        
+        print(f"📋 Found {len(chats)} active chats")
+        return jsonify([serialize_chat(c) for c in chats]), 200
+    except Exception as e:
+        print(f"❌ Error listing chats: {str(e)}")
+        return jsonify({'error': str(e)}), 500

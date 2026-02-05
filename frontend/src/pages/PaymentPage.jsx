@@ -1,131 +1,16 @@
-// Helper: prepend backend URL to image paths (same as Home.jsx)
-const API_BASE_URL = 'http://localhost:5000';
-const getImageSrc = (url) => url && !url.startsWith('http') ? `${API_BASE_URL}${url}` : url;
+// PaymentPage.jsx - COMPLETE UPDATED VERSION WITH REAL-TIME CHAT
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaSpinner, FaTimes } from "react-icons/fa"; // Kept only essential functional icons
+import { FaSpinner, FaTimes } from "react-icons/fa";
 import api from "../services/api";
+import ChatWindow from "../components/Chat/ChatWindow";
+import socketService from "../services/socketService";
 
-// --- MINIMALIST CHAT WIDGET ---
-const ChatWidget = ({ isOpen, onClose, onToggle, user }) => {
-  const [message, setMessage] = useState('');
-  const [chatMessages, setChatMessages] = useState([]);
-  const [isTyping, setIsTyping] = useState(false);
-  const [chatId, setChatId] = useState(null);
+// Helper: prepend backend URL to image paths (same as Home.jsx)
+const API_BASE_URL = 'http://localhost:5000';
+const getImageSrc = (url) => url && !url.startsWith('http') ? `${API_BASE_URL}${url}` : url;
 
-  useEffect(() => {
-    if (!isOpen || !user) return;
-    let mounted = true;
-
-    const initChat = async () => {
-      try {
-        const chatsResp = await api.chats.getUserChats(user.id);
-        const chats = chatsResp.data || [];
-        let chat = chats.length ? chats[0] : null;
-
-        if (!chat) {
-          const startResp = await api.chats.startChat(user.id, null, null);
-          chat = startResp.data?.chat || null;
-        }
-
-        if (chat && mounted) {
-          setChatId(chat.id);
-          const msgsResp = await api.chats.getMessages(chat.id);
-          setChatMessages(msgsResp.data || []);
-        }
-      } catch (err) {
-        console.error('Chat init error', err);
-      }
-    };
-    initChat();
-    return () => { mounted = false; };
-  }, [isOpen, user]);
-
-  const handleSendMessage = async () => {
-    if (!message.trim() || !user) return;
-    try {
-      setIsTyping(true);
-      let cid = chatId;
-      if (!cid) {
-        const startResp = await api.chats.startChat(user.id, null, null);
-        cid = startResp.data?.chat?.id;
-        setChatId(cid);
-      }
-      const payload = { message, sender_id: user.id, sender_name: user.name, is_host: false };
-      await api.chats.sendMessage(cid, payload);
-      const msgsResp = await api.chats.getMessages(cid);
-      setChatMessages(msgsResp.data || []);
-      setMessage('');
-    } catch (err) {
-      console.error('Send message error', err);
-    } finally {
-      setIsTyping(false);
-    }
-  };
-
-  if (!isOpen) {
-    return (
-      <button
-        onClick={onToggle}
-        className="fixed bottom-8 right-8 z-50 bg-stone-900 text-stone-50 px-6 py-3 font-serif italic text-sm shadow-xl hover:bg-black transition-all duration-500 border border-stone-800"
-      >
-        Concierge
-      </button>
-    );
-  }
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="fixed bottom-8 right-8 w-80 h-[450px] bg-stone-50 border border-stone-200 shadow-2xl z-50 flex flex-col"
-    >
-      {/* Minimal Header */}
-      <div className="bg-stone-900 text-stone-50 p-4 flex items-center justify-between">
-        <span className="font-serif italic">Concierge Support</span>
-        <button onClick={onClose} className="hover:text-stone-300"><FaTimes /></button>
-      </div>
-
-      {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 bg-white space-y-4">
-        {chatMessages.map((msg) => (
-          <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[80%] p-3 text-xs ${
-              msg.sender === 'user' ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-800'
-            }`}>
-              {msg.text}
-            </div>
-          </div>
-        ))}
-        {isTyping && <div className="text-xs text-stone-400 italic">Concierge is typing...</div>}
-      </div>
-
-      {/* Input Area */}
-      <div className="p-4 border-t border-stone-200 bg-white">
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-            placeholder="Type your inquiry..."
-            className="flex-1 border-b border-stone-300 focus:border-stone-900 outline-none text-sm py-2 bg-transparent placeholder-stone-400 font-serif"
-          />
-          <button 
-            onClick={handleSendMessage}
-            disabled={!message.trim()}
-            className="text-xs uppercase tracking-widest font-bold text-stone-900 hover:text-stone-600 disabled:opacity-30"
-          >
-            SEND
-          </button>
-        </div>
-      </div>
-    </motion.div>
-  );
-};
-
-// --- MAIN PAYMENT PAGE ---
 export default function PaymentPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -133,6 +18,9 @@ export default function PaymentPage() {
   
   // State
   const [showChat, setShowChat] = useState(false);
+  const [userChatId, setUserChatId] = useState(null);
+  const [isCreatingChat, setIsCreatingChat] = useState(false);
+  const [socketConnected, setSocketConnected] = useState(false);
   const { bookingDetails: passedDetails } = location.state || {};
   const [currentStep, setCurrentStep] = useState(1); 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -168,6 +56,37 @@ export default function PaymentPage() {
     nights: 0, baseAmount: 0, cleaningFee: 0, serviceFee: 0, taxes: 0, total: 0
   });
 
+  // Initialize socket
+  useEffect(() => {
+    socketService.connect();
+    
+    socketService.on('socket_connected', () => {
+      setSocketConnected(true);
+      console.log('✅ Socket connected as client');
+      
+      // Authenticate if user is logged in
+      if (user) {
+        socketService.authenticate(user.id, user.role || 'user');
+      }
+    });
+    
+    socketService.on('socket_disconnected', () => {
+      setSocketConnected(false);
+      console.log('❌ Socket disconnected');
+    });
+    
+    socketService.on('new_message', (message) => {
+      console.log('📨 New message received:', message);
+      // The ChatWindow component handles displaying messages
+    });
+    
+    return () => {
+      socketService.off('socket_connected');
+      socketService.off('socket_disconnected');
+      socketService.off('new_message');
+    };
+  }, [user]);
+
   // Initialization
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -175,9 +94,17 @@ export default function PaymentPage() {
       try {
         const storedUser = localStorage.getItem('user');
         if (storedUser) {
-          setUser(JSON.parse(storedUser));
+          const userData = JSON.parse(storedUser);
+          setUser(userData);
           setIsLoggedIn(true);
           setCurrentStep(2);
+          
+          // Try to find existing chat for user
+          const chatsResponse = await api.chats.getUserChats(userData.id);
+          const chats = chatsResponse.data || [];
+          if (chats.length > 0) {
+            setUserChatId(chats[0].id);
+          }
         }
 
         const propertyResponse = await api.properties.getById(id);
@@ -239,6 +166,9 @@ export default function PaymentPage() {
       setUser(userData);
       setIsLoggedIn(true);
       setCurrentStep(2);
+      
+      // Authenticate with socket
+      socketService.authenticate(userData.id, userData.role || 'user');
     } catch (error) {
       alert('Authentication failed.');
     } finally {
@@ -374,13 +304,105 @@ export default function PaymentPage() {
     }
   }, [location]);
 
+// FIXED handleStartChat for PaymentPage.jsx
+// Replace the current handleStartChat function with this one
+
+const handleStartChat = async () => {
+  if (!user) {
+    alert('Please login or continue as guest first');
+    return;
+  }
+
+  setIsCreatingChat(true);
+  try {
+    console.log('🔄 Creating chat for user:', user.id, 'property:', id);
+    
+    // ✅ STEP 1: Create chat in database via REST API
+    const chatResponse = await api.chats.startChat(
+      user.id, 
+      null, // hostId - not needed, backend will handle
+      id // propertyId from URL params
+    );
+    
+    console.log('📨 Chat API response:', chatResponse.data);
+    
+    const chat = chatResponse.data.chat;
+    if (!chat || !chat.id) {
+      throw new Error('Invalid chat response from server');
+    }
+    
+    console.log('✅ Chat created/found in database:', chat.id);
+    
+    setUserChatId(chat.id);
+    setShowChat(true);
+    
+    // ✅ STEP 2: Authenticate with WebSocket if connected
+    if (socketConnected) {
+      console.log('🔌 Authenticating with WebSocket...');
+      socketService.authenticate(user.id, user.role || 'user');
+      socketService.joinChat(chat.id);
+    } else {
+      console.log('⚠️  WebSocket not connected, skipping socket setup');
+    }
+    
+    // ✅ STEP 3: Send initial message via REST API (will save to DB)
+    console.log('📤 Sending initial message...');
+    await api.chats.sendMessage(chat.id, {
+      message: `Hi, I'm interested in ${property?.title}. Can you help me with some questions about booking?`,
+      sender_id: user.id,
+      sender_name: user.name || 'Guest',
+      is_host: false
+    });
+    
+    console.log('✅ Chat setup complete!');
+    
+  } catch (error) {
+    console.error('❌ Error creating chat:', error);
+    console.error('Error details:', error.response?.data || error.message);
+    
+    const errorMsg = error.response?.data?.error || error.message || 'Unknown error';
+    alert(`Could not start chat: ${errorMsg}`);
+  } finally {
+    setIsCreatingChat(false);
+  }
+};
+
+
   const formatCurrency = (val) => `KES ${val?.toLocaleString() || '0'}`;
 
   // --- RENDER ---
   return (
     <div className="min-h-screen bg-stone-50 font-sans text-stone-900 selection:bg-stone-200">
       
-      <ChatWidget isOpen={showChat} onClose={() => setShowChat(false)} onToggle={() => setShowChat(!showChat)} user={user} />
+      {/* Chat Widget */}
+      {showChat && user && userChatId ? (
+        <div className="fixed bottom-8 right-8 w-96 h-[500px] z-50 shadow-2xl border border-stone-200">
+          <ChatWindow
+            chatId={userChatId}
+            currentUser={user}
+            onClose={() => setShowChat(false)}
+            propertyName={property?.title}
+          />
+        </div>
+      ) : (
+        <button
+          onClick={handleStartChat}
+          disabled={isCreatingChat || !user}
+          className="fixed bottom-8 right-8 z-50 bg-stone-900 text-stone-50 px-6 py-3 font-serif italic text-sm shadow-xl hover:bg-black transition-all duration-500 border border-stone-800 disabled:opacity-50 disabled:cursor-not-allowed group"
+        >
+          {isCreatingChat ? (
+            <span className="flex items-center gap-2">
+              <span className="w-4 h-4 border-2 border-stone-300 border-t-white rounded-full animate-spin"></span>
+              Connecting...
+            </span>
+          ) : (
+            <span className="flex items-center gap-2 group-hover:gap-3 transition-all">
+              <span>💬</span>
+              <span>Chat with Concierge</span>
+            </span>
+          )}
+        </button>
+      )}
       
       <main className="max-w-7xl mx-auto px-6 pt-32 pb-24">
         
@@ -469,7 +491,12 @@ export default function PaymentPage() {
                         {authMode === 'login' ? "New Client? Register" : "Existing Client? Login"}
                       </button>
                       <button onClick={() => {
-                        setUser({ name: "Guest", email: "guest@client.com" }); setIsLoggedIn(true); setCurrentStep(2);
+                        const guestUser = { id: `guest_${Date.now()}`, name: "Guest", email: "guest@client.com", role: "user" };
+                        setUser(guestUser);
+                        setIsLoggedIn(true);
+                        setCurrentStep(2);
+                        localStorage.setItem('user', JSON.stringify(guestUser));
+                        socketService.authenticate(guestUser.id, 'user');
                       }} className="text-stone-400 hover:text-stone-600">
                         Continue as Guest
                       </button>

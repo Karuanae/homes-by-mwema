@@ -1,17 +1,21 @@
-from flask import Flask, jsonify, send_from_directory
+# app.py - FIXED VERSION
+from flask import Flask, jsonify, send_from_directory, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from models import db, TokenBlocklist, User
 import os
-from datetime import timedelta
+from datetime import datetime, timedelta
 from flask_migrate import Migrate
 from dotenv import load_dotenv
+from flask_socketio import SocketIO, emit, join_room, leave_room
+import eventlet
 
 # Load environment variables from .env file
 load_dotenv()
 
 # Create the Flask application
 app = Flask(__name__)
+app.url_map.strict_slashes = False
 
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///homes.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -83,6 +87,20 @@ app.config['KES_TO_USD_RATE'] = float(os.environ.get('KES_TO_USD_RATE', '153.0')
 jwt = JWTManager(app)
 jwt.init_app(app)
 
+# Initialize SocketIO AFTER all other configurations
+socketio = SocketIO(
+    app, 
+    cors_allowed_origins=[
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173"
+    ],
+    async_mode='eventlet',
+    logger=True,
+    engineio_logger=False
+)
+
 # Serve uploaded files
 @app.route('/uploads/properties/<filename>')
 def uploaded_file(filename):
@@ -108,10 +126,53 @@ app.register_blueprint(user_bp, url_prefix='/api/users')
 app.register_blueprint(chat_bp, url_prefix='/api/chats')
 app.register_blueprint(main_bp, url_prefix='/api')
 
+# SocketIO event handlers (simple test first)
+@socketio.on('connect')
+def handle_connect():
+    print(f'[SOCKETIO] Client connected: {request.sid}')
+    emit('connected', {'status': 'connected', 'sid': request.sid})
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    print(f'[SOCKETIO] Client disconnected: {request.sid}')
+
+# Simple test event
+@socketio.on('ping')
+def handle_ping():
+    emit('pong', {'message': 'pong', 'timestamp': datetime.utcnow().isoformat()})
+
+# Import and register chat socket events AFTER socketio is defined
+# This prevents circular imports
+try:
+    from socket_events import register_chat_events
+    register_chat_events(socketio)
+    print("✅ Chat socket events registered successfully")
+except ImportError as e:
+    print(f"⚠️  Could not import socket_events: {e}")
+    print("⚠️  Creating socket_events.py file...")
+    
+    # Create a basic socket_events.py if it doesn't exist
+    socket_events_content = '''# socket_events.py
+def register_chat_events(socketio):
+    """Placeholder for chat events"""
+    print("ℹ️  Using placeholder socket events")
+    
+    @socketio.on('authenticate')
+    def handle_authentication(data):
+        print(f"Authentication attempt: {data}")
+        socketio.emit('authenticated', {'status': 'success'})
+'''
+    
+    with open('socket_events.py', 'w') as f:
+        f.write(socket_events_content)
+    
+    from socket_events import register_chat_events
+    register_chat_events(socketio)
+
 # Create database tables on startup
 with app.app_context():
     db.create_all()
-    print("Database tables created/verified")
+    print("✅ Database tables created/verified")
     
     # Create default admin user if none exists
     admin_email = "admin@mwema.com"
@@ -127,7 +188,15 @@ with app.app_context():
         admin_user.set_password("admin123")  # Change this in production!
         db.session.add(admin_user)
         db.session.commit()
-        print(f"Created default admin user: {admin_email}")
+        print(f"✅ Created default admin user: {admin_email}")
+    else:
+        print(f"✅ Admin user already exists: {admin_email}")
 
+# Update the main block to use socketio.run
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    print("🚀 Starting MWEMA Estate server with SocketIO...")
+    print(f"📡 Server will run on: http://0.0.0.0:5000")
+    print(f"🌐 CORS allowed origins: {['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000', 'http://127.0.0.1:5173']}")
+    print("🔌 WebSocket endpoint: ws://localhost:5000/socket.io/")
+    print("-" * 50)
+    socketio.run(app, debug=True, host='0.0.0.0', port=5000)

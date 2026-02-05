@@ -1,4 +1,4 @@
-// admindashboard.jsx - COMPLETE SIMPLIFIED VERSION
+// admindashboard.jsx - COMPLETE UPDATED VERSION WITH REAL-TIME CHAT
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -20,11 +20,21 @@ import {
   FaMapMarkerAlt,
   FaUpload,
   FaImage,
-  FaCamera
+  FaCamera,
+  FaComments,
+  FaUser,
+  FaClock,
+  FaBell,
+  FaPaperPlane,
+  FaTimes,
+  FaCrown,
+  FaCheckDouble
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
+import ChatWindow from "../components/Chat/ChatWindow";
+import socketService from "../services/socketService";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -44,6 +54,11 @@ export default function AdminDashboard() {
   const [customers, setCustomers] = useState([]);
   const [messages, setMessages] = useState([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
+
+  // Chat States
+  const [selectedChat, setSelectedChat] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [socketConnected, setSocketConnected] = useState(false);
 
   // Modal States
   const [showAddProperty, setShowAddProperty] = useState(false);
@@ -107,7 +122,20 @@ export default function AdminDashboard() {
     fetchProperties();
     fetchBookings();
     fetchCustomers();
-  }, []);
+    
+    // Initialize socket connection
+    if (user?.role === 'admin') {
+      initializeSocket();
+    }
+
+    return () => {
+      // Cleanup socket on unmount
+      socketService.off('socket_connected');
+      socketService.off('socket_disconnected');
+      socketService.off('chat_notification');
+      socketService.off('new_message');
+    };
+  }, [user]);
 
   useEffect(() => {
     if (activeTab === "messages") {
@@ -120,6 +148,54 @@ export default function AdminDashboard() {
       cleanupBlobUrls();
     };
   }, [cleanupBlobUrls]);
+
+  const initializeSocket = () => {
+    if (!socketService.isConnected) {
+      socketService.connect();
+    }
+    
+    socketService.on('socket_connected', () => {
+      setSocketConnected(true);
+      console.log('✅ Socket connected as admin');
+      
+      // Authenticate as admin
+      if (user) {
+        socketService.authenticate(user.id, 'admin');
+      }
+    });
+    
+    socketService.on('socket_disconnected', () => {
+      setSocketConnected(false);
+      console.log('❌ Socket disconnected');
+    });
+    
+    socketService.on('chat_notification', (notification) => {
+      console.log('🔔 New chat notification:', notification);
+      
+      // Update unread count
+      setUnreadCount(prev => prev + 1);
+      
+      // Refresh messages list
+      if (activeTab === 'messages') {
+        fetchMessages();
+      }
+      
+      // Show browser notification
+      if (Notification.permission === 'granted') {
+        new Notification('New Chat Message', {
+          body: `${notification.user_name}: ${notification.message_preview}`,
+          icon: '/favicon.ico'
+        });
+      }
+    });
+    
+    socketService.on('new_message', (message) => {
+      // If viewing this chat, update messages
+      if (selectedChat?.id === message.chat_id) {
+        // The ChatWindow component handles its own messages
+      }
+    });
+  };
 
   const fetchStats = async () => {
     try {
@@ -171,8 +247,15 @@ export default function AdminDashboard() {
   const fetchMessages = async () => {
     setLoadingMessages(true);
     try {
-      const response = await api.chats.getUserChats();
-      setMessages(response.data || []);
+      // Get all chats (admin can see all)
+      const response = await api.chats.getAll();
+      const chats = response.data || [];
+      setMessages(chats);
+      
+      // Calculate total unread count
+      const totalUnread = chats.reduce((sum, chat) => sum + (chat.unread_count || 0), 0);
+      setUnreadCount(totalUnread);
+      
     } catch (error) {
       console.error("Error fetching messages:", error);
     } finally {
@@ -180,7 +263,16 @@ export default function AdminDashboard() {
     }
   };
 
+  const refreshMessages = () => {
+    fetchMessages();
+    // Also get active chats via socket
+    if (socketConnected) {
+      socketService.getActiveChats();
+    }
+  };
+
   const handleLogout = () => {
+    socketService.disconnect();
     logout();
     navigate("/login");
   };
@@ -466,8 +558,45 @@ export default function AdminDashboard() {
     { id: "properties", label: "Properties", icon: FaBuilding },
     { id: "bookings", label: "Bookings", icon: FaCalendarAlt },
     { id: "customers", label: "Clients", icon: FaUsers },
-    { id: "messages", label: "Chat", icon: FaEnvelope },
+    { id: "messages", label: "Chat", icon: FaEnvelope, badge: unreadCount > 0 ? unreadCount : null },
   ];
+
+  const handleSelectChat = async (chat) => {
+    setSelectedChat(chat);
+    
+    // Mark chat as read
+    try {
+      await api.chats.markRead(chat.id);
+      
+      // Update local state
+      setMessages(prev => prev.map(c => 
+        c.id === chat.id ? { ...c, unread_count: 0 } : c
+      ));
+      
+      // Update unread count
+      setUnreadCount(prev => Math.max(0, prev - (chat.unread_count || 0)));
+      
+    } catch (error) {
+      console.error('Error marking chat as read:', error);
+    }
+  };
+
+  const formatTime = (timestamp) => {
+    if (!timestamp) return '';
+    try {
+      const date = new Date(timestamp);
+      const now = new Date();
+      const diffMs = now - date;
+      const diffMins = Math.floor(diffMs / 60000);
+      
+      if (diffMins < 1) return 'Just now';
+      if (diffMins < 60) return `${diffMins}m ago`;
+      if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
+      return date.toLocaleDateString();
+    } catch (e) {
+      return '';
+    }
+  };
 
   if (loading) {
     return (
@@ -495,8 +624,13 @@ export default function AdminDashboard() {
           {navItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={`w-full flex items-center gap-4 px-6 py-4 transition-all duration-500 ease-out group ${
+              onClick={() => {
+                setActiveTab(item.id);
+                if (item.id !== 'messages') {
+                  setSelectedChat(null);
+                }
+              }}
+              className={`w-full flex items-center gap-4 px-6 py-4 transition-all duration-500 ease-out group relative ${
                 activeTab === item.id
                   ? "bg-white/5 text-white border-r-2 border-[#D4AF37]"
                   : "text-stone-400 hover:text-stone-100 hover:bg-white/[0.02]"
@@ -504,6 +638,12 @@ export default function AdminDashboard() {
             >
               <item.icon className={`text-lg transition-transform duration-500 ${activeTab === item.id ? "scale-110 text-[#D4AF37]" : "group-hover:text-stone-300"}`} />
               <span className={`font-serif tracking-wide ${activeTab === item.id ? "font-medium" : "font-light"}`}>{item.label}</span>
+              
+              {item.badge && (
+                <span className="absolute right-6 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {item.badge}
+                </span>
+              )}
             </button>
           ))}
         </nav>
@@ -514,6 +654,11 @@ export default function AdminDashboard() {
               {user?.name?.charAt(0) || 'A'}
             </div>
             <span className="text-sm text-stone-300">{user?.name || 'Admin'}</span>
+          </div>
+          
+          <div className="flex items-center gap-2 text-xs text-stone-500">
+            <div className={`w-2 h-2 rounded-full ${socketConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+            {socketConnected ? 'Live Chat Active' : 'Chat Offline'}
           </div>
           
           <button
@@ -792,47 +937,182 @@ export default function AdminDashboard() {
            </div>
         )}
 
-        {/* Concierge/Messages Tab */}
+        {/* Concierge/Messages Tab - UPDATED WITH REAL-TIME CHAT */}
         {activeTab === "messages" && (
-            <div>
-              <div className="flex justify-between items-center mb-8">
-                 <h2 className="text-2xl font-serif text-[#1C2321]">Concierge Desk</h2>
-                 <button onClick={fetchMessages} className="text-stone-500 hover:text-[#1C2321] flex items-center gap-2 text-sm uppercase tracking-widest">
-                    <FaSync /> Refresh
-                 </button>
+          <div className="space-y-8">
+            <div className="flex justify-between items-center mb-8">
+              <div>
+                <h2 className="text-2xl font-serif text-[#1C2321]">Concierge Desk</h2>
+                <p className="text-stone-500 font-serif italic">
+                  {socketConnected ? '🔵 Live client support' : '⚪️ Chat offline'}
+                </p>
               </div>
-
-              {loadingMessages ? (
-                 <div className="text-center py-20 font-serif italic text-stone-400">Retrieving correspondence...</div>
-              ) : messages.length === 0 ? (
-                 <div className="bg-white border border-stone-100 p-20 text-center">
-                    <FaEnvelope className="text-4xl text-stone-200 mx-auto mb-4" />
-                    <p className="font-serif text-stone-400 italic">No pending correspondence.</p>
-                 </div>
-              ) : (
-                <div className="bg-white border border-stone-100">
-                    {messages.map((chat) => (
-                        <div key={chat.id} className="p-6 border-b border-stone-100 hover:bg-[#F9F8F6] transition-colors flex justify-between items-center cursor-pointer group">
-                            <div className="flex items-center gap-4">
-                                <div className={`w-2 h-2 rounded-full ${chat.unread_count > 0 ? 'bg-[#D4AF37]' : 'bg-transparent'}`}></div>
-                                <div>
-                                    <p className="font-serif text-lg text-[#1C2321]">{chat.user_name || 'Guest'}</p>
-                                    <p className="text-sm text-stone-500 font-light truncate max-w-md">{chat.last_message}</p>
-                                </div>
-                            </div>
-                            <div className="text-right">
-                                <p className="text-xs uppercase tracking-widest text-stone-400 mb-1">
-                                    {chat.updated_at ? new Date(chat.updated_at).toLocaleDateString() : ''}
-                                </p>
-                                <span className="opacity-0 group-hover:opacity-100 text-xs font-serif italic text-[#1C2321] transition-opacity">
-                                    Open thread &rarr;
-                                </span>
-                            </div>
-                        </div>
-                    ))}
+              <div className="flex items-center gap-6">
+                <div className="relative group">
+                  <FaSearch className="absolute left-3 top-3 text-stone-400" />
+                  <input 
+                    type="text" 
+                    placeholder="Search conversations..." 
+                    className="pl-10 pr-4 py-2 bg-transparent border-b border-stone-300 focus:border-[#1C2321] outline-none w-64 transition-all placeholder-stone-400 text-stone-800"
+                  />
                 </div>
-              )}
+                <button 
+                  onClick={refreshMessages} 
+                  className="text-stone-500 hover:text-[#1C2321] flex items-center gap-2 text-sm uppercase tracking-widest"
+                >
+                  <FaSync /> Refresh
+                </button>
+              </div>
             </div>
+
+            {/* Two-column layout: Chat List | Chat Window */}
+            {selectedChat ? (
+              <div className="grid grid-cols-3 gap-8">
+                {/* Chat List Sidebar */}
+                <div className="col-span-1">
+                  <div className="bg-white border border-stone-100 rounded-lg overflow-hidden">
+                    <div className="p-4 bg-[#1C2321] text-white">
+                      <button 
+                        onClick={() => setSelectedChat(null)}
+                        className="flex items-center gap-2 text-sm hover:text-stone-300"
+                      >
+                        ← Back to conversations
+                      </button>
+                    </div>
+                    <div className="p-4">
+                      <h4 className="font-serif text-lg text-[#1C2321] mb-2">Active Conversations</h4>
+                      <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                        {messages.slice(0, 5).map((chat) => (
+                          <div
+                            key={chat.id}
+                            onClick={() => handleSelectChat(chat)}
+                            className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                              selectedChat?.id === chat.id
+                                ? 'bg-stone-100 border border-stone-200'
+                                : 'hover:bg-stone-50'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`w-2 h-2 rounded-full ${
+                                chat.unread_count > 0 ? 'bg-[#D4AF37]' : 'bg-stone-300'
+                              }`}></div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-stone-800 truncate">{chat.user_name || 'Guest'}</p>
+                                <p className="text-xs text-stone-500 truncate">{chat.last_message}</p>
+                                <p className="text-[10px] text-stone-400 mt-1">
+                                  {formatTime(chat.last_message_time)}
+                                </p>
+                              </div>
+                              {chat.unread_count > 0 && (
+                                <span className="text-xs bg-[#D4AF37] text-white rounded-full px-2 py-1">
+                                  {chat.unread_count}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Main Chat Window */}
+                <div className="col-span-2">
+                  <ChatWindow
+                    chatId={selectedChat.id}
+                    currentUser={user}
+                    onClose={() => setSelectedChat(null)}
+                    propertyName={selectedChat.property_name}
+                  />
+                </div>
+              </div>
+            ) : (
+              /* Full-width chat list when no chat selected */
+              loadingMessages ? (
+                <div className="bg-white border border-stone-100 p-20 text-center">
+                  <div className="w-8 h-8 border-2 border-stone-200 border-t-stone-600 rounded-full animate-spin mx-auto mb-4"></div>
+                  <p className="font-serif text-stone-400 italic">Retrieving conversations...</p>
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="bg-white border border-stone-100 p-20 text-center">
+                  <FaComments className="text-4xl text-stone-200 mx-auto mb-4" />
+                  <h3 className="font-serif text-stone-400 text-lg mb-2">No Active Conversations</h3>
+                  <p className="text-stone-400 max-w-md mx-auto">
+                    Client inquiries will appear here in real-time. When a client starts a chat, you'll receive a notification.
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-white border border-stone-100 rounded-lg overflow-hidden">
+                  {/* Header */}
+                  <div className="bg-[#1C2321] text-white p-6 border-b border-stone-700">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-3">
+                        <FaComments className="text-[#D4AF37] text-xl" />
+                        <div>
+                          <h3 className="font-serif text-xl">Active Conversations</h3>
+                          <p className="text-stone-400 text-xs uppercase tracking-widest">
+                            {messages.length} conversation{messages.length !== 1 ? 's' : ''} • {unreadCount} unread
+                          </p>
+                        </div>
+                      </div>
+                      {unreadCount > 0 && (
+                        <div className="relative">
+                          <FaBell className="text-[#D4AF37] text-lg" />
+                          <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                            {unreadCount}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Chat List */}
+                  <div className="divide-y divide-stone-100">
+                    {messages.map((chat) => (
+                      <div
+                        key={chat.id}
+                        onClick={() => handleSelectChat(chat)}
+                        className="p-6 hover:bg-[#F9F8F6] cursor-pointer transition-colors group"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <div className="relative">
+                              <div className="w-12 h-12 rounded-full bg-stone-800 text-white flex items-center justify-center">
+                                <FaUser className="text-lg" />
+                              </div>
+                              {chat.unread_count > 0 && (
+                                <div className="absolute -top-1 -right-1 w-5 h-5 bg-[#D4AF37] rounded-full flex items-center justify-center">
+                                  <span className="text-xs text-white font-bold">{chat.unread_count}</span>
+                                </div>
+                              )}
+                            </div>
+                            <div>
+                              <h4 className="font-serif text-lg text-[#1C2321] group-hover:text-stone-800">
+                                {chat.user_name || `Client ${chat.user_id}`}
+                              </h4>
+                              <p className="text-sm text-stone-500 truncate max-w-md">
+                                {chat.last_message || 'No messages yet'}
+                              </p>
+                              <div className="flex items-center gap-3 mt-1">
+                                <span className="flex items-center gap-1 text-[10px] text-stone-400">
+                                  <FaClock className="text-xs" /> {formatTime(chat.last_message_time)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                            <span className="text-xs font-serif italic text-stone-400">
+                              Open &rarr;
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            )}
+          </div>
         )}
 
       </main>

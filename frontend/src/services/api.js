@@ -359,7 +359,7 @@ export const paymentsAPI = {
   },
 };
 
-// ==================== CHATS/MESSAGES API ====================
+// ==================== CHATS/MESSAGES API - FIXED ====================
 export const chatsAPI = {
   getUserChats: async (userId) => {
     const response = await api.get(`/chats/user/${userId}`);
@@ -382,16 +382,23 @@ export const chatsAPI = {
     return response;
   },
 
-  startChat: async (userId, hostId, propertyId = null) => {
+  // FIXED: Simplified startChat - only needs userId and propertyId
+  startChat: async (userId, hostId = null, propertyId = null) => {
     const response = await api.post('/chats', {
       user_id: userId,
-      host_id: hostId,
       property_id: propertyId,
+      // host_id is optional and not used by backend
     });
     return response;
   },
 
   markAsRead: async (chatId) => {
+    const response = await api.put(`/chats/${chatId}/read`);
+    return response;
+  },
+
+  // FIXED: Changed endpoint name to match backend
+  markRead: async (chatId) => {
     const response = await api.put(`/chats/${chatId}/read`);
     return response;
   },
@@ -402,10 +409,11 @@ export const chatsAPI = {
   },
 
   getAll: async (params = {}) => {
-    const response = await api.get('/admin/chats', { params });
+    const response = await api.get('/chats', { params });
     return response;
   },
 };
+
 
 // ==================== LEADS API ====================
 export const leadsAPI = {
@@ -710,6 +718,31 @@ export const getBookingPayments = async (bookingId) => {
   return await paymentsAPI.getBookingPayments(bookingId);
 };
 
+export const socketAPI = {
+  // These methods use the socketService directly
+  connect: () => socketService.connect(),
+  disconnect: () => socketService.disconnect(),
+  authenticate: (userId, userType) => socketService.authenticate(userId, userType),
+  createChat: (userId, propertyId, initialMessage) => 
+    socketService.createChat(userId, propertyId, initialMessage),
+  joinChat: (chatId) => socketService.joinChat(chatId),
+  sendMessage: (chatId, content, senderName) => 
+    socketService.sendMessage(chatId, content, senderName),
+  typing: (chatId, isTyping) => socketService.typing(chatId, isTyping),
+  markMessagesRead: (chatId) => socketService.markMessagesRead(chatId),
+  getActiveChats: () => socketService.getActiveChats(),
+  leaveChat: (chatId) => socketService.leaveChat(chatId),
+  ping: () => socketService.ping(),
+  
+  // Event subscription
+  on: (event, callback) => socketService.on(event, callback),
+  off: (event, callback) => socketService.off(event, callback),
+  
+  // Status
+  getStatus: () => socketService.getConnectionStatus(),
+  isConnected: () => socketService.isConnected,
+};
+
 // Export everything
 export default {
   // API categories
@@ -727,6 +760,7 @@ export default {
   settings: settingsAPI,
   misc: miscAPI,
   upload: uploadAPI,
+  socket: socketAPI,
   
   // Helper functions
   isAuthenticated,
