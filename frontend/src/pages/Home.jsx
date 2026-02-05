@@ -181,6 +181,10 @@ export default function Home() {
     { id: 3, question: "Amenities Included", answer: "All stays include high-speed WiFi, premium linens, toiletries, and fully equipped kitchens." }
   ];
 
+    // Helper: prepend backend URL to image paths
+    const API_BASE_URL = 'http://localhost:5000'; // Ensure this matches your backend
+    const getImageSrc = (url) => url && !url.startsWith('http') ? `${API_BASE_URL}${url}` : url;
+
   // Lifecycle & Handlers
   useEffect(() => {
     function handleClickOutside(e) {
@@ -472,20 +476,20 @@ export default function Home() {
                 <Link 
                   to={`/booking/${property.id}`} 
                   key={property.id || idx} 
-                  className="group block relative overflow-hidden rounded-sm transition-all duration-300 hover:shadow-2xl hover:-translate-y-1"
+                  className="block relative overflow-hidden rounded-sm transition-all duration-300"
                 >
                   {/* Property Image with improved hover effects */}
                   <div className="relative aspect-[3/4] overflow-hidden bg-stone-100 mb-4">
                     <motion.img
                       whileHover={{ scale: 1.05 }}
                       transition={{ duration: 0.7, ease: "easeOut" }}
-                      src={property.images?.[0]}
+                      src={getImageSrc(property.cover_image || property.images?.[0])}
                       alt={property.name}
-                      className="w-full h-full object-cover grayscale-[20%] group-hover:grayscale-0 transition-all duration-500"
+                      className="w-full h-full object-cover"
                     />
                     
                     {/* Overlay on hover */}
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-all duration-500 flex items-center justify-center">
+                    <div className="absolute inset-0 bg-black/0 flex items-center justify-center">
                       <motion.div
                         initial={{ opacity: 0, y: 10 }}
                         whileHover={{ opacity: 1, y: 0 }}

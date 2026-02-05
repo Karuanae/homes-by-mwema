@@ -57,18 +57,20 @@ export default function BookingPage() {
           },
           host: propertyData.host || {
             name: 'Mwema Concierge',
-            avatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=400'
+            avatar: '/Icon.jpg'
           },
-          amenities: propertyData.amenities || [
-            { name: 'High-speed WiFi' },
-            { name: 'Premium Linens' },
-            { name: 'Fully Equipped Kitchen' },
-            { name: 'Smart TV' },
-            { name: 'Air Conditioning' },
-            { name: 'Private Balcony' },
-            { name: 'Coffee Maker' },
-            { name: 'Hair Dryer' }
-          ],
+          amenities: Array.isArray(propertyData.amenities)
+            ? propertyData.amenities.map(a => typeof a === 'string' ? { name: a } : a)
+            : [
+                { name: 'High-speed WiFi' },
+                { name: 'Premium Linens' },
+                { name: 'Fully Equipped Kitchen' },
+                { name: 'Smart TV' },
+                { name: 'Air Conditioning' },
+                { name: 'Private Balcony' },
+                { name: 'Coffee Maker' },
+                { name: 'Hair Dryer' }
+              ],
           images: propertyData.images || [
             'https://images.unsplash.com/photo-1613490493576-7fde63acd811?w=1200',
             'https://images.unsplash.com/photo-1615529182904-14819c35db37?w-800',
@@ -186,9 +188,16 @@ export default function BookingPage() {
     </div>
   );
 
+  // Helper: prepend backend URL to image paths
+  const API_BASE_URL = 'http://localhost:5000'; // Ensure this matches your backend
+  const getImageSrc = (url) => url && !url.startsWith('http') ? `${API_BASE_URL}${url}` : url;
+
   // Determine which images to show
   const imagesToShow = viewAllImages ? property.images : property.images.slice(0, 5);
   const hasMoreImages = property.images.length > 5;
+
+  // When rendering images, use getImageSrc(imageUrl)
+  // Example: <img src={getImageSrc(imageUrl)} ... />
 
   return (
     <div className="bg-[#f5f2ee] font-sans text-stone-900 selection:bg-stone-200 selection:text-black">
@@ -222,7 +231,7 @@ export default function BookingPage() {
             <div className="flex-1 flex items-center justify-center relative bg-black">
               <motion.img
                 key={selectedImage}
-                src={property.images[selectedImage]}
+                src={getImageSrc(property.images[selectedImage])}
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
@@ -260,7 +269,7 @@ export default function BookingPage() {
                     className={`flex-shrink-0 w-16 h-16 rounded overflow-hidden border-2 transition-all ${selectedImage === index ? 'border-white' : 'border-transparent hover:border-white/50'}`}
                   >
                     <img 
-                      src={img} 
+                      src={getImageSrc(img)} 
                       alt={`Thumbnail ${index + 1}`}
                       className="w-full h-full object-cover"
                       onError={(e) => handleImageError(e, index)}
@@ -311,7 +320,7 @@ export default function BookingPage() {
               onClick={() => setIsFullscreen(true)}
             >
               <motion.img
-                src={property.images[0]}
+                src={getImageSrc(property.images[0])}
                 alt="Main view"
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                 onError={(e) => handleImageError(e, 0)}
@@ -330,7 +339,7 @@ export default function BookingPage() {
                 }}
               >
                 <img 
-                  src={img} 
+                  src={getImageSrc(img)} 
                   alt={`View ${index + 1}`}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                   onError={(e) => handleImageError(e, index + 1)}
@@ -389,7 +398,7 @@ export default function BookingPage() {
                   }}
                 >
                   <img 
-                    src={img} 
+                    src={getImageSrc(img)} 
                     alt={`Additional ${index + 1}`}
                     className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                     onError={(e) => handleImageError(e, index + 5)}
@@ -403,10 +412,10 @@ export default function BookingPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-16 relative">
           
           {/* ================= LEFT COLUMN ================= */}
-          <div className="lg:col-span-2 space-y-12">
+          <div className="lg:col-span-2 space-y-6">
             
             {/* Host Info */}
-            <div className="flex justify-between items-start border-b border-stone-200 pb-12">
+            <div className="flex justify-between items-start border-b border-stone-200 pb-4">
               <div>
                 <h3 className="text-2xl font-serif text-stone-900 mb-2">
                   Hosted by {property.host.name}
@@ -428,7 +437,7 @@ export default function BookingPage() {
             </div>
 
             {/* Description */}
-            <div className="border-b border-stone-200 pb-12">
+            <div className="border-b border-stone-200 pb-4">
               <h3 className="text-2xl font-serif text-stone-900 mb-6">
                 About this residence
               </h3>
@@ -438,7 +447,7 @@ export default function BookingPage() {
             </div>
 
             {/* Amenities */}
-            <div className="border-b border-stone-200 pb-12">
+            <div className="border-b border-stone-200 pb-4">
               <h3 className="text-2xl font-serif text-stone-900 mb-8">
                 Amenities & Features
               </h3>
@@ -448,7 +457,7 @@ export default function BookingPage() {
                     <div className="w-5 h-5 rounded-full bg-stone-900/5 flex items-center justify-center group-hover:bg-stone-900 transition-colors">
                       <Check className="w-3 h-3 text-stone-900 opacity-60 group-hover:text-white group-hover:opacity-100" />
                     </div>
-                    <span className="text-stone-700 font-light group-hover:text-stone-900 transition-colors">
+                    <span className="text-black font-semibold group-hover:text-black transition-colors">
                       {amenity.name}
                     </span>
                   </div>

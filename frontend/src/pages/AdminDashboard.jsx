@@ -72,22 +72,22 @@ export default function AdminDashboard() {
 
   // Predefined amenities with icons
   const predefinedAmenities = [
-    { label: 'WiFi', value: 'wifi', icon: '📶' },
-    { label: 'Pool', value: 'pool', icon: '🏊' },
-    { label: 'Parking', value: 'parking', icon: '🅿️' },
-    { label: 'AC', value: 'ac', icon: '❄️' },
-    { label: 'Kitchen', value: 'kitchen', icon: '👨‍🍳' },
-    { label: 'TV', value: 'tv', icon: '📺' },
-    { label: 'Gym', value: 'gym', icon: '💪' },
-    { label: 'Spa', value: 'spa', icon: '🧖' },
-    { label: 'Concierge', value: 'concierge', icon: '🎩' },
-    { label: 'Security', value: 'security', icon: '👮' },
-    { label: 'Laundry', value: 'laundry', icon: '👕' },
-    { label: 'Breakfast', value: 'breakfast', icon: '🍳' },
-    { label: 'Elevator', value: 'elevator', icon: '⬆️' },
-    { label: 'Fireplace', value: 'fireplace', icon: '🔥' },
-    { label: 'BBQ Grill', value: 'bbq', icon: '🍖' },
-    { label: 'Balcony', value: 'balcony', icon: '🌇' },
+    { label: 'WiFi', value: 'wifi' },
+    { label: 'Pool', value: 'pool' },
+    { label: 'Parking', value: 'parking' },
+    { label: 'AC', value: 'ac' },
+    { label: 'Kitchen', value: 'kitchen' },
+    { label: 'TV', value: 'tv' },
+    { label: 'Gym', value: 'gym' },
+    { label: 'Spa', value: 'spa' },
+    { label: 'Concierge', value: 'concierge' },
+    { label: 'Security', value: 'security' },
+    { label: 'Laundry', value: 'laundry' },
+    { label: 'Breakfast', value: 'breakfast' },
+    { label: 'Elevator', value: 'elevator' },
+    { label: 'Fireplace', value: 'fireplace' },
+    { label: 'BBQ Grill', value: 'bbq' },
+    { label: 'Balcony', value: 'balcony' },
   ];
 
   // Clean up blob URLs when component unmounts or modal closes
@@ -445,23 +445,28 @@ export default function AdminDashboard() {
   };
 
   // Helper function to get image URL for display
+  const API_BASE_URL = 'http://localhost:5000'; // Ensure this matches your backend
   const getImageUrl = (property) => {
+    // Prefer backend image URLs
     if (property.cover_image) {
-      return property.cover_image;
+      return property.cover_image.startsWith('http')
+        ? property.cover_image
+        : `${API_BASE_URL}${property.cover_image}`;
     }
     if (property.images && property.images.length > 0) {
-      return property.images[0];
+      const imgUrl = property.images[0];
+      return imgUrl.startsWith('http') ? imgUrl : `${API_BASE_URL}${imgUrl}`;
     }
-    // Data URL placeholder
-    return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iI2Y1ZjVmNSIvPjx0ZXh0IHg9IjIwMCIgeT0iMTUwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiNjY2MiPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==';
+    // Fallback to local default image
+    return '/default-property.jpg';
   };
 
   const navItems = [
-    { id: "dashboard", label: "Overview", icon: FaHome },
+    { id: "dashboard", label: "Dashboard", icon: FaHome },
     { id: "properties", label: "Properties", icon: FaBuilding },
-    { id: "bookings", label: "Reservations", icon: FaCalendarAlt },
-    { id: "customers", label: "Clientele", icon: FaUsers },
-    { id: "messages", label: "Concierge", icon: FaEnvelope },
+    { id: "bookings", label: "Bookings", icon: FaCalendarAlt },
+    { id: "customers", label: "Clients", icon: FaUsers },
+    { id: "messages", label: "Chat", icon: FaEnvelope },
   ];
 
   if (loading) {
@@ -960,7 +965,6 @@ export default function AdminDashboard() {
                                 : 'bg-white text-stone-600 border-stone-300 hover:border-[#1C2321]'
                             }`}
                           >
-                            <span className="text-sm">{amenity.icon}</span>
                             <span className="text-xs font-medium">{amenity.label}</span>
                           </label>
                         </div>
@@ -1052,9 +1056,15 @@ export default function AdminDashboard() {
                       {/* Preview */}
                       {newProperty.coverPreview && (
                         <div className="relative w-full max-w-md aspect-[16/10] border border-stone-200 rounded-lg overflow-hidden">
-                          <img 
-                            src={newProperty.coverPreview} 
-                            alt="Cover" 
+                          <img
+                            src={
+                              newProperty.coverPreview.startsWith('blob:')
+                                ? newProperty.coverPreview
+                                : newProperty.coverPreview.startsWith('http')
+                                  ? newProperty.coverPreview
+                                  : `${API_BASE_URL}${newProperty.coverPreview}`
+                            }
+                            alt="Cover"
                             className="w-full h-full object-cover"
                           />
                           <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-4">
@@ -1118,7 +1128,13 @@ export default function AdminDashboard() {
                           {newProperty.galleryPreviews.map((url, idx) => (
                             <div key={idx} className="relative aspect-square rounded-lg overflow-hidden group">
                               <img
-                                src={url}
+                                src={
+                                  url.startsWith('blob:')
+                                    ? url
+                                    : url.startsWith('http')
+                                      ? url
+                                      : `${API_BASE_URL}${url}`
+                                }
                                 alt={`Gallery ${idx + 1}`}
                                 className="w-full h-full object-cover"
                               />

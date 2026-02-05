@@ -97,8 +97,8 @@ class PropertyImage(db.Model):
             'filename': self.filename,
             'mime_type': self.mime_type,
             'is_cover': self.is_cover,
-            'url': f"/api/admin/property-image/{self.id}",
-            'created_at': self.created_at.isoformat() if self.created_at else None
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'url': f"/api/admin/property-image/{self.id}"
         }
 
 class Booking(db.Model):

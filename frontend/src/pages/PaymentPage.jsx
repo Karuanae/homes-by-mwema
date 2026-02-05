@@ -1,3 +1,6 @@
+// Helper: prepend backend URL to image paths (same as Home.jsx)
+const API_BASE_URL = 'http://localhost:5000';
+const getImageSrc = (url) => url && !url.startsWith('http') ? `${API_BASE_URL}${url}` : url;
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -180,25 +183,31 @@ export default function PaymentPage() {
         const propertyResponse = await api.properties.getById(id);
         setProperty(propertyResponse.data);
 
-        // Logic for booking details (same as before)
+        // Always prefer navigation state, then localStorage, then fallback
         if (passedDetails) {
           setBookingDetails(passedDetails);
         } else {
-          // Demo fallback
-          const today = new Date();
-          const checkIn = new Date(today.setDate(today.getDate() + 2));
-          const checkOut = new Date(today.setDate(today.getDate() + 3));
-          setBookingDetails({
-            checkIn: checkIn.toISOString().split('T')[0],
-            checkOut: checkOut.toISOString().split('T')[0],
-            guests: { adults: 2, children: 0 },
-            nights: 3,
-            baseAmount: 15000,
-            cleaningFee: 1500,
-            serviceFee: 2000,
-            taxes: 0,
-            total: 18500
-          });
+          const pending = localStorage.getItem('pendingBooking');
+          if (pending) {
+            setBookingDetails(JSON.parse(pending));
+            localStorage.removeItem('pendingBooking');
+          } else {
+            // Demo fallback
+            const today = new Date();
+            const checkIn = new Date(today.setDate(today.getDate() + 2));
+            const checkOut = new Date(today.setDate(today.getDate() + 3));
+            setBookingDetails({
+              checkIn: checkIn.toISOString().split('T')[0],
+              checkOut: checkOut.toISOString().split('T')[0],
+              guests: { adults: 2, children: 0 },
+              nights: 3,
+              baseAmount: 15000,
+              cleaningFee: 1500,
+              serviceFee: 2000,
+              taxes: 0,
+              total: 18500
+            });
+          }
         }
       } catch (error) {
         console.error('Error:', error);
@@ -679,9 +688,9 @@ export default function PaymentPage() {
               
               {/* Image with No Gradient - Just Pure Image */}
               <div className="h-64 overflow-hidden relative border-b border-stone-100">
-                 <img 
-                  src={property?.images?.[0] || "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800"} 
-                  alt="Property" 
+                 <img
+                  src={getImageSrc(property?.cover_image || property?.images?.[0] || "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800")}
+                  alt="Property"
                   className="w-full h-full object-cover opacity-90 hover:scale-105 transition-transform duration-1000"
                 />
               </div>

@@ -627,12 +627,16 @@ def admin_delete_property(property_id):
     
     # Delete associated images from database
     PropertyImage.query.filter_by(property_id=property_id).delete()
-    
+
+    # Delete associated bookings (to avoid NOT NULL constraint error)
+    from models import Booking
+    Booking.query.filter_by(property_id=property_id).delete()
+
     # Delete property
     db.session.delete(property)
     db.session.commit()
-    
-    return jsonify({'message': 'Property deleted successfully'})
+
+    return jsonify({'message': 'Property and related bookings deleted successfully'})
 
 # ========== STATISTICS ==========
 @admin_bp.route('/stats', methods=['GET'])
