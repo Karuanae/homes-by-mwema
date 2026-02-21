@@ -414,7 +414,7 @@ export default function BookingPage() {
           {/* ================= LEFT COLUMN ================= */}
           <div className="lg:col-span-2 space-y-6">
             
-            {/* Host Info */}
+            {/* Host Info (no avatar) */}
             <div className="flex justify-between items-start border-b border-stone-200 pb-4">
               <div>
                 <h3 className="text-2xl font-serif text-stone-900 mb-2">
@@ -424,15 +424,6 @@ export default function BookingPage() {
                   <span className="w-2 h-2 bg-green-500 rounded-full"></span>
                   Superhost • Response rate: 100% • 3+ years hosting
                 </p>
-              </div>
-              <div className="relative group">
-                <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-white shadow-lg">
-                  <img 
-                    src={property.host.avatar} 
-                    alt={property.host.name}
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                  />
-                </div>
               </div>
             </div>
 

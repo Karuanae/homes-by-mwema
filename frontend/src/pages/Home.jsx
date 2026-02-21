@@ -1,4 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
+import { FaSearch } from "react-icons/fa";
 import { useState, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
 import api from "../services/api";
@@ -107,6 +108,22 @@ const SocialProof = () => (
 );
 
 export default function Home() {
+      // Helper to check if a date string is between two other date strings (format: 'Mon DD')
+      function isBetween(date, start, end) {
+        if (!start || !end) return false;
+        const parse = d => {
+          const [mon, day] = d.split(' ');
+          return new Date(`${mon} ${day}, ${year}`);
+        };
+        const d = parse(date);
+        const s = parse(start);
+        const e = parse(end);
+        return (d > s && d < e) || (d > e && d < s);
+      }
+    // Helper to format date as 'Mon DD'
+    function formatDate(monthIdx, day) {
+      return `${months[monthIdx]} ${day}`;
+    }
   /* ================= DATE & LOGIC STATE ================= */
   const year = new Date().getFullYear();
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -248,186 +265,264 @@ export default function Home() {
       `}</style>
       <div className="bg-noise" />
 
-      {/* ================= HERO SECTION (UPDATED) ================= */}
-      <div className="relative min-h-[110vh] w-full flex flex-col pt-32 pb-12 px-6 lg:px-16 overflow-hidden">
+      {/* ================= HERO SECTION WITH BACKGROUND IMAGE ================= */}
+        <div className="h-screen bg-fixed bg-cover bg-center relative" style={{ backgroundImage: "url('/Capital2.jpeg')" }}>
+          {/* Logo at top left */}
         
-        {/* ANIMATED BACKGROUND BLOBS (LAVA LAMP EFFECT) */}
-        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-orange-200/20 rounded-full blur-[120px] animate-pulse" />
-        <div className="absolute bottom-[10%] right-[-5%] w-[40%] h-[60%] bg-stone-300/30 rounded-full blur-[100px]" />
-
-        <div className="max-w-[1400px] mx-auto w-full grid grid-cols-1 lg:grid-cols-2 gap-12 items-center relative z-10">
+        {/* JUNGLE GREEN OVERLAY */}
+        <div className="h-full bg-teal-900/40 bg-gradient-to-b from-teal-950/80 via-teal-900/50 to-transparent relative overflow-hidden">
           
-          {/* Left: Typography & Search */}
-          <div className="flex flex-col justify-center order-2 lg:order-1 relative">
-            
-            {/* Rotating Decorative Badge */}
-            <RotatingBadge />
+          <section className="h-full flex items-center justify-center px-4 md:px-6 relative z-10">
+            {/* Centered content */}
+            <div className="max-w-6xl w-full flex flex-col items-center justify-center">
+              <motion.div 
+                className="text-center relative"
+                initial="hidden"
+                animate="visible"
+                variants={{
+                  hidden: { opacity: 0 },
+                  visible: {
+                    opacity: 1,
+                    transition: {
+                      staggerChildren: 0.15,
+                      delayChildren: 0.3,
+                    }
+                  }
+                }}
+              >
 
-            <motion.div
-              initial={{ opacity: 0, x: -30 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 1, ease: "easeOut" }}
-            >
-              {/* Tagline Pill */}
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-stone-300 bg-white/50 backdrop-blur-sm mb-6 w-fit">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                </span>
-                <span className="text-[10px] font-bold tracking-widest uppercase text-stone-600">Now hosting in Nairobi</span>
-              </div>
+                {/* HEADER */}
+                <div className="relative mb-6">
+                  <motion.h1 
+                    // Removed variants={glowVariants} to fix ReferenceError
+                    className="text-3xl md:text-4xl lg:text-5xl font-light tracking-tight"
+                    style={{ fontFamily: "'Playfair Display', serif" }}
+                  >
+                    <motion.span
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.7 }}
+                      className="text-white block leading-[1.1]"
+                    >
+                      Refined
+                    </motion.span>
+                    
+                    <motion.span
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.2, duration: 0.8 }}
+                      className="relative mt-2 md:mt-3 block"
+                    >
+                      <span className="absolute inset-0 text-transparent bg-clip-text bg-gradient-to-r from-[#ED9B40]  animate-gradient-x">
+                        Living Awaits
+                      </span>
+                      <span className="text-transparent bg-clip-text bg-gradient-to-b from-white via-white to-white/90">
+                        Living Awaits
+                      </span>
+                    </motion.span>
+                  </motion.h1>
 
-              <h1 className="text-6xl sm:text-7xl md:text-8xl text-stone-900 mb-6 leading-[0.9]" style={{ fontFamily: "'Playfair Display', serif" }}>
-                Homes <span className="font-light italic text-stone-400">by</span> <br/>
-                Mwema.
-              </h1>
-              
-              <p className="text-lg text-stone-600 max-w-md leading-relaxed font-light mb-2">
-                Curated sanctuaries for the modern traveler. Experience Kenya with unmatched privacy and style.
-              </p>
+                  {/* REDUCED GLOW EFFECT */}
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 0.4, scale: 1 }}
+                    transition={{ delay: 1, duration: 1 }}
+                    className="absolute -top-8 -left-8 -right-8 -bottom-8 bg-gradient-to-r from-teal-500/6 via-transparent to-cyan-400/6 blur-xl pointer-events-none"
+                  />
+                </div>
 
-              {/* Social Proof Section */}
-              <SocialProof />
-
-            </motion.div>
-
-            {/* GLASSMORPHISM SEARCH BAR */}
-            <motion.div 
-              initial={{ opacity: 0, y: 40 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3, duration: 0.8 }}
-              className="bg-white/80 backdrop-blur-lg rounded-xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] border border-white/50 p-2 max-w-xl relative z-20"
-            >
-              <div className="flex flex-col sm:flex-row divide-y sm:divide-y-0 sm:divide-x divide-stone-200/50">
-                {/* Dates */}
-                <div 
-                  className="flex-1 p-4 hover:bg-white/50 transition-colors cursor-pointer rounded-lg relative"
-                  onClick={() => setShowCalendar(!showCalendar)}
+                {/* SEARCH BAR POSITIONED NEAR BOTTOM */}
+                <motion.div 
+                  // Removed variants={searchBarVariants} to fix ReferenceError
+                  className="relative max-w-2xl mx-auto mt-8"
                 >
-                  <label className="block text-[9px] uppercase tracking-widest text-stone-500 font-bold mb-1">Check In - Out</label>
-                  <div className="text-stone-900 font-serif text-lg leading-none truncate">{formatDateDisplay()}</div>
-                  
-                  {/* Calendar Dropdown */}
-                  <AnimatePresence>
-                    {showCalendar && (
-                      <motion.div 
-                        ref={calendarRef}
-                        initial={{ opacity: 0, y: 10, scale: 0.95 }} 
-                        animate={{ opacity: 1, y: 0, scale: 1 }} 
-                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                        className="absolute top-full left-0 mt-4 bg-white p-4 shadow-2xl rounded-xl border border-stone-100 w-72 z-[9999]"
-                      >
-                         <div className="flex justify-between items-center mb-4">
-                            <button onClick={(e) => {e.stopPropagation(); setCurrentMonth(m => Math.max(0, m - 1))}} className="text-stone-400 hover:text-black">←</button>
-                            <span className="font-serif italic">{months[currentMonth]} {year}</span>
-                            <button onClick={(e) => {e.stopPropagation(); setCurrentMonth(m => Math.min(11, m + 1))}} className="text-stone-400 hover:text-black">→</button>
+                  <div className="flex items-center bg-white/15 backdrop-blur-lg rounded-2xl border border-teal-400/25 shadow-xl px-8 py-2 gap-8 hover:border-teal-300/40 transition-all duration-300">
+
+                    {/* WHEN */}
+                    <motion.div
+                      whileHover={{ scale: 1.01 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => setShowCalendar(true)}
+                      className="flex-1 px-6 py-2.5 cursor-pointer hover:bg-teal-500/8 rounded-xl relative group min-w-0"
+                    >
+                      <p className="text-[10px] uppercase tracking-widest text-[#ED9B40]/60 font-medium mb-0.5">Dates</p>
+                      <p className="text-sm text-white font-light truncate">
+                        {startDate && endDate ? `${startDate} → ${endDate}` : "Select dates"}
+                      </p>
+
+                      {showCalendar && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                          ref={calendarRef}
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute top-16 left-0 bg-gradient-to-br from-[#ED9B40]/95 to-[#ED9B40]/90 backdrop-blur-xl rounded-xl shadow-xl z-50 p-4 w-[300px] border border-[#ED9B40]/20"
+                        >
+                          {/* HEADER */}
+                          <div className="flex justify-between items-center mb-4">
+                            <button onClick={() => setCurrentMonth(m => Math.max(0, m - 1))} 
+                                    className="text-teal-300 hover:text-white transition-colors p-1.5 hover:bg-teal-500/20 rounded">
+                              ←
+                            </button>
+                            <h4 className="font-light text-white text-sm" style={{ fontFamily: "'Playfair Display', serif" }}>
+                              {months[currentMonth]} {year}
+                            </h4>
+                            <button onClick={() => setCurrentMonth(m => Math.min(11, m + 1))} 
+                                    className="text-teal-300 hover:text-white transition-colors p-1.5 hover:bg-teal-500/20 rounded">
+                              →
+                            </button>
                           </div>
-                          <div className="grid grid-cols-7 gap-1 text-center text-[10px] text-stone-400 mb-2">
-                            {["S","M","T","W","T","F","S"].map(d => <div key={d}>{d}</div>)}
+
+                          {/* WEEKDAYS */}
+                          <div className="grid grid-cols-7 text-[10px] text-teal-300/60 text-center mb-2">
+                            {["S","M","T","W","T","F","S"].map(d => (
+                              <div key={d} className="font-medium">{d}</div>
+                            ))}
                           </div>
-                          <div className="grid grid-cols-7 gap-1">
-                            {Array.from({ length: getStartDay(currentMonth, year) }, (_, i) => <div key={`e-${i}`} />)}
-                            {Array.from({ length: getDaysInMonth(currentMonth, year) }, (_, i) => {
-                              const d = i + 1;
-                              const dateStr = `${months[currentMonth]} ${d}`;
-                              const isSel = dateStr === startDate || dateStr === endDate;
+
+                          {/* DAYS */}
+                          <div className="grid grid-cols-7 gap-0.5 text-center">
+                            {Array(getStartDay(currentMonth, year)).fill(null).map((_, i) => <div key={i} />)}
+
+                            {Array.from({ length: getDaysInMonth(currentMonth, year) }, (_, day) => {
+                              const date = formatDate(currentMonth, day + 1);
+                              const isStart = date === startDate;
+                              const isEnd = date === endDate;
+                              const inRange = isBetween(date, startDate, endDate);
+
                               return (
-                                <button key={i} onClick={(e) => {e.stopPropagation(); handleDateSelect(d);}}
-                                  className={`h-8 w-8 text-xs rounded-full flex items-center justify-center transition-all ${isSel ? 'bg-stone-900 text-white' : 'hover:bg-stone-100'}`}>
-                                  {d}
-                                </button>
+                                <motion.button
+                                  whileHover={{ scale: 1.05 }}
+                                  whileTap={{ scale: 0.9 }}
+                                  key={day}
+                                  onClick={() => {
+                                    if (!startDate || endDate) {
+                                      setStartDate(date);
+                                      setEndDate(null);
+                                    } else {
+                                      setEndDate(date);
+                                    }
+                                  }}
+                                  className={`h-4 w-4 rounded-full text-[10px] transition-all duration-200 flex items-center justify-center
+                                    ${isStart || isEnd 
+                                      ? "bg-gradient-to-br from-[#ED9B40] to-[#ED9B40] font-bold shadow-md ring-2 ring-black ring-offset-1"
+                                      : inRange 
+                                        ? "bg-[#ED9B40]/15 text-white"
+                                        : "text-white/70 hover:bg-[#ED9B40]/8 hover:text-white"}`}
+                                >
+                                  {day + 1}
+                                </motion.button>
                               );
                             })}
                           </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
+                        </motion.div>
+                      )}
+                    </motion.div>
 
-                {/* Residence Type */}
-                <div 
-                  className="flex-1 p-4 hover:bg-white/50 transition-colors cursor-pointer rounded-lg relative"
-                  onClick={() => setShowRooms(!showRooms)}
-                >
-                  <label className="block text-[9px] uppercase tracking-widest text-stone-500 font-bold mb-1">Residence</label>
-                  <div className="text-stone-900 font-serif text-lg leading-none truncate">{roomType}</div>
-                  
-                  {/* Residence Dropdown */}
-                  <AnimatePresence>
-                    {showRooms && (
-                      <motion.div 
-                        ref={roomsRef}
-                        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
-                        className="absolute top-full left-0 mt-4 bg-white shadow-2xl rounded-xl border border-stone-100 w-48 z-[9999] overflow-hidden"
-                      >
-                        {["Studio", "1 Bedroom", "2 Bedroom", "3 Bedroom"].map((type) => (
-                          <button 
-                            key={type}
-                            onClick={(e) => { e.stopPropagation(); setRoomType(type); setShowRooms(false); }}
-                            className="w-full text-left px-4 py-3 text-sm hover:bg-stone-50 transition-colors"
-                          >
-                            {type}
-                          </button>
-                        ))}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
+                    {/* DIVIDER */}
+                    <div className="h-6 w-px bg-gradient-to-b from-transparent via-[#ED9B40] to-transparent mx-4" />
 
-                {/* Guests */}
-                <div 
-                  className="flex-1 p-4 hover:bg-white/50 transition-colors cursor-pointer rounded-lg relative"
-                  onClick={() => setShowGuests(!showGuests)}
-                >
-                  <label className="block text-[9px] uppercase tracking-widest text-stone-500 font-bold mb-1">Guests</label>
-                  <div className="text-stone-900 font-serif text-lg leading-none">{guests.adults + guests.children} Guest(s)</div>
-                  
-                  {/* Guests Dropdown */}
-                  <AnimatePresence>
-                    {showGuests && (
-                      <motion.div 
-                        ref={guestsRef}
-                        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
-                        className="absolute top-full left-0 mt-4 bg-white p-4 shadow-2xl rounded-xl border border-stone-100 w-60 z-[9999]"
-                      >
-                         <div className="flex justify-between items-center py-2">
-                           <span className="text-sm">Adults</span>
-                           <div className="flex gap-3 items-center">
-                             <button onClick={(e)=>{e.stopPropagation(); setGuests(g=>({...g, adults:Math.max(1,g.adults-1)}))}} className="w-6 h-6 rounded-full border flex items-center justify-center hover:bg-stone-100">-</button>
-                             <span className="text-sm w-3 text-center">{guests.adults}</span>
-                             <button onClick={(e)=>{e.stopPropagation(); setGuests(g=>({...g, adults:g.adults+1}))}} className="w-6 h-6 rounded-full border flex items-center justify-center hover:bg-stone-100">+</button>
-                           </div>
-                         </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
+                    {/* ROOMS */}
+                    <motion.div
+                      whileHover={{ scale: 1.01 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => setShowRooms(!showRooms)}
+                      className="flex-1 px-6 py-2.5 cursor-pointer hover:bg-[#ED9B40]/8 rounded-xl relative group min-w-0"
+                    >
+                      <p className="text-[10px] uppercase tracking-widest text-[#ED9B40]/60 font-medium mb-0.5">Rooms</p>
+                      <p className="text-sm text-white font-light truncate">{roomType}</p>
 
-                {/* Button */}
-                <div className="p-2 flex items-center">
-                  <button className="w-full h-full min-h-[50px] bg-stone-900 hover:bg-stone-800 text-white rounded-lg px-6 transition-all duration-300 shadow-lg hover:shadow-xl flex items-center justify-center gap-2 group">
-                    <span className="text-xs uppercase tracking-widest font-bold">Search</span>
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
+                      {showRooms && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                          ref={roomsRef}
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute top-16 left-0 bg-gradient-to-br from-[#ED9B40]/95 to-[#ED9B40]/90 backdrop-blur-xl rounded-xl shadow-xl w-5560 z-50 border border-[#ED9B40]/20"
+                        >
+                          {["Studio", "1 Bed", "2 Bed", "3 Bed", "4+ Beds"].map(r => (
+                            <button 
+                              key={r} 
+                              onClick={() => { setRoomType(r); setShowRooms(false); }}
+                              className="block w-full text-left px-4 py-2.5 text-white/90  transition-all duration-200 border-b border-[#ED9B40]/10 last:border-b-0 text-sm"
+                            >
+                              {r}
+                            </button>
+                          ))}
+                        </motion.div>
+                      )}
+                    </motion.div>
 
-          {/* Right: 3D Carousel with backdrop element */}
-          <div className="relative order-1 lg:order-2 h-[500px] flex items-center justify-center mt-0">
-             {/* Abstract shape behind carousel */}
-             <motion.div 
-               animate={{ rotate: -5 }}
-               className="absolute top-10 right-10 w-[300px] h-[400px] bg-stone-200/50 rounded-full blur-3xl -z-10" 
-             />
-             <LuxuryCarousel slides={carouselSlides} />
-          </div>
+                    {/* DIVIDER */}
+                    <div className="h-6 w-px bg-gradient-to-b from-transparent via-[#ED9B40] to-transparent mx-4" />
 
+                    {/* GUESTS */}
+                    <motion.div
+                      whileHover={{ scale: 1.01 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => setShowGuests(!showGuests)}
+                      className="flex-1 px-6 py-2.5 cursor-pointer hover:bg-[#ED9B40]/8 rounded-xl relative group min-w-0"
+                    >
+                      <p className="text-[10px] uppercase tracking-widest text-[#ED9B40]/60 font-medium mb-0.5">Guests</p>
+                      <p className="text-sm text-white font-light">
+                        {guests.adults + guests.children + guests.infants || "Add"}
+                      </p>
+
+                      {showGuests && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                          ref={guestsRef}
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute top-16 right-0 bg-gradient-to-br from-[#ED9B40]/95 to-[#ED9B40]/90 backdrop-blur-xl rounded-xl shadow-xl w-48 z-50 p-4 border border-[#ED9B40]/20"
+                        >
+                          {["adults","children","infants"].map(type => (
+                            <div key={type} className="flex justify-between items-center mb-4 last:mb-0">
+                              <span className="capitalize text-white/80 text-sm">{type}</span>
+                              <div className="flex gap-2 items-center">
+                                <button 
+                                  onClick={() => setGuests(g => ({ ...g, [type]: Math.max(0, g[type] - 1) }))}
+                                  className="w-7 h-7 rounded-lg bg-white/10 hover:bg-[#ED9B40]/25 text-white hover:text-[#ED9B40] transition-all duration-200 flex items-center justify-center text-sm"
+                                >
+                                  −
+                                </button>
+                                <span className="text-white text-sm w-6 text-center">{guests[type]}</span>
+                                <button 
+                                  onClick={() => setGuests(g => ({ ...g, [type]: g[type] + 1 }))}
+                                  className="w-7 h-7 rounded-lg bg-white/10 hover:bg-[#ED9B40]/25 text-white hover:text-[#ED9B40] transition-all duration-200 flex items-center justify-center text-sm"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </motion.div>
+                      )}
+                    </motion.div>
+
+                    {/* SEARCH BUTTON */}
+                    <motion.button 
+                      whileHover={{ scale: 1.05, backgroundColor: "#ED9B40" }}
+                      whileTap={{ scale: 0.9 }}
+                      className="ml-4 h-10 w-10 bg-gradient-to-br from-[#ED9B40] to-[#ED9B40]/90 rounded-full flex items-center justify-center text-white shadow-lg hover:shadow-[#ED9B40]/25 transition-all duration-300"
+                    >
+                      <FaSearch className="text-base" />
+                    </motion.button>
+
+                  </div>
+                </motion.div>
+
+              </motion.div>
+            </div>
+          </section>
         </div>
       </div>
 
       {/* ================= MARQUEE STRIP ================= */}
-      <div className="w-full bg-stone-900 text-stone-400 overflow-hidden py-3 border-y border-stone-800 z-20 relative">
+      <div className="w-full bg-[#ED9B40] text-stone-900 overflow-hidden py-3 z-20 relative">
         <div className="whitespace-nowrap animate-marquee flex gap-12 text-xs font-medium tracking-[0.2em] uppercase">
           {Array(10).fill("Concierge • Privacy • Luxury • Comfort • Design • ").map((text, i) => (
              <span key={i}>{text}</span>
@@ -436,7 +531,7 @@ export default function Home() {
       </div>
 
       {/* ================= PROPERTIES COLLECTION ================= */}
-      <section className="py-16 px-6 relative z-10 bg-white">
+        <section className="py-16 px-6 relative z-10 bg-white">
         <div className="max-w-[1400px] mx-auto">
           <div className="flex flex-col justify-center items-center mb-16 pb-0">
             <h2 className="text-3xl md:text-4xl text-stone-900 text-center" style={{ fontFamily: "'Playfair Display', serif" }}>Featured <span className="italic font-light text-stone-600">Properties</span></h2>

@@ -17,6 +17,7 @@ import MyBookings from "./pages/MyBookings";
 import Chat from "./pages/Chat";
 import AdminDashboard from "./pages/AdminDashboard";
 import Footer from "./components/Footer";
+import Management from "./pages/Management";
 
 export default function App() {
   return (
@@ -109,6 +110,13 @@ export default function App() {
           <AdminRoute>
             <AdminDashboard />
           </AdminRoute>
+        } />
+        <Route path="/management" element={
+          <>
+            <Header />
+            <Management />
+            <Footer />
+          </>
         } />
       </Routes>
     </AuthProvider>
