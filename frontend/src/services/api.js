@@ -1,8 +1,8 @@
 // api.js - COMPLETE UPDATED VERSION WITH SIMPLIFIED UPLOAD
 import axios from 'axios';
 
-const API_BASE_URL = 'https://flask-app-production-c760.up.railway.app/api';
-const SOCKET_URL = 'https://flask-app-production-c760.up.railway.app';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://flask-app-production-c760.up.railway.app/api';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'https://flask-app-production-c760.up.railway.app';
 
 console.log('🚀 PRODUCTION MODE - API URL:', API_BASE_URL);
 

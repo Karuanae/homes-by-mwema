@@ -23,7 +23,7 @@ connect() {
   }
 
   // Hardcoded production URL
-  const SOCKET_URL = 'https://flask-app-production-c760.up.railway.app';
+  const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'https://flask-app-production-c760.up.railway.app';
 
   console.log(`🔌 Connecting to production Socket.IO: ${SOCKET_URL}`);
 
