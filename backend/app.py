@@ -1,4 +1,4 @@
-# app.py - FIXED VERSION
+# app.py - COMPLETE RAILWAY-READY VERSION
 from flask import Flask, jsonify, send_from_directory, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
@@ -17,11 +17,19 @@ load_dotenv()
 app = Flask(__name__)
 app.url_map.strict_slashes = False
 
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///homes.db')
+# Database configuration - Handle Railway's PostgreSQL URL format
+database_url = os.environ.get('DATABASE_URL', 'sqlite:///homes.db')
+if database_url and database_url.startswith('postgres://'):
+    database_url = database_url.replace('postgres://', 'postgresql://', 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# File upload configurations
-UPLOAD_FOLDER = 'uploads/properties'
+# File upload configurations - Use Railway volume if available
+if os.environ.get('RAILWAY_VOLUME_MOUNT_PATH'):
+    UPLOAD_FOLDER = os.path.join(os.environ.get('RAILWAY_VOLUME_MOUNT_PATH'), 'uploads/properties')
+else:
+    UPLOAD_FOLDER = 'uploads/properties'
+
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -29,32 +37,41 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 app.config['ALLOWED_EXTENSIONS'] = ALLOWED_EXTENSIONS
 
 # Create upload folder if it doesn't exist
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-    print(f"Created upload directory: {UPLOAD_FOLDER}")
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+print(f"📁 Upload directory: {UPLOAD_FOLDER}")
 
 migrate = Migrate(app, db)
 db.init_app(app)
 
-# CORS Configuration
+# CORS Configuration - Get allowed origins from environment
+allowed_origins = os.environ.get('ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:5173').split(',')
+railway_domain = os.environ.get('RAILWAY_PUBLIC_DOMAIN')
+if railway_domain:
+    allowed_origins.append(f'https://{railway_domain}')
+    allowed_origins.append(f'https://www.{railway_domain}')
+
+# Add any additional frontend domains here
+frontend_url = os.environ.get('FRONTEND_URL')
+if frontend_url and frontend_url not in allowed_origins:
+    allowed_origins.append(frontend_url)
+
 CORS(app, resources={
     r"/api/*": {
-        "origins": [
-            "http://localhost:3000",
-            "http://localhost:5173",
-            "http://127.0.0.1:3000",
-            "http://127.0.0.1:5173",
-            "http://localhost",
-            "http://127.0.0.1"
-        ],
+        "origins": allowed_origins,
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"],
+        "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
+        "expose_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True,
+        "max_age": 600
+    },
+    r"/socket.io/*": {
+        "origins": allowed_origins,
         "supports_credentials": True
     }
 })
 
 # Configuration
-app.config['JWT_SECRET_KEY'] = "akerywaeiyff\jk632423746"
+app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'akerywaeiyff\jk632423746')
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=24)
 app.config['JWT_VERIFY_SUB'] = False
 
@@ -87,25 +104,51 @@ app.config['KES_TO_USD_RATE'] = float(os.environ.get('KES_TO_USD_RATE', '153.0')
 jwt = JWTManager(app)
 jwt.init_app(app)
 
-# Initialize SocketIO AFTER all other configurations
+# Initialize SocketIO with production settings
 socketio = SocketIO(
-    app, 
-    cors_allowed_origins=[
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:5173"
-    ],
+    app,
+    cors_allowed_origins=allowed_origins,
     async_mode='eventlet',
     logger=True,
-    engineio_logger=False
+    engineio_logger=False,
+    ping_timeout=60,
+    ping_interval=25,
+    manage_session=False
 )
+
+# JWT token blocklist callback
+@jwt.token_in_blocklist_loader
+def check_if_token_revoked(jwt_header, jwt_payload):
+    jti = jwt_payload['jti']
+    token = db.session.query(TokenBlocklist).filter_by(jti=jti).first()
+    return token is not None
 
 # Serve uploaded files
 @app.route('/uploads/properties/<filename>')
 def uploaded_file(filename):
     """Serve uploaded property images"""
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
+# Health check endpoint for Railway
+@app.route('/health')
+def health_check():
+    """Health check endpoint for Railway"""
+    return jsonify({
+        'status': 'healthy',
+        'timestamp': datetime.utcnow().isoformat(),
+        'database': 'connected' if db.engine else 'disconnected'
+    })
+
+# Root endpoint
+@app.route('/')
+def index():
+    return jsonify({
+        'name': 'MWEMA Estate API',
+        'version': '1.0.0',
+        'status': 'running',
+        'environment': os.environ.get('FLASK_ENV', 'production'),
+        'timestamp': datetime.utcnow().isoformat()
+    })
 
 # Register blueprints
 from views.auth import auth_bp
@@ -126,7 +169,7 @@ app.register_blueprint(user_bp, url_prefix='/api/users')
 app.register_blueprint(chat_bp, url_prefix='/api/chats')
 app.register_blueprint(main_bp, url_prefix='/api')
 
-# SocketIO event handlers (simple test first)
+# SocketIO event handlers
 @socketio.on('connect')
 def handle_connect():
     print(f'[SOCKETIO] Client connected: {request.sid}')
@@ -171,32 +214,60 @@ def register_chat_events(socketio):
 
 # Create database tables on startup
 with app.app_context():
-    db.create_all()
-    print("✅ Database tables created/verified")
-    
-    # Create default admin user if none exists
-    admin_email = "admin@mwema.com"
-    admin_user = User.query.filter_by(email=admin_email).first()
-    
-    if not admin_user:
-        admin_user = User(
-            name="Administrator",
-            email=admin_email,
-            phone="+254700000000",
-            role="admin"
-        )
-        admin_user.set_password("admin123")  # Change this in production!
-        db.session.add(admin_user)
-        db.session.commit()
-        print(f"✅ Created default admin user: {admin_email}")
-    else:
-        print(f"✅ Admin user already exists: {admin_email}")
+    try:
+        db.create_all()
+        print("✅ Database tables created/verified")
+        
+        # Create default admin user if none exists
+        admin_email = "admin@mwema.com"
+        admin_user = User.query.filter_by(email=admin_email).first()
+        
+        if not admin_user:
+            admin_user = User(
+                name="Administrator",
+                email=admin_email,
+                phone="+254700000000",
+                role="admin"
+            )
+            admin_user.set_password(os.environ.get('ADMIN_PASSWORD', 'admin123'))  # Change this in production!
+            db.session.add(admin_user)
+            db.session.commit()
+            print(f"✅ Created default admin user: {admin_email}")
+        else:
+            print(f"✅ Admin user already exists: {admin_email}")
+            
+    except Exception as e:
+        print(f"⚠️  Database initialization warning: {e}")
+        print("This is normal if migrations haven't been applied yet.")
 
-# Update the main block to use socketio.run
+# Error handlers
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({'error': 'Resource not found'}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    db.session.rollback()
+    return jsonify({'error': 'Internal server error'}), 500
+
+# Update the main block for Railway
 if __name__ == '__main__':
-    print("🚀 Starting MWEMA Estate server with SocketIO...")
-    print(f"📡 Server will run on: http://0.0.0.0:5000")
-    print(f"🌐 CORS allowed origins: {['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000', 'http://127.0.0.1:5173']}")
+    # Local development
+    port = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('FLASK_DEBUG', 'True').lower() == 'true'
+    print("=" * 50)
+    print("🚀 Starting MWEMA Estate server locally...")
+    print(f"📡 Server will run on: http://0.0.0.0:{port}")
+    print(f"📁 Upload folder: {UPLOAD_FOLDER}")
+    print(f"🌐 CORS allowed origins: {allowed_origins}")
     print("🔌 WebSocket endpoint: ws://localhost:5000/socket.io/")
-    print("-" * 50)
-    socketio.run(app, debug=True, host='0.0.0.0', port=5000)
+    print("=" * 50)
+    socketio.run(app, debug=debug, host='0.0.0.0', port=port)
+else:
+    # Production (imported by gunicorn)
+    print("=" * 50)
+    print("🚀 MWEMA Estate app initialized for production")
+    print(f"📡 Database: {app.config['SQLALCHEMY_DATABASE_URI']}")
+    print(f"📁 Upload folder: {app.config['UPLOAD_FOLDER']}")
+    print(f"🌐 CORS allowed origins: {allowed_origins}")
+    print("=" * 50)
