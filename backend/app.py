@@ -1,4 +1,4 @@
-# app.py - COMPLETE RAILWAY-READY VERSION
+# app.py - COMPLETE RAILWAY-READY VERSION WITH UPDATED DOMAINS
 from flask import Flask, jsonify, send_from_directory, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
@@ -17,10 +17,20 @@ load_dotenv()
 app = Flask(__name__)
 app.url_map.strict_slashes = False
 
-# Database configuration - Handle Railway's PostgreSQL URL format
-database_url = os.environ.get('DATABASE_URL', 'sqlite:///homes.db')
+# Database configuration - Force PostgreSQL in production, SQLite only for local dev
+database_url = os.environ.get('DATABASE_URL')
+if not database_url:
+    # Only use SQLite if explicitly in development mode and no DATABASE_URL
+    if os.environ.get('FLASK_ENV') == 'development':
+        database_url = 'sqlite:///homes.db'
+        print("⚠️  WARNING: Using SQLite database - not suitable for production!")
+    else:
+        raise ValueError("DATABASE_URL environment variable is required in production")
+
+# Handle Railway's PostgreSQL URL format
 if database_url and database_url.startswith('postgres://'):
     database_url = database_url.replace('postgres://', 'postgresql://', 1)
+    
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -43,21 +53,38 @@ print(f"📁 Upload directory: {UPLOAD_FOLDER}")
 migrate = Migrate(app, db)
 db.init_app(app)
 
-# CORS Configuration - Get allowed origins from environment
-allowed_origins = os.environ.get('ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:5173').split(',')
+# ===== UPDATED CORS CONFIGURATION WITH ALL YOUR DOMAINS =====
+# Get allowed origins from environment or use defaults
+default_origins = 'http://localhost:3000,http://localhost:5173'
+allowed_origins = os.environ.get('ALLOWED_ORIGINS', default_origins).split(',')
+
+# Add Vercel domains (temporary and production)
+vercel_domains = [
+    'https://homes-by-mwema-bc0hneof2-karuanaes-projects.vercel.app',
+    'https://homes-by-mwema.vercel.app',
+]
+
+# Add Truehost/Custom domains
+custom_domains = [
+    'https://homesbymwema.com',
+    'https://www.homesbymwema.com',
+]
+
+# Add Railway domain if available
 railway_domain = os.environ.get('RAILWAY_PUBLIC_DOMAIN')
 if railway_domain:
     allowed_origins.append(f'https://{railway_domain}')
     allowed_origins.append(f'https://www.{railway_domain}')
 
-# Add any additional frontend domains here
-frontend_url = os.environ.get('FRONTEND_URL')
-if frontend_url and frontend_url not in allowed_origins:
-    allowed_origins.append(frontend_url)
+# Combine all domains (remove duplicates by converting to set)
+all_domains = set(allowed_origins + vercel_domains + custom_domains)
+# Filter out any empty strings
+all_domains = [domain for domain in all_domains if domain]
 
+# Update CORS configuration
 CORS(app, resources={
     r"/api/*": {
-        "origins": allowed_origins,
+        "origins": list(all_domains),
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
         "expose_headers": ["Content-Type", "Authorization"],
@@ -65,10 +92,17 @@ CORS(app, resources={
         "max_age": 600
     },
     r"/socket.io/*": {
-        "origins": allowed_origins,
+        "origins": list(all_domains),
         "supports_credentials": True
     }
 })
+
+# Print configured origins for debugging
+print("=" * 50)
+print("🌐 CORS Allowed Origins:")
+for origin in sorted(list(all_domains)):
+    print(f"  • {origin}")
+print("=" * 50)
 
 # Configuration
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'akerywaeiyff\jk632423746')
@@ -81,24 +115,24 @@ app.config['MPESA_CONSUMER_KEY'] = os.environ.get('MPESA_CONSUMER_KEY', 'YOUR_CO
 app.config['MPESA_CONSUMER_SECRET'] = os.environ.get('MPESA_CONSUMER_SECRET', 'YOUR_CONSUMER_SECRET_HERE')
 app.config['MPESA_BUSINESS_SHORT_CODE'] = os.environ.get('MPESA_BUSINESS_SHORT_CODE', '174379')
 app.config['MPESA_PASSKEY'] = os.environ.get('MPESA_PASSKEY', 'YOUR_PASSKEY_HERE')
-app.config['MPESA_CALLBACK_URL'] = os.environ.get('MPESA_CALLBACK_URL', 'https://yourdomain.com/api/payments/mpesa/callback')
+app.config['MPESA_CALLBACK_URL'] = os.environ.get('MPESA_CALLBACK_URL', 'https://homesbymwema.com/api/payments/mpesa/callback')
 
 # M-PESA B2C Configuration (for refunds)
 app.config['MPESA_INITIATOR_NAME'] = os.environ.get('MPESA_INITIATOR_NAME', 'testapi')
 app.config['MPESA_SECURITY_CREDENTIAL'] = os.environ.get('MPESA_SECURITY_CREDENTIAL', 'YOUR_SECURITY_CREDENTIAL')
-app.config['MPESA_B2C_TIMEOUT_URL'] = os.environ.get('MPESA_B2C_TIMEOUT_URL', 'https://yourdomain.com/api/payments/mpesa/b2c/timeout')
-app.config['MPESA_B2C_RESULT_URL'] = os.environ.get('MPESA_B2C_RESULT_URL', 'https://yourdomain.com/api/payments/mpesa/b2c/result')
+app.config['MPESA_B2C_TIMEOUT_URL'] = os.environ.get('MPESA_B2C_TIMEOUT_URL', 'https://homesbymwema.com/api/payments/mpesa/b2c/timeout')
+app.config['MPESA_B2C_RESULT_URL'] = os.environ.get('MPESA_B2C_RESULT_URL', 'https://homesbymwema.com/api/payments/mpesa/b2c/result')
 
 # PayPal REST API Configuration
 app.config['PAYPAL_ENVIRONMENT'] = os.environ.get('PAYPAL_ENVIRONMENT', 'sandbox')
 app.config['PAYPAL_CLIENT_ID'] = os.environ.get('PAYPAL_CLIENT_ID', 'ARx2bRbdY3X1kfuT8P-QlfoAsDF0rWqv4VExGthJOl5QOqQWhHLo76HdxztMGcyJylPpbnMqTfa_jggd')
 app.config['PAYPAL_CLIENT_SECRET'] = os.environ.get('PAYPAL_CLIENT_SECRET', 'EIm6QhXUnU9QSuBJCr0-xdxrIacugPSQfjGeSzgzHyyoStbwL0rP5ONGbvDOGDIXekfSWs_RvRdliJBi')
-app.config['PAYPAL_RETURN_URL'] = os.environ.get('PAYPAL_RETURN_URL', 'http://localhost:5173/payment/success')
-app.config['PAYPAL_CANCEL_URL'] = os.environ.get('PAYPAL_CANCEL_URL', 'http://localhost:5173/payment/cancel')
+app.config['PAYPAL_RETURN_URL'] = os.environ.get('PAYPAL_RETURN_URL', 'https://homesbymwema.com/payment/success')
+app.config['PAYPAL_CANCEL_URL'] = os.environ.get('PAYPAL_CANCEL_URL', 'https://homesbymwema.com/payment/cancel')
 app.config['PAYPAL_WEBHOOK_ID'] = os.environ.get('PAYPAL_WEBHOOK_ID', '')
 
 # Currency conversion rate (KES to USD)
-app.config['KES_TO_USD_RATE'] = float(os.environ.get('KES_TO_USD_RATE', '153.0'))
+app.config['KES_TO_USD_RATE'] = float(os.environ.get('KES_TO_USD_RATE', '129.0'))
 
 # Initialize extensions
 jwt = JWTManager(app)
@@ -107,7 +141,7 @@ jwt.init_app(app)
 # Initialize SocketIO with production settings
 socketio = SocketIO(
     app,
-    cors_allowed_origins=allowed_origins,
+    cors_allowed_origins=list(all_domains),
     async_mode='eventlet',
     logger=True,
     engineio_logger=False,
@@ -185,7 +219,6 @@ def handle_ping():
     emit('pong', {'message': 'pong', 'timestamp': datetime.utcnow().isoformat()})
 
 # Import and register chat socket events AFTER socketio is defined
-# This prevents circular imports
 try:
     from socket_events import register_chat_events
     register_chat_events(socketio)
@@ -194,7 +227,6 @@ except ImportError as e:
     print(f"⚠️  Could not import socket_events: {e}")
     print("⚠️  Creating socket_events.py file...")
     
-    # Create a basic socket_events.py if it doesn't exist
     socket_events_content = '''# socket_events.py
 def register_chat_events(socketio):
     """Placeholder for chat events"""
@@ -229,7 +261,7 @@ with app.app_context():
                 phone="+254700000000",
                 role="admin"
             )
-            admin_user.set_password(os.environ.get('ADMIN_PASSWORD', 'admin123'))  # Change this in production!
+            admin_user.set_password(os.environ.get('ADMIN_PASSWORD', 'admin123'))
             db.session.add(admin_user)
             db.session.commit()
             print(f"✅ Created default admin user: {admin_email}")
@@ -259,7 +291,7 @@ if __name__ == '__main__':
     print("🚀 Starting MWEMA Estate server locally...")
     print(f"📡 Server will run on: http://0.0.0.0:{port}")
     print(f"📁 Upload folder: {UPLOAD_FOLDER}")
-    print(f"🌐 CORS allowed origins: {allowed_origins}")
+    print(f"🌐 CORS allowed origins: {list(all_domains)}")
     print("🔌 WebSocket endpoint: ws://localhost:5000/socket.io/")
     print("=" * 50)
     socketio.run(app, debug=debug, host='0.0.0.0', port=port)
@@ -269,5 +301,5 @@ else:
     print("🚀 MWEMA Estate app initialized for production")
     print(f"📡 Database: {app.config['SQLALCHEMY_DATABASE_URI']}")
     print(f"📁 Upload folder: {app.config['UPLOAD_FOLDER']}")
-    print(f"🌐 CORS allowed origins: {allowed_origins}")
+    print(f"🌐 CORS allowed origins: {list(all_domains)}")
     print("=" * 50)

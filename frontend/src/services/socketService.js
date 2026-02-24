@@ -16,25 +16,30 @@ class SocketService {
   }
 
   // Initialize connection
-  connect() {
-    if (this.socket?.connected) {
-      console.log('🔌 Socket already connected');
-      return;
-    }
-
-    // Create new connection
-    this.socket = io('http://localhost:5000', {
-      transports: ['websocket', 'polling'],
-      withCredentials: true,
-      reconnection: true,
-      reconnectionAttempts: this.maxReconnectionAttempts,
-      reconnectionDelay: 1000,
-      timeout: 10000,
-      autoConnect: true,
-    });
-
-    this.setupEventListeners();
+connect() {
+  if (this.socket?.connected) {
+    console.log('🔌 Socket already connected');
+    return;
   }
+
+  // Hardcoded production URL
+  const SOCKET_URL = 'https://flask-app-production-c760.up.railway.app';
+
+  console.log(`🔌 Connecting to production Socket.IO: ${SOCKET_URL}`);
+
+  this.socket = io(SOCKET_URL, {
+    transports: ['websocket', 'polling'],
+    withCredentials: true,
+    reconnection: true,
+    reconnectionAttempts: 10,
+    reconnectionDelay: 1000,
+    timeout: 20000,
+    path: '/socket.io/',
+    secure: true,
+  });
+
+  this.setupEventListeners();
+}
 
   // Setup all event listeners
   setupEventListeners() {

@@ -1,7 +1,10 @@
 // api.js - COMPLETE UPDATED VERSION WITH SIMPLIFIED UPLOAD
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = 'https://flask-app-production-c760.up.railway.app/api';
+const SOCKET_URL = 'https://flask-app-production-c760.up.railway.app';
+
+console.log('🚀 PRODUCTION MODE - API URL:', API_BASE_URL);
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -9,6 +12,7 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
   withCredentials: true,
+  timeout: 30000,
 });
 
 api.interceptors.request.use(
