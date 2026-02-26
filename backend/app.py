@@ -1,4 +1,4 @@
-# app.py - COMPLETE RAILWAY-READY VERSION WITH UPDATED DOMAINS
+# app.py - COMPLETE RAILWAY-READY VERSION WITH UPDATED DOMAINS AND ADMIN CONFIG
 from flask import Flask, jsonify, send_from_directory, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
@@ -244,29 +244,67 @@ def register_chat_events(socketio):
     from socket_events import register_chat_events
     register_chat_events(socketio)
 
+# ===== UPDATED ADMIN USER SECTION - CONFIGURABLE VIA ENV VARIABLES =====
 # Create database tables on startup
 with app.app_context():
     try:
         db.create_all()
         print("✅ Database tables created/verified")
         
-        # Create default admin user if none exists
-        admin_email = "admin@mwema.com"
+        # Get admin credentials from environment variables
+        admin_email = os.environ.get('ADMIN_EMAIL', 'homesbymwema@gmail.com')  # Default changed
+        admin_password = os.environ.get('ADMIN_PASSWORD', 'admin123')
+        admin_name = os.environ.get('ADMIN_NAME', 'Homes by Mwema Admin')
+        admin_phone = os.environ.get('ADMIN_PHONE', '+254700000000')
+        
+        # Check if admin user exists
         admin_user = User.query.filter_by(email=admin_email).first()
         
         if not admin_user:
+            # Create new admin user
             admin_user = User(
-                name="Administrator",
+                name=admin_name,
                 email=admin_email,
-                phone="+254700000000",
+                phone=admin_phone,
                 role="admin"
             )
-            admin_user.set_password(os.environ.get('ADMIN_PASSWORD', 'admin123'))
+            admin_user.set_password(admin_password)
             db.session.add(admin_user)
             db.session.commit()
-            print(f"✅ Created default admin user: {admin_email}")
+            print(f"✅ Created admin user: {admin_email}")
         else:
-            print(f"✅ Admin user already exists: {admin_email}")
+            # Update existing admin user if credentials changed
+            updated = False
+            
+            # Check if password needs update
+            if not admin_user.check_password(admin_password):
+                admin_user.set_password(admin_password)
+                updated = True
+                print(f"🔄 Updated admin password from environment variable")
+            
+            # Check if email changed
+            if admin_user.email != admin_email:
+                admin_user.email = admin_email
+                updated = True
+                print(f"🔄 Updated admin email to: {admin_email}")
+            
+            # Check if name changed
+            if admin_user.name != admin_name:
+                admin_user.name = admin_name
+                updated = True
+                print(f"🔄 Updated admin name to: {admin_name}")
+            
+            # Check if phone changed
+            if admin_user.phone != admin_phone:
+                admin_user.phone = admin_phone
+                updated = True
+                print(f"🔄 Updated admin phone to: {admin_phone}")
+            
+            if updated:
+                db.session.commit()
+                print(f"✅ Admin user updated: {admin_email}")
+            else:
+                print(f"✅ Admin user already exists: {admin_email}")
             
     except Exception as e:
         print(f"⚠️  Database initialization warning: {e}")
