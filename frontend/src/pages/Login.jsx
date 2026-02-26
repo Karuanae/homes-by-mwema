@@ -116,19 +116,60 @@ export default function Login() {
           </div>
         )}
 
+
         <form onSubmit={handleSubmit} className="space-y-10">
-          {/* ...existing code... */}
+          <div>
+            <label htmlFor="email" className="block text-xs uppercase tracking-widest text-stone-500 mb-2">Email</label>
+            <input
+              type="email"
+              id="email"
+              name="email"
+              value={formData.email}
+              onChange={handleChange}
+              required
+              autoComplete="email"
+              className="w-full px-4 py-3 border border-stone-200 rounded bg-stone-50 focus:outline-none focus:border-stone-400 text-sm"
+              placeholder="you@email.com"
+            />
+          </div>
+          <div className="relative">
+            <label htmlFor="password" className="block text-xs uppercase tracking-widest text-stone-500 mb-2">Password</label>
+            <input
+              type={showPassword ? 'text' : 'password'}
+              id="password"
+              name="password"
+              value={formData.password}
+              onChange={handleChange}
+              required
+              autoComplete="current-password"
+              className="w-full px-4 py-3 border border-stone-200 rounded bg-stone-50 focus:outline-none focus:border-stone-400 text-sm pr-10"
+              placeholder="Password"
+            />
+            <button
+              type="button"
+              tabIndex={-1}
+              className="absolute right-3 top-9 -translate-y-1/2 text-stone-400 hover:text-stone-900"
+              onClick={() => setShowPassword((v) => !v)}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? <FaEyeSlash /> : <FaEye />}
+            </button>
+          </div>
+          <button
+            type="submit"
+            className="w-full py-3 bg-stone-900 text-white uppercase tracking-widest text-xs font-bold rounded hover:bg-stone-800 transition-colors flex items-center justify-center gap-2"
+            disabled={isLoading}
+          >
+            {isLoading ? <FaSpinner className="animate-spin" /> : 'Sign In'}
+          </button>
         </form>
 
         {/* Footer Links */}
         <div className="mt-12 pt-8 border-t border-stone-100 text-center space-y-6">
-          <div className="grid grid-cols-2 gap-4">
-             <button type="button" onClick={handleGoogleAuth} className="py-3 border border-stone-200 text-[10px] uppercase tracking-widest hover:bg-stone-50 transition-colors flex items-center justify-center gap-2">
-               <FaGoogle className="text-lg" /> Google
-             </button>
-             <button className="py-3 border border-stone-200 text-[10px] uppercase tracking-widest hover:bg-stone-50 transition-colors">
-               Apple
-             </button>
+          <div>
+            <button type="button" onClick={handleGoogleAuth} className="w-full py-3 border border-stone-200 text-[10px] uppercase tracking-widest hover:bg-stone-50 transition-colors flex items-center justify-center gap-2">
+              <FaGoogle className="text-lg" /> Sign in with Google
+            </button>
           </div>
           <p className="text-stone-500 font-serif text-sm">
             Not a member?{' '}

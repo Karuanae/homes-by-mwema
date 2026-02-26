@@ -1,11 +1,12 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from 'framer-motion'; // used in JSX
 import { FaEye, FaEyeSlash, FaSpinner, FaGoogle } from 'react-icons/fa';
-import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 export default function Register() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [formData, setFormData] = useState({
     name: '', email: '', password: '', confirmPassword: '', phone: ''
   });
@@ -36,25 +37,30 @@ export default function Register() {
     return true;
   };
 
+  const { signup } = useAuth();
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) return;
-    
+
     setIsLoading(true);
+    setError('');
     try {
-      const response = await api.auth.register({
+      const { user } = await signup({
         name: formData.name,
         email: formData.email,
         password: formData.password,
         phone: formData.phone || ''
       });
-      
+
       setSuccess('Account created.');
-      if (response.data.token) {
-        localStorage.setItem('token', response.data.token);
-        localStorage.setItem('user', JSON.stringify(response.data.user));
+      // after successful signup, the auth context already stored user/token
+      if (user?.role === 'admin') {
+        window.location.href = '/admin';
+      } else {
+        const redirectUrl = searchParams.get('redirect');
+        setTimeout(() => navigate(redirectUrl || '/'), 1500);
       }
-      setTimeout(() => navigate('/login'), 1500);
     } catch (error) {
       const msg = error.response?.data?.error || 'Registration failed.';
       setError(msg);
@@ -66,7 +72,7 @@ export default function Register() {
 
   // Google Auth Handler (using Google Identity Services)
   const handleGoogleAuth = () => {
-    /* global google */
+    // `google` is accessed via window.google
     if (!window.google) {
       const script = document.createElement('script');
       script.src = 'https://accounts.google.com/gsi/client';
@@ -77,13 +83,13 @@ export default function Register() {
       return;
     }
     window.google.accounts.id.initialize({
-      client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID || 'YOUR_GOOGLE_CLIENT_ID',
+      client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID || 'YOUR_GOOGLE_CLIENT_ID',
       callback: async (response) => {
         setIsLoading(true);
         setError('');
         try {
           // Send credential to backend for verification
-          const res = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/auth/google`, {
+          const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/auth/google`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ credential: response.credential })
@@ -93,11 +99,16 @@ export default function Register() {
             localStorage.setItem('token', data.token);
             localStorage.setItem('user', JSON.stringify(data.user));
             setSuccess('Account created.');
-            setTimeout(() => navigate('/'), 1000);
+            if (data.user.role === 'admin') {
+              window.location.href = '/admin';
+            } else {
+              const redirectUrl = searchParams.get('redirect');
+              setTimeout(() => navigate(redirectUrl || '/'), 1000);
+            }
           } else {
             setError(data.error || 'Google authentication failed.');
           }
-        } catch (err) {
+        } catch {
           setError('Google authentication failed.');
         } finally {
           setIsLoading(false);
@@ -122,11 +133,116 @@ export default function Register() {
           <p className="text-xs uppercase tracking-widest text-stone-400">Join the Collective</p>
         </div>
 
-        {error && <div className="mb-6 text-red-900 text-xs tracking-wide text-center">{error}</div>}
-        {success && <div className="mb-6 text-stone-900 text-xs tracking-wide text-center font-bold">{success}</div>}
+        {error && (
+          <div className="mb-8 p-4 bg-stone-50 border-l-2 border-red-900 text-red-900 text-xs tracking-wide">
+            {error}
+          </div>
+        )}
+        {success && (
+          <div className="mb-8 p-4 bg-stone-50 border-l-2 border-green-900 text-green-900 text-xs tracking-wide">
+            {success}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-8">
-          {/* ...existing code... */}
+          <div>
+            <label htmlFor="name" className="block text-xs uppercase tracking-widest text-stone-500 mb-2">
+              Full Name
+            </label>
+            <input
+              type="text"
+              id="name"
+              name="name"
+              value={formData.name}
+              onChange={handleChange}
+              required
+              className="w-full px-4 py-3 border border-stone-200 rounded bg-stone-50 focus:outline-none focus:border-stone-400 text-sm"
+              placeholder="John Doe"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="email" className="block text-xs uppercase tracking-widest text-stone-500 mb-2">
+              Email
+            </label>
+            <input
+              type="email"
+              id="email"
+              name="email"
+              value={formData.email}
+              onChange={handleChange}
+              required
+              autoComplete="email"
+              className="w-full px-4 py-3 border border-stone-200 rounded bg-stone-50 focus:outline-none focus:border-stone-400 text-sm"
+              placeholder="you@email.com"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="phone" className="block text-xs uppercase tracking-widest text-stone-500 mb-2">
+              Phone (optional)
+            </label>
+            <input
+              type="tel"
+              id="phone"
+              name="phone"
+              value={formData.phone}
+              onChange={handleChange}
+              className="w-full px-4 py-3 border border-stone-200 rounded bg-stone-50 focus:outline-none focus:border-stone-400 text-sm"
+              placeholder="0712345678"
+            />
+          </div>
+
+          <div className="relative">
+            <label htmlFor="password" className="block text-xs uppercase tracking-widest text-stone-500 mb-2">
+              Password
+            </label>
+            <input
+              type={showPassword ? 'text' : 'password'}
+              id="password"
+              name="password"
+              value={formData.password}
+              onChange={handleChange}
+              required
+              autoComplete="new-password"
+              className="w-full px-4 py-3 border border-stone-200 rounded bg-stone-50 focus:outline-none focus:border-stone-400 text-sm pr-10"
+              placeholder="Password"
+            />
+            <button
+              type="button"
+              tabIndex={-1}
+              className="absolute right-3 top-9 -translate-y-1/2 text-stone-400 hover:text-stone-900"
+              onClick={() => setShowPassword((v) => !v)}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? <FaEyeSlash /> : <FaEye />}
+            </button>
+          </div>
+
+          <div className="relative">
+            <label htmlFor="confirmPassword" className="block text-xs uppercase tracking-widest text-stone-500 mb-2">
+              Confirm Password
+            </label>
+            <input
+              type={showPassword ? 'text' : 'password'}
+              id="confirmPassword"
+              name="confirmPassword"
+              value={formData.confirmPassword}
+              onChange={handleChange}
+              required
+              autoComplete="new-password"
+              className="w-full px-4 py-3 border border-stone-200 rounded bg-stone-50 focus:outline-none focus:border-stone-400 text-sm pr-10"
+              placeholder="Confirm Password"
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="w-full py-3 bg-stone-900 text-white uppercase tracking-widest text-xs font-bold rounded hover:bg-stone-800 transition-colors flex items-center justify-center gap-2"
+            disabled={isLoading}
+          >
+            {isLoading ? <FaSpinner className="animate-spin" /> : 'Create Account'}
+          </button>
         </form>
 
         <div className="mt-10 pt-6 border-t border-stone-100 text-center">
