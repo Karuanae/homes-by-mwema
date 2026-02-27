@@ -115,7 +115,7 @@ export default function ConsultationModal({ isOpen, onClose }) {
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.95, opacity: 0, y: 20 }}
             transition={{ duration: 0.4 }}
-            className="bg-[#F5F2EE] border border-[#EBE5DE] shadow-2xl p-6 w-full max-w-md relative rounded-lg pointer-events-auto"
+            className="bg-[#F5F2EE] border border-[#EBE5DE] shadow-2xl p-4 w-full max-w-sm max-h-[85vh] overflow-y-auto relative rounded-lg pointer-events-auto"
             role="dialog"
             aria-modal="true"
             onClick={(e) => e.stopPropagation()} // prevent overlay click
