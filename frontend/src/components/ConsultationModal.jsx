@@ -106,7 +106,7 @@ export default function ConsultationModal({ isOpen, onClose }) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-[#1C1917]/60 backdrop-blur-sm"
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-[#1C1917]/60 backdrop-blur-sm pointer-events-auto"
           onClick={onClose} // clicking overlay closes
         >
           <motion.div
@@ -115,7 +115,7 @@ export default function ConsultationModal({ isOpen, onClose }) {
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.95, opacity: 0, y: 20 }}
             transition={{ duration: 0.4 }}
-            className="bg-[#F5F2EE] border border-[#EBE5DE] shadow-2xl p-6 w-full max-w-md relative"
+            className="bg-[#F5F2EE] border border-[#EBE5DE] shadow-2xl p-6 w-full max-w-md relative rounded-lg pointer-events-auto"
             role="dialog"
             aria-modal="true"
             onClick={(e) => e.stopPropagation()} // prevent overlay click
