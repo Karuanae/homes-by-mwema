@@ -2,15 +2,153 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-     <link rel="preconnect" href="https://fonts.googleapis.com">
+    <meta name="description" content="MWEMA ESTATE - Refined Living Awaits. Curated luxury residences in Nairobi's most prestigious locations." />
+    <meta name="keywords" content="luxury apartments, Nairobi real estate, premium homes, Kenya property, MWEMA estate" />
+    <meta name="author" content="MWEMA ESTATE" />
+    <meta property="og:title" content="MWEMA ESTATE | Refined Living Awaits" />
+    <meta property="og:description" content="Experience the finest homes Kenya has to offer. Curated luxury residences in Nairobi's most prestigious locations." />
+    <meta property="og:image" content="/og-image.jpg" />
+    <meta property="og:url" content="https://homesbymwema.com" />
+    <meta name="twitter:card" content="summary_large_image" />
+    
+    <!-- CRITICAL FIX FOR ROUTING -->
+    <base href="/" />
+    
+    <!-- Favicon / Icon - Replace with your actual logo -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="theme-color" content="#1C2321" />
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap" rel="stylesheet">
-    <title>homes-by-mwema</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    
+    <!-- Preload critical assets -->
+    <link rel="preload" href="/Logo.jpeg" as="image" />
+    
+    <title>MWEMA ESTATE | Refined Living Awaits</title>
+    
+    <!-- Inline critical styles for initial render -->
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
+      body {
+        font-family: 'Inter', sans-serif;
+        background-color: #f5f2ee;
+        color: #1C2321;
+        line-height: 1.6;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+      }
+      
+      body.loaded {
+        opacity: 1;
+      }
+      
+      /* Loading animation */
+      .initial-loader {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: #f5f2ee;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+        transition: opacity 0.5s ease, visibility 0.5s ease;
+      }
+      
+      .loader-content {
+        text-align: center;
+      }
+      
+      .loader-logo {
+        font-family: 'Playfair Display', serif;
+        font-size: 2.5rem;
+        letter-spacing: 4px;
+        color: #1C2321;
+        margin-bottom: 1rem;
+        animation: pulse 2s infinite;
+      }
+      
+      .loader-logo span {
+        color: #D4AF37;
+      }
+      
+      .loader-bar {
+        width: 200px;
+        height: 2px;
+        background: #e0d9d0;
+        margin: 1rem auto;
+        position: relative;
+        overflow: hidden;
+      }
+      
+      .loader-bar::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 40%;
+        height: 100%;
+        background: #1C2321;
+        animation: loading 1.5s infinite;
+      }
+      
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+      }
+      
+      @keyframes loading {
+        0% { left: -40%; }
+        100% { left: 100%; }
+      }
+      
+      .loader-text {
+        font-size: 0.75rem;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        color: #8a7f74;
+        margin-top: 1rem;
+      }
+    </style>
   </head>
   <body>
+    <!-- Initial Loader -->
+    <div class="initial-loader" id="initial-loader">
+      <div class="loader-content">
+        <div class="loader-logo">
+          MWEMA<span>.</span>
+        </div>
+        <div class="loader-bar"></div>
+        <div class="loader-text">Refined Living Awaits</div>
+      </div>
+    </div>
+
     <div id="root"></div>
+    
     <script type="module" src="/src/main.jsx"></script>
+    
+    <!-- Remove loader when app is ready -->
+    <script>
+      window.addEventListener('load', function() {
+        setTimeout(function() {
+          document.getElementById('initial-loader').style.opacity = '0';
+          document.getElementById('initial-loader').style.visibility = 'hidden';
+          document.body.classList.add('loaded');
+        }, 800);
+      });
+    </script>
   </body>
 </html>
