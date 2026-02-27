@@ -747,6 +747,18 @@ export const socketAPI = {
   isConnected: () => socketService.isConnected,
 };
 
+// ==================== CONSULTATIONS API ====================
+export const consultationsAPI = {
+  create: async (data) => {
+    const response = await api.post('/consultations', data);
+    return response;
+  },
+  list: async () => {
+    const response = await api.get('/consultations');
+    return response;
+  },
+};
+
 // Export everything
 export default {
   // API categories
@@ -765,6 +777,7 @@ export default {
   misc: miscAPI,
   upload: uploadAPI,
   socket: socketAPI,
+  consultations: consultationsAPI,
   
   // Helper functions
   isAuthenticated,

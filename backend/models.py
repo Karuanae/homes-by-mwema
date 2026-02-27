@@ -154,6 +154,23 @@ class Payment(db.Model):
     completed_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+class Consultation(db.Model):
+    __tablename__ = 'consultations'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    date = db.Column(db.DateTime, nullable=False)
+    hour = db.Column(db.Integer)
+    minute = db.Column(db.Integer)
+    notes = db.Column(db.Text)
+    status = db.Column(db.String(20), default='pending')  # 'pending', 'scheduled', 'completed', etc.
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # chat relationship (one-to-one)
+    chat = db.relationship('Chat', backref='consultation', uselist=False)
+
+
 class Chat(db.Model):
     __tablename__ = 'chats'
     
@@ -161,7 +178,8 @@ class Chat(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     property_id = db.Column(db.Integer, db.ForeignKey('properties.id'))
     booking_id = db.Column(db.Integer, db.ForeignKey('bookings.id'))
-    chat_type = db.Column(db.String(20), default='general')  # 'general', 'booking', 'inquiry', 'lead'
+    consultation_id = db.Column(db.Integer, db.ForeignKey('consultations.id'))
+    chat_type = db.Column(db.String(20), default='general')  # 'general', 'booking', 'inquiry', 'lead', 'consultation'
     status = db.Column(db.String(20), default='active')  # 'active', 'closed', 'archived'
     unread_count = db.Column(db.Integer, default=0)
     last_message = db.Column(db.Text)

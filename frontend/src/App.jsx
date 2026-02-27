@@ -18,6 +18,9 @@ import Chat from "./pages/Chat";
 import AdminDashboard from "./pages/AdminDashboard";
 import Footer from "./components/Footer";
 import Management from "./pages/Management";
+import ListingOptimization from "./pages/ListingOptimization";
+import PhotographyVideography from "./pages/PhotographyVideography";
+import AdminConsultations from "./pages/AdminConsultations";
 
 export default function App() {
   return (
@@ -111,10 +114,29 @@ export default function App() {
             <AdminDashboard />
           </AdminRoute>
         } />
+        <Route path="/admin/consultations" element={
+          <AdminRoute>
+            <AdminConsultations />
+          </AdminRoute>
+        } />
         <Route path="/management" element={
           <>
             <Header />
             <Management />
+            <Footer />
+          </>
+        } />
+        <Route path="/photography-videography" element={
+          <>
+            <Header />
+            <PhotographyVideography />
+            <Footer />
+          </>
+        } />
+        <Route path="/listing-optimization" element={
+          <>
+            <Header />
+            <ListingOptimization />
             <Footer />
           </>
         } />

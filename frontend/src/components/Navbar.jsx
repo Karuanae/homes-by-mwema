@@ -1,9 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavbarState } from '../hooks/useNavbarState';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, X, User, LogOut, MessageSquare, Bell, ChevronRight, Calendar } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../services/api';
+import ConsultationModal from './ConsultationModal';
+import ServicesDropdown from './ServicesDropdown';
+import MobileServices from './MobileServices';
 
 // --- STYLING CONSTANTS ---
 // You can adjust these hex codes to match your specific brand
@@ -16,31 +20,27 @@ const COLORS = {
 };
 
 const Navbar = () => {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { isMenuOpen, setIsMenuOpen, showServices, setShowServices, showConsultModal, setShowConsultModal, menuRef } = useNavbarState();
   const { isAuthenticated, logout, user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const menuRef = useRef(null);
 
   const [showToast, setShowToast] = useState(false);
-  
-  // Consultation modal state
-  const [showConsultModal, setShowConsultModal] = useState(false);
-  const [consultDate, setConsultDate] = useState(null);
-  
-  // Calendar logic
-  const today = new Date();
-  const [consultMonth, setConsultMonth] = useState(today.getMonth());
-  const [consultYear, setConsultYear] = useState(today.getFullYear());
-  const consultMonths = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-  const getDaysInMonth = (m, y) => new Date(y, m + 1, 0).getDate();
-  const getStartDay = (m, y) => new Date(y, m, 1).getDay();
 
 
 
   useEffect(() => {
+    // synchronise with location changes (close menus)
     setIsMenuOpen(false);
-  }, [location]);
+    setShowServices(false);
+
+    // consult query handling
+    const params = new URLSearchParams(location.search);
+    if (params.get('consult') === '1' && isAuthenticated) {
+      setShowConsultModal(true);
+      navigate(location.pathname, { replace: true });
+    }
+  }, [location, isAuthenticated, navigate, setIsMenuOpen, setShowServices, setShowConsultModal]);
 
   useEffect(() => {
     if (!isAuthenticated || !user) return;
@@ -64,6 +64,10 @@ const Navbar = () => {
       if (isMenuOpen && menuRef.current && !menuRef.current.contains(event.target)) {
         setIsMenuOpen(false);
       }
+      // close services dropdown if clicking outside
+      if (showServices && menuRef.current && !menuRef.current.contains(event.target)) {
+        setShowServices(false);
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -78,102 +82,7 @@ const Navbar = () => {
 
   return (
     <>
-      {/* --- CONSULTATION MODAL (Bespoke Paper Look) --- */}
-      <AnimatePresence>
-        {showConsultModal && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-[#1C1917]/60 backdrop-blur-sm"
-          >
-            <motion.div 
-              initial={{ scale: 0.95, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 20 }}
-              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }} // Elegant easing
-              className="bg-[#F5F2EE] border border-[#EBE5DE] shadow-2xl p-8 w-full max-w-md relative"
-            >
-              <button
-                onClick={() => setShowConsultModal(false)}
-                className="absolute top-6 right-6 text-stone-400 hover:text-stone-900 transition-colors"
-              >
-                <X size={20} strokeWidth={1} />
-              </button>
-
-              <div className="text-center mb-8">
-                <h3 className="font-serif text-2xl text-stone-900 mb-2 italic">Private Consultation</h3>
-                <p className="text-[10px] uppercase tracking-[0.2em] text-stone-500 font-medium">Select a Date</p>
-              </div>
-
-              {/* Calendar UI */}
-              <div className="border border-stone-200 p-6 bg-white mb-6">
-                <div className="flex justify-between items-center mb-6">
-                  <button onClick={() => setConsultMonth(m => m === 0 ? 11 : m - 1)} className="text-stone-400 hover:text-stone-900 transition-colors">
-                    <span className="font-serif text-lg">←</span>
-                  </button>
-                  <span className="font-serif text-lg text-stone-800 tracking-wide">
-                    {consultMonths[consultMonth]} <span className="text-stone-400">{consultYear}</span>
-                  </span>
-                  <button onClick={() => setConsultMonth(m => m === 11 ? 0 : m + 1)} className="text-stone-400 hover:text-stone-900 transition-colors">
-                    <span className="font-serif text-lg">→</span>
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-7 gap-2 text-center text-[9px] uppercase tracking-widest text-stone-400 mb-3">
-                  {["S","M","T","W","T","F","S"].map(d => <div key={d}>{d}</div>)}
-                </div>
-                
-                <div className="grid grid-cols-7 gap-2">
-                  {Array.from({ length: getStartDay(consultMonth, consultYear) }, (_, i) => <div key={`e-${i}`} />)}
-                  {Array.from({ length: getDaysInMonth(consultMonth, consultYear) }, (_, i) => {
-                    const d = i + 1;
-                    const dateObj = new Date(consultYear, consultMonth, d);
-                    const isPast = dateObj < new Date(today.getFullYear(), today.getMonth(), today.getDate());
-                    const isSel = consultDate && dateObj.toDateString() === new Date(consultDate).toDateString();
-                    
-                    return (
-                      <button
-                        key={d}
-                        disabled={isPast}
-                        onClick={() => setConsultDate(dateObj)}
-                        className={`
-                          h-9 w-9 text-xs flex items-center justify-center transition-all duration-300 font-serif
-                          ${isSel 
-                            ? 'bg-[#1C1917] text-[#F5F2EE]' 
-                            : 'hover:bg-[#F5F2EE] text-stone-600'
-                          } 
-                          ${isPast ? 'opacity-20 cursor-not-allowed' : ''}
-                        `}
-                      >
-                        {d}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <button
-                className={`
-                  w-full py-4 uppercase text-[11px] tracking-[0.25em] font-bold border border-[#1C1917] transition-all duration-500
-                  ${!consultDate 
-                    ? 'opacity-50 cursor-not-allowed text-stone-400 border-stone-200' 
-                    : 'bg-[#1C1917] text-[#F5F2EE] hover:bg-transparent hover:text-[#1C1917]'
-                  }
-                `}
-                disabled={!consultDate}
-                onClick={() => {
-                  setShowConsultModal(false);
-                  setConsultDate(null);
-                  alert('Consultation request received.');
-                }}
-              >
-                Confirm Appointment
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <ConsultationModal isOpen={showConsultModal} onClose={() => setShowConsultModal(false)} />
 
       {/* --- TOAST NOTIFICATION --- */}
       <AnimatePresence>
@@ -220,7 +129,14 @@ const Navbar = () => {
               {/* Desktop Nav Links */}
               <div className="hidden md:flex items-center gap-8 mr-4">
                 <button
-                  onClick={() => setShowConsultModal(true)}
+                  onClick={() => {
+                    if (!isAuthenticated) {
+                      const dest = `${location.pathname}${location.search ? location.search + '&' : '?'}consult=1`;
+                      navigate(`/login?redirect=${encodeURIComponent(dest)}`);
+                    } else {
+                      setShowConsultModal(true);
+                    }
+                  }}
                   className="relative group py-2"
                 >
                   <span className="font-sans text-[12px] uppercase tracking-[0.2em] font-medium transition-colors duration-300 text-[#C1A173]">
@@ -230,38 +146,20 @@ const Navbar = () => {
                 </button>
 
                 {/* Services Dropdown */}
-                <div className="relative group">
+                <div className="relative">
                   <button
                     className="relative group py-2"
+                    aria-expanded={showServices}
+                    onClick={() => setShowServices(s => !s)}
+                    onKeyDown={(e) => { if (e.key === 'Escape') setShowServices(false); }}
                   >
                     <span className="font-sans text-[12px] uppercase tracking-[0.2em] font-medium transition-colors duration-300 text-[#C1A173]">
                       Services
                     </span>
                     <span className="absolute bottom-0 left-0 w-0 h-[1px] bg-[#C1A173] transition-all duration-500 group-hover:w-full"></span>
                   </button>
-                  <div className="absolute left-0 mt-2 w-56 bg-white border border-[#EBE5DE] shadow-xl opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto pointer-events-none transition-opacity duration-300 z-50">
-                    <div className="py-2 px-4 text-left">
-                      <Link
-                        to="/photography-videography"
-                        className="block text-[11px] font-serif text-[#1C1917] py-2 border-b border-[#EBE5DE] hover:bg-[#F5F2EE] transition-colors"
-                        onClick={() => setIsMenuOpen(false)}
-                      >
-                        Photography & videography
-                      </Link>
-                      <Link
-                        to="/listing-optimization"
-                        className="block text-[11px] font-serif text-[#1C1917] py-2 border-b border-[#EBE5DE] hover:bg-[#F5F2EE] transition-colors"
-                        onClick={() => setIsMenuOpen(false)}
-                      >
-                        Listing optimization
-                      </Link>
-                      <button
-                        onClick={() => { setIsMenuOpen(false); navigate('/management'); }}
-                        className="w-full text-left text-[11px] font-serif text-[#1C1917] py-2 hover:bg-[#F5F2EE] transition-colors"
-                      >
-                        Management
-                      </button>
-                    </div>
+                  <div className={`absolute left-0 mt-2 w-56 bg-white border border-[#EBE5DE] shadow-xl transition-opacity duration-300 z-50 ${showServices ? 'opacity-100 pointer-events-auto' : 'opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto pointer-events-none'}`}>
+                    <ServicesDropdown onClose={() => { setIsMenuOpen(false); setShowServices(false); }} />
                   </div>
                 </div>
               </div>
@@ -315,6 +213,39 @@ const Navbar = () => {
 
                       {/* Navigation Links */}
                       <div className="py-4">
+                        {/* Mobile: Consultation + Services collapsible */}
+                        <div className="px-4">
+                          <button
+                            onClick={() => {
+                              if (!isAuthenticated) {
+                                const dest = `${location.pathname}${location.search ? location.search + '&' : '?'}consult=1`;
+                                navigate(`/login?redirect=${encodeURIComponent(dest)}`);
+                                setIsMenuOpen(false);
+                              } else {
+                                setShowConsultModal(true);
+                                setIsMenuOpen(false);
+                              }
+                            }}
+                            className="w-full text-left px-8 py-3 mb-1 uppercase text-[10px] tracking-[0.2em] font-bold text-[#C1A173] bg-transparent hover:bg-white transition-colors"
+                          >
+                            Consultation
+                          </button>
+
+                          <div>
+                            <button
+                              onClick={() => setShowServices(s => !s)}
+                              className="w-full text-left px-8 py-3 mb-1 uppercase text-[10px] tracking-[0.2em] font-bold text-[#C1A173] bg-transparent hover:bg-white transition-colors flex justify-between items-center"
+                            >
+                              <span>Services</span>
+                              <span className="text-sm">{showServices ? '−' : '+'}</span>
+                            </button>
+                            {showServices && (
+                              <div className="pl-8">
+                                <MobileServices onNavigate={() => { setIsMenuOpen(false); setShowServices(false); }} />
+                              </div>
+                            )}
+                          </div>
+                        </div>
                         {!isAuthenticated ? (
                           <>
                             <MenuLink to="/login" label="Client Login" onClick={() => setIsMenuOpen(false)} />
@@ -371,26 +302,6 @@ const Navbar = () => {
   );
 };
 
-// Helper component for styled links
-const MenuLink = ({ to, label, highlight, onClick }) => (
-  <Link
-    to={to}
-    onClick={onClick}
-    className={`
-      flex items-center justify-between px-8 py-3 group transition-all duration-300
-      ${highlight ? 'bg-[#C1A173]/10' : 'hover:bg-white'}
-    `}
-  >
-    <span className={`
-      text-[10px] uppercase tracking-[0.2em] font-bold transition-colors
-      text-[#C1A173]
-    `}>
-      {label}
-    </span>
-    <span className="opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 text-[#C1A173]">
-        <ChevronRight size={14} strokeWidth={1} />
-    </span>
-  </Link>
-);
+import MenuLink from './MenuLink';
 
 export default Navbar;

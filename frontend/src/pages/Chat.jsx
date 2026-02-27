@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from "framer-motion";
 import { IoSend, IoHomeOutline, IoChatbubblesOutline, IoChevronBack } from "react-icons/io5";
 import { useAuth } from "../context/AuthContext";
@@ -8,6 +9,7 @@ export default function Chat() {
   const { user } = useAuth();
   const [chats, setChats] = useState([]);
   const [activeChat, setActiveChat] = useState(null);
+  const [searchParams] = useSearchParams();
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -17,6 +19,15 @@ export default function Chat() {
   useEffect(() => {
     if (user?.id) fetchChats();
   }, [user]);
+
+  // when chats update, if query param chat_id exists select that chat
+  useEffect(() => {
+    const target = searchParams.get('chat_id');
+    if (target && chats.length > 0) {
+      const found = chats.find(c => String(c.id) === target);
+      if (found) setActiveChat(found);
+    }
+  }, [searchParams, chats]);
 
   useEffect(() => {
     if (activeChat) fetchMessages(activeChat.id);
