@@ -2,7 +2,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { FaSearch } from "react-icons/fa";
 import { useState, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
-import api from "../services/api";
+import api, { API_BASE_URL, IMAGE_BASE_URL } from "../services/api";
 
 // --- SUB-COMPONENT: 3D LUXURY CAROUSEL ---
 const LuxuryCarousel = ({ slides }) => {
@@ -199,8 +199,8 @@ export default function Home() {
   ];
 
     // Helper: prepend backend URL to image paths
-    const API_BASE_URL = 'http://localhost:5000'; // Ensure this matches your backend
-    const getImageSrc = (url) => url && !url.startsWith('http') ? `${API_BASE_URL}${url}` : url;
+
+    const getImageSrc = (url) => url && !url.startsWith('http') ? `${IMAGE_BASE_URL}${url}` : url;
 
   // Lifecycle & Handlers
   useEffect(() => {

@@ -4,6 +4,7 @@ import { Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminRoute from "./components/AdminRoute";
+import PublicRoute from "./components/PublicRoute";
 import Header from "./components/Navbar";
 import UserLayout from "./components/UserLayout";
 import Home from "./pages/Home";
@@ -27,11 +28,13 @@ export default function App() {
     <AuthProvider>
       <Routes>
         <Route path="/" element={
-          <>
-            <Header />
-            <Home />
-            <Footer />
-          </>
+          <PublicRoute>
+            <>
+              <Header />
+              <Home />
+              <Footer />
+            </>
+          </PublicRoute>
         } />
 
         <Route path="/login" element={
@@ -120,25 +123,31 @@ export default function App() {
           </AdminRoute>
         } />
         <Route path="/management" element={
-          <>
-            <Header />
-            <Management />
-            <Footer />
-          </>
+          <PublicRoute>
+            <>
+              <Header />
+              <Management />
+              <Footer />
+            </>
+          </PublicRoute>
         } />
         <Route path="/photography-videography" element={
-          <>
-            <Header />
-            <PhotographyVideography />
-            <Footer />
-          </>
+          <PublicRoute>
+            <>
+              <Header />
+              <PhotographyVideography />
+              <Footer />
+            </>
+          </PublicRoute>
         } />
         <Route path="/listing-optimization" element={
-          <>
-            <Header />
-            <ListingOptimization />
-            <Footer />
-          </>
+          <PublicRoute>
+            <>
+              <Header />
+              <ListingOptimization />
+              <Footer />
+            </>
+          </PublicRoute>
         } />
       </Routes>
     </AuthProvider>

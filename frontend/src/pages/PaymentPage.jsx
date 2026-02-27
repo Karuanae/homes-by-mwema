@@ -3,13 +3,12 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaSpinner, FaTimes } from "react-icons/fa";
-import api from "../services/api";
+import api, { API_BASE_URL, IMAGE_BASE_URL } from "../services/api";
 import ChatWindow from "../components/Chat/ChatWindow";
 import socketService from "../services/socketService";
 
 // Helper: prepend backend URL to image paths (same as Home.jsx)
-const API_BASE_URL = 'http://localhost:5000';
-const getImageSrc = (url) => url && !url.startsWith('http') ? `${API_BASE_URL}${url}` : url;
+const getImageSrc = (url) => url && !url.startsWith('http') ? `${IMAGE_BASE_URL}${url}` : url;
 
 export default function PaymentPage() {
   const { id } = useParams();

@@ -1,4 +1,4 @@
-// admindashboard.jsx - COMPLETE UPDATED VERSION WITH REAL-TIME CHAT
+// admindashboard.jsx - COMPLETE UPDATED VERSION WITH CLIENT MANAGEMENT
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -28,10 +28,13 @@ import {
   FaPaperPlane,
   FaTimes,
   FaCrown,
-  FaCheckDouble
+  FaCheckDouble,
+  FaPhone,
+  FaEnvelopeOpen,
+  FaCalendarCheck
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
-import api from "../services/api";
+import api, { API_BASE_URL, IMAGE_BASE_URL } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import ChatWindow from "../components/Chat/ChatWindow";
 import socketService from "../services/socketService";
@@ -66,6 +69,11 @@ export default function AdminDashboard() {
 
   // Upload States
   const [uploading, setUploading] = useState(false);
+
+  // Client Management States
+  const [selectedClient, setSelectedClient] = useState(null);
+  const [deletingClient, setDeletingClient] = useState(false);
+  const [loadingClientDetails, setLoadingClientDetails] = useState(false);
 
   // Form State - Simplified approach
   const [newProperty, setNewProperty] = useState({
@@ -536,18 +544,93 @@ export default function AdminDashboard() {
     setNewProperty({...newProperty, amenities: updated});
   };
 
+  // ========== CLIENT MANAGEMENT HANDLERS ==========
+  const handleViewClient = async (client) => {
+    setLoadingClientDetails(true);
+    try {
+      // Fetch detailed user info from new endpoint
+      const response = await api.admin.getUserDetails(client.id);
+      const details = response.data;
+      
+      setSelectedClient({
+        ...client,
+        stats: details.stats || {
+          bookings: client.bookings_count || 0,
+          spent: client.total_spent || 0,
+          chats: client.chats_count || 0
+        },
+        recentActivity: details.recent_activity || [
+          `Joined: ${new Date(client.created_at).toLocaleDateString()}`,
+          `Last login: ${details.last_login ? new Date(details.last_login).toLocaleDateString() : 'N/A'}`
+        ]
+      });
+    } catch (error) {
+      console.error('Error fetching client details:', error);
+      // Fallback to basic info
+      setSelectedClient({
+        ...client,
+        stats: {
+          bookings: client.bookings_count || 0,
+          spent: client.total_spent || 0,
+          chats: client.chats_count || 0
+        },
+        recentActivity: [
+          `Joined: ${new Date(client.created_at).toLocaleDateString()}`,
+          'Details temporarily unavailable'
+        ]
+      });
+    } finally {
+      setLoadingClientDetails(false);
+    }
+  };
+
+  const handleMessageClient = async (client) => {
+    try {
+      // Create or get existing chat with this client
+      const response = await api.chats.startChat(client.id, null, null);
+      const chat = response.data.chat;
+      
+      // Switch to messages tab and select this chat
+      setActiveTab('messages');
+      setSelectedChat(chat);
+      
+    } catch (error) {
+      console.error('Error starting chat with client:', error);
+      alert('Could not start chat with this client. Please try again.');
+    }
+  };
+
+  const handleDeleteClient = async (clientId) => {
+    if (!window.confirm('Are you sure you want to delete this client? This action cannot be undone.')) {
+      return;
+    }
+    
+    setDeletingClient(true);
+    try {
+      await api.admin.deleteUser(clientId);
+      // Refresh the customers list
+      fetchCustomers();
+      alert('Client deleted successfully');
+    } catch (error) {
+      console.error('Error deleting client:', error);
+      alert(error.response?.data?.error || 'Failed to delete client. Please try again.');
+    } finally {
+      setDeletingClient(false);
+    }
+  };
+  // ========== END CLIENT MANAGEMENT HANDLERS ==========
+
   // Helper function to get image URL for display
-  const API_BASE_URL = 'http://localhost:5000'; // Ensure this matches your backend
   const getImageUrl = (property) => {
     // Prefer backend image URLs
     if (property.cover_image) {
       return property.cover_image.startsWith('http')
         ? property.cover_image
-        : `${API_BASE_URL}${property.cover_image}`;
+        : `${IMAGE_BASE_URL}${property.cover_image}`;
     }
     if (property.images && property.images.length > 0) {
       const imgUrl = property.images[0];
-      return imgUrl.startsWith('http') ? imgUrl : `${API_BASE_URL}${imgUrl}`;
+      return imgUrl.startsWith('http') ? imgUrl : `${IMAGE_BASE_URL}${imgUrl}`;
     }
     // Fallback to local default image
     return '/default-property.jpg';
@@ -610,9 +693,9 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="flex h-screen bg-[#F9F8F6] font-sans text-stone-800 overflow-hidden">
-      {/* Sidebar */}
-      <aside className="w-72 bg-[#1C2321] text-[#E5E5E0] flex flex-col shadow-2xl z-20">
+    <div className="flex flex-col md:flex-row h-screen bg-[#F9F8F6] font-sans text-stone-800 overflow-hidden">
+      {/* Sidebar - Hidden on mobile */}
+      <aside className="hidden md:flex md:w-72 bg-[#1C2321] text-[#E5E5E0] flex-col shadow-2xl z-20">
         <div className="p-10 border-b border-stone-700/50">
           <h1 className="text-2xl font-serif tracking-wider text-white">
             MWEMA<span className="text-stone-400">.</span>
@@ -662,13 +745,6 @@ export default function AdminDashboard() {
           </div>
           
           <button
-            onClick={() => navigate('/')}
-            className="w-full flex items-center gap-3 text-stone-400 hover:text-white transition-colors uppercase tracking-widest text-xs py-2"
-          >
-            <FaHome /> Back to Home
-          </button>
-          
-          <button
             onClick={handleLogout}
             className="w-full flex items-center gap-3 text-stone-400 hover:text-red-300 transition-colors uppercase tracking-widest text-xs py-2"
           >
@@ -678,13 +754,13 @@ export default function AdminDashboard() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto p-12 relative">
-        <header className="flex justify-between items-end mb-12 border-b border-stone-200 pb-6">
+      <main className="flex-1 overflow-y-auto p-4 md:p-12 relative">
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 md:mb-12 border-b border-stone-200 pb-4 md:pb-6">
           <div>
-            <h2 className="text-4xl font-serif text-[#1C2321] mb-2">
+            <h2 className="text-2xl md:text-4xl font-serif text-[#1C2321] mb-2">
               {navItems.find((item) => item.id === activeTab)?.label}
             </h2>
-            <p className="text-stone-500 font-serif italic">
+            <p className="text-stone-500 font-serif italic text-sm md:text-base">
               {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </p>
           </div>
@@ -703,6 +779,25 @@ export default function AdminDashboard() {
              </div>
           </div>
         </header>
+
+        {/* Mobile Tab Navigation */}
+        <div className="md:hidden mb-6 -mx-4 px-4 pb-4 border-b border-stone-200 overflow-x-auto">
+          <div className="flex gap-2 min-w-min">
+            {navItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`px-3 py-2 rounded text-xs whitespace-nowrap transition-all ${
+                  activeTab === item.id
+                    ? 'bg-[#1C2321] text-white'
+                    : 'bg-stone-100 text-stone-600 border border-stone-200'
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* Dashboard Overview */}
         {activeTab === "dashboard" && (
@@ -835,8 +930,8 @@ export default function AdminDashboard() {
 
         {/* Bookings/Reservations Tab */}
         {activeTab === "bookings" && (
-            <div className="bg-white border border-stone-100 p-8">
-                <table className="w-full text-left border-collapse">
+            <div className="bg-white border border-stone-100 p-8 overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[1000px]">
                     <thead>
                         <tr className="border-b-2 border-[#1C2321]">
                             {["Property", "Guest", "Dates", "Status", "Amount", "Actions"].map(head => (
@@ -885,54 +980,222 @@ export default function AdminDashboard() {
             </div>
         )}
 
-        {/* Clientele Tab */}
+        {/* ========== UPDATED CLIENTELE TAB WITH FULL MANAGEMENT ========== */}
         {activeTab === "customers" && (
            <div className="bg-white border border-stone-100 p-8">
+              {/* Client Details Modal */}
+              <AnimatePresence>
+                {selectedClient && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                    onClick={() => setSelectedClient(null)}
+                  >
+                    <motion.div
+                      initial={{ scale: 0.95, y: 20 }}
+                      animate={{ scale: 1, y: 0 }}
+                      exit={{ scale: 0.95, y: 20 }}
+                      className="bg-white max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="p-8">
+                        <div className="flex justify-between items-start mb-6">
+                          <h3 className="text-2xl font-serif text-[#1C2321]">Client Profile</h3>
+                          <button
+                            onClick={() => setSelectedClient(null)}
+                            className="text-stone-400 hover:text-stone-600"
+                          >
+                            <FaTimes size={20} />
+                          </button>
+                        </div>
+
+                        {selectedClient && (
+                          <div className="space-y-6">
+                            {loadingClientDetails ? (
+                              <div className="flex justify-center py-12">
+                                <div className="w-8 h-8 border-2 border-stone-200 border-t-stone-800 rounded-full animate-spin"></div>
+                              </div>
+                            ) : (
+                              <>
+                                {/* Avatar & Basic Info */}
+                                <div className="flex items-center gap-6 pb-6 border-b border-stone-100">
+                                  <div className="w-20 h-20 rounded-full bg-[#1C2321] text-white flex items-center justify-center text-2xl font-serif">
+                                    {selectedClient.name?.charAt(0) || selectedClient.email?.charAt(0)}
+                                  </div>
+                                  <div>
+                                    <h4 className="text-xl font-serif text-[#1C2321]">{selectedClient.name || 'Unnamed'}</h4>
+                                    <p className="text-stone-500 text-sm mt-1">Member since {new Date(selectedClient.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
+                                    <span className="inline-block mt-2 text-xs uppercase tracking-widest border border-stone-200 px-2 py-1 text-stone-500">
+                                      {selectedClient.role || 'Guest'}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Contact Information */}
+                                <div className="grid grid-cols-2 gap-6">
+                                  <div>
+                                    <p className="text-[10px] uppercase tracking-widest text-stone-400 mb-1">Email Address</p>
+                                    <p className="text-stone-800 flex items-center gap-2">
+                                      <FaEnvelopeOpen className="text-stone-400" size={12} />
+                                      {selectedClient.email}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-[10px] uppercase tracking-widest text-stone-400 mb-1">Phone Number</p>
+                                    <p className="text-stone-800 flex items-center gap-2">
+                                      <FaPhone className="text-stone-400" size={12} />
+                                      {selectedClient.phone || 'Not provided'}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {/* Stats */}
+                                <div className="grid grid-cols-3 gap-4 py-6 border-y border-stone-100">
+                                  <div className="text-center">
+                                    <p className="text-2xl font-serif text-[#1C2321]">{selectedClient.stats?.bookings || 0}</p>
+                                    <p className="text-[10px] uppercase tracking-widest text-stone-400">Bookings</p>
+                                  </div>
+                                  <div className="text-center border-x border-stone-100">
+                                    <p className="text-2xl font-serif text-[#1C2321]">
+                                      Ksh {selectedClient.stats?.spent?.toLocaleString() || 0}
+                                    </p>
+                                    <p className="text-[10px] uppercase tracking-widest text-stone-400">Total Spent</p>
+                                  </div>
+                                  <div className="text-center">
+                                    <p className="text-2xl font-serif text-[#1C2321]">{selectedClient.stats?.chats || 0}</p>
+                                    <p className="text-[10px] uppercase tracking-widest text-stone-400">Chats</p>
+                                  </div>
+                                </div>
+
+                                {/* Recent Activity */}
+                                <div>
+                                  <h5 className="font-serif text-lg text-[#1C2321] mb-4 flex items-center gap-2">
+                                    <FaCalendarCheck className="text-stone-400" /> Recent Activity
+                                  </h5>
+                                  <div className="space-y-3">
+                                    {selectedClient.recentActivity?.length > 0 ? (
+                                      selectedClient.recentActivity.map((activity, idx) => (
+                                        <div key={idx} className="flex items-center gap-3 text-sm">
+                                          <div className="w-1 h-1 rounded-full bg-[#D4AF37]"></div>
+                                          <span className="text-stone-600">{activity}</span>
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <p className="text-stone-400 italic text-sm">No recent activity</p>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Action Buttons */}
+                                <div className="flex gap-4 pt-6 border-t border-stone-100">
+                                  <button
+                                    onClick={() => {
+                                      handleMessageClient(selectedClient);
+                                      setSelectedClient(null);
+                                    }}
+                                    className="flex-1 bg-[#1C2321] text-white py-3 hover:bg-[#2C3632] transition-colors flex items-center justify-center gap-2 text-xs uppercase tracking-widest"
+                                  >
+                                    <FaComments /> Message Client
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      handleDeleteClient(selectedClient.id);
+                                      setSelectedClient(null);
+                                    }}
+                                    className="flex-1 border border-red-200 text-red-600 py-3 hover:bg-red-50 transition-colors flex items-center justify-center gap-2 text-xs uppercase tracking-widest"
+                                  >
+                                    <FaTrash /> Delete Account
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               {customers.length === 0 ? (
                 <div className="text-center py-20">
-                    <FaUsers className="text-4xl text-stone-200 mx-auto mb-4" />
-                    <p className="font-serif text-stone-400 italic">Registry is currently empty.</p>
+                  <FaUsers className="text-4xl text-stone-200 mx-auto mb-4" />
+                  <p className="font-serif text-stone-400 italic">Registry is currently empty.</p>
                 </div>
               ) : (
-                <table className="w-full text-left border-collapse">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse min-w-[1200px]">
                     <thead>
-                        <tr className="border-b-2 border-[#1C2321]">
-                            <th className="py-4 px-4 font-serif text-[#1C2321] text-lg font-normal">Identity</th>
-                            <th className="py-4 px-4 font-serif text-[#1C2321] text-lg font-normal">Contact</th>
-                            <th className="py-4 px-4 font-serif text-[#1C2321] text-lg font-normal">Role</th>
-                            <th className="py-4 px-4 font-serif text-[#1C2321] text-lg font-normal">Member Since</th>
-                            <th className="py-4 px-4 font-serif text-[#1C2321] text-lg font-normal">Actions</th>
-                        </tr>
+                      <tr className="border-b-2 border-[#1C2321]">
+                        <th className="py-4 px-4 font-serif text-[#1C2321] text-lg font-normal">Identity</th>
+                        <th className="py-4 px-4 font-serif text-[#1C2321] text-lg font-normal">Email</th>
+                        <th className="py-4 px-4 font-serif text-[#1C2321] text-lg font-normal">Phone</th>
+                        <th className="py-4 px-4 font-serif text-[#1C2321] text-lg font-normal">Role</th>
+                        <th className="py-4 px-4 font-serif text-[#1C2321] text-lg font-normal">Joined</th>
+                        <th className="py-4 px-4 font-serif text-[#1C2321] text-lg font-normal">Actions</th>
+                      </tr>
                     </thead>
                     <tbody>
-                        {customers.map((customer) => (
-                            <tr key={customer.id} className="border-b border-stone-100 hover:bg-[#F9F8F6] transition-colors">
-                                <td className="py-6 px-4">
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-10 h-10 rounded-full bg-[#1C2321] text-white flex items-center justify-center font-serif text-sm">
-                                            {customer.name?.charAt(0) || customer.email?.charAt(0)}
-                                        </div>
-                                        <span className="font-serif text-[#1C2321]">{customer.name}</span>
-                                    </div>
-                                </td>
-                                <td className="py-6 px-4 text-stone-600 font-light">{customer.email}</td>
-                                <td className="py-6 px-4">
-                                    <span className="text-xs uppercase tracking-widest border border-stone-200 px-2 py-1 text-stone-500">
-                                        {customer.role || 'Guest'}
-                                    </span>
-                                </td>
-                                <td className="py-6 px-4 text-stone-500 font-light text-sm">
-                                    {new Date(customer.created_at).toLocaleDateString()}
-                                </td>
-                                <td className="py-6 px-4">
-                                    <button className="text-stone-400 hover:text-[#1C2321]">
-                                        <FaEye />
-                                    </button>
-                                </td>
-                            </tr>
-                        ))}
+                      {customers.map((customer) => (
+                        <tr key={customer.id} className="border-b border-stone-100 hover:bg-[#F9F8F6] transition-colors">
+                          <td className="py-6 px-4">
+                            <div className="flex items-center gap-4">
+                              <div className="w-10 h-10 rounded-full bg-[#1C2321] text-white flex items-center justify-center font-serif text-sm">
+                                {customer.name?.charAt(0) || customer.email?.charAt(0)}
+                              </div>
+                              <span className="font-serif text-[#1C2321]">{customer.name || 'Unnamed'}</span>
+                            </div>
+                          </td>
+                          <td className="py-6 px-4 text-stone-600 font-light">{customer.email}</td>
+                          <td className="py-6 px-4 text-stone-600 font-light">{customer.phone || '—'}</td>
+                          <td className="py-6 px-4">
+                            <span className="text-xs uppercase tracking-widest border border-stone-200 px-2 py-1 text-stone-500">
+                              {customer.role || 'guest'}
+                            </span>
+                          </td>
+                          <td className="py-6 px-4 text-stone-500 font-light text-sm">
+                            {new Date(customer.created_at).toLocaleDateString()}
+                          </td>
+                          <td className="py-6 px-4">
+                            <div className="flex items-center gap-3">
+                              {/* View Details */}
+                              <button 
+                                onClick={() => handleViewClient(customer)}
+                                className="text-stone-400 hover:text-[#1C2321] transition-colors p-2 hover:bg-stone-100 rounded-full"
+                                title="View Details"
+                                disabled={deletingClient}
+                              >
+                                <FaEye size={16} />
+                              </button>
+                              
+                              {/* Message Client */}
+                              <button 
+                                onClick={() => handleMessageClient(customer)}
+                                className="text-stone-400 hover:text-[#1C2321] transition-colors p-2 hover:bg-stone-100 rounded-full"
+                                title="Message Client"
+                                disabled={deletingClient}
+                              >
+                                <FaComments size={16} />
+                              </button>
+                              
+                              {/* Delete Client */}
+                              <button 
+                                onClick={() => handleDeleteClient(customer.id)}
+                                className="text-stone-400 hover:text-red-600 transition-colors p-2 hover:bg-red-50 rounded-full"
+                                title="Delete Client"
+                                disabled={deletingClient}
+                              >
+                                <FaTrash size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
-                </table>
+                  </table>
+                </div>
               )}
            </div>
         )}
@@ -1088,7 +1351,7 @@ export default function AdminDashboard() {
                             </div>
                             <div>
                               <h4 className="font-serif text-lg text-[#1C2321] group-hover:text-stone-800">
-                                {chat.user_name || `Client ${chat.user_id}`}
+                                {chat.user_name}
                               </h4>
                               <p className="text-sm text-stone-500 truncate max-w-md">
                                 {chat.last_message || 'No messages yet'}

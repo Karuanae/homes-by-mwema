@@ -1,10 +1,12 @@
 // api.js - COMPLETE UPDATED VERSION WITH SIMPLIFIED UPLOAD
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://flask-app-production-c760.up.railway.app/api';
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'https://flask-app-production-c760.up.railway.app';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://flask-app-production-c760.up.railway.app/api';
+export const IMAGE_BASE_URL = import.meta.env.VITE_IMAGE_URL || (import.meta.env.VITE_API_URL || 'https://flask-app-production-c760.up.railway.app').replace('/api', '');
+export const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'https://flask-app-production-c760.up.railway.app';
 
 console.log('🚀 PRODUCTION MODE - API URL:', API_BASE_URL);
+console.log('🖼️  IMAGE URL:', IMAGE_BASE_URL);
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -20,6 +22,10 @@ api.interceptors.request.use(
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+    // For FormData, let axios set the proper multipart/form-data header automatically
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
     }
     return config;
   },
@@ -129,21 +135,13 @@ export const propertiesAPI = {
 export const uploadAPI = {
   // NEW: Single endpoint for property with images (Simplified Approach)
   createPropertyWithImages: async (formData) => {
-    const response = await api.post('/admin/properties/with-images', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const response = await api.post('/admin/properties/with-images', formData);
     return response;
   },
 
   // NEW: Add images to existing property
   addPropertyImages: async (propertyId, formData) => {
-    const response = await api.post(`/admin/properties/${propertyId}/images`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const response = await api.post(`/admin/properties/${propertyId}/images`, formData);
     return response;
   },
 
@@ -151,11 +149,7 @@ export const uploadAPI = {
   uploadPropertyImageToDB: async (file) => {
     const formData = new FormData();
     formData.append('image', file);
-    const response = await api.post('/admin/upload/property-image', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const response = await api.post('/admin/upload/property-image', formData);
     return response;
   },
 
@@ -164,11 +158,7 @@ export const uploadAPI = {
     files.forEach((file) => {
       formData.append('images', file);
     });
-    const response = await api.post('/admin/upload/property-images', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const response = await api.post('/admin/upload/property-images', formData);
     return response;
   },
 
@@ -176,11 +166,7 @@ export const uploadAPI = {
   uploadFile: async (file) => {
     const formData = new FormData();
     formData.append('file', file);
-    const response = await api.post('/upload', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const response = await api.post('/upload', formData);
     return response;
   },
 
@@ -189,22 +175,14 @@ export const uploadAPI = {
     files.forEach((file, index) => {
       formData.append(`files`, file);
     });
-    const response = await api.post('/upload/multiple', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const response = await api.post('/upload/multiple', formData);
     return response;
   },
 
   uploadPropertyImage: async (file) => {
     const formData = new FormData();
     formData.append('image', file);
-    const response = await api.post('/upload/property', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const response = await api.post('/upload/property', formData);
     return response;
   },
 
@@ -213,11 +191,7 @@ export const uploadAPI = {
     files.forEach((file) => {
       formData.append('images', file);
     });
-    const response = await api.post('/upload/property-images', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const response = await api.post('/upload/property-images', formData);
     return response;
   },
 };
@@ -517,21 +491,25 @@ export const reportsAPI = {
 export const adminAPI = {
   // NEW: Single endpoint for property creation with images
   createPropertyWithImages: async (formData) => {
-    const response = await api.post('/admin/properties/with-images', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const response = await api.post('/admin/properties/with-images', formData);
     return response;
   },
 
   // NEW: Add images to existing property
   addPropertyImages: async (propertyId, formData) => {
-    const response = await api.post(`/admin/properties/${propertyId}/images`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const response = await api.post(`/admin/properties/${propertyId}/images`, formData);
+    return response;
+  },
+
+  // NEW: Get detailed user information
+  getUserDetails: async (userId) => {
+    const response = await api.get(`/admin/users/${userId}/details`);
+    return response;
+  },
+
+  // NEW: Delete a user
+  deleteUser: async (userId) => {
+    const response = await api.delete(`/admin/users/${userId}`);
     return response;
   },
 

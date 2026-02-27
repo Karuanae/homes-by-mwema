@@ -273,25 +273,27 @@ export default function ChatWindow({ chatId, currentUser, onClose, propertyName 
       }
       socketService.typing(chatId, false);
       
-      // Send via WebSocket (real-time)
-      socketService.sendMessage(chatId, messageContent, currentUser.name);
-      
-      // Also send via REST API for persistence
-      await api.chats.sendMessage(chatId, {
+      // ONLY send via REST API - it will broadcast via socket to other clients
+      // This prevents duplicate messages (before we were sending both ways)
+      const response = await api.chats.sendMessage(chatId, {
         message: messageContent,
         sender_id: currentUser.id,
         sender_name: currentUser.name,
         is_host: currentUser.role === 'admin'
       });
       
-      console.log('✅ Message sent successfully');
+      console.log('✅ Message sent successfully:', response.data);
       
-      // Update the temporary message with real ID when socket confirms
-      setTimeout(() => {
+      // Update the temporary message with the real ID and mark as confirmed
+      if (response.data?.id) {
+        setMessages(prev => prev.map(msg => 
+          msg.id === optimisticMessage.id ? { ...msg, id: response.data.id, is_temp: false } : msg
+        ));
+      } else {
         setMessages(prev => prev.map(msg => 
           msg.id === optimisticMessage.id ? { ...msg, is_temp: false } : msg
         ));
-      }, 1000);
+      }
       
     } catch (error) {
       console.error('❌ Error sending message:', error);

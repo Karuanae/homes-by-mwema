@@ -1,14 +1,21 @@
 from flask import Blueprint, request, jsonify
-from models import db, Chat, ChatMessage
+from models import db, Chat, ChatMessage, User
 from datetime import datetime
 
 chat_bp = Blueprint('chats', __name__)
 
 
 def serialize_chat(c):
+    # Get user info
+    user = User.query.get(c.user_id)
+    user_name = user.name if user else f"Unknown User {c.user_id}"
+    user_phone = user.phone if user else None
+    
     return {
         'id': c.id,
         'user_id': c.user_id,
+        'user_name': user_name,
+        'user_phone': user_phone,
         'property_id': c.property_id,
         'booking_id': c.booking_id,
         'chat_type': c.chat_type,

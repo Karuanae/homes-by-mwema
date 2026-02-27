@@ -2,7 +2,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import api from "../services/api";
+import api, { IMAGE_BASE_URL } from "../services/api";
 import { MapPin, ChevronLeft, ChevronRight, X, Check } from "lucide-react";
 
 export default function BookingPage() {
@@ -189,8 +189,8 @@ export default function BookingPage() {
   );
 
   // Helper: prepend backend URL to image paths
-  const API_BASE_URL = 'http://localhost:5000'; // Ensure this matches your backend
-  const getImageSrc = (url) => url && !url.startsWith('http') ? `${API_BASE_URL}${url}` : url;
+
+  const getImageSrc = (url) => url && !url.startsWith('http') ? `${IMAGE_BASE_URL}${url}` : url;
 
   // Determine which images to show
   const imagesToShow = viewAllImages ? property.images : property.images.slice(0, 5);

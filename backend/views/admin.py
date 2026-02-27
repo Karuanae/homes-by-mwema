@@ -1,7 +1,7 @@
-# admin.py - COMPLETE UPDATED VERSION
+# admin.py - COMPLETE UPDATED VERSION WITH USER MANAGEMENT
 from flask import Blueprint, request, jsonify, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import db, User, Property, Booking, Payment, Lead, HomepageContent, AdminStats, PropertyImage
+from models import db, User, Property, Booking, Payment, Lead, HomepageContent, AdminStats, PropertyImage, Chat, ChatMessage
 from werkzeug.exceptions import Forbidden
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -665,12 +665,41 @@ def admin_get_stats():
 @admin_bp.route('/users', methods=['GET'])
 @jwt_required()
 def admin_get_users():
-    """Admin: Get all users"""
+    """Admin: Get all users with stats"""
     require_admin()
     users = User.query.all()
     
     result = []
     for user in users:
+        # Get basic counts
+        bookings_count = Booking.query.filter_by(user_id=user.id).count()
+        
+        # Get total spent from completed payments
+        payments = Payment.query.filter_by(
+            user_id=user.id, 
+            status='completed'
+        ).all()
+        total_spent = sum(float(p.amount) for p in payments) if payments else 0
+        
+        # Get chat count
+        chats_count = Chat.query.filter_by(user_id=user.id).count()
+        
+        # Get last activity
+        last_activity = None
+        last_message = ChatMessage.query.join(Chat)\
+            .filter(Chat.user_id == user.id)\
+            .order_by(ChatMessage.timestamp.desc())\
+            .first()
+        if last_message:
+            last_activity = last_message.timestamp
+        
+        if not last_activity:
+            last_booking = Booking.query.filter_by(user_id=user.id)\
+                .order_by(Booking.created_at.desc())\
+                .first()
+            if last_booking:
+                last_activity = last_booking.created_at
+        
         result.append({
             'id': user.id,
             'name': user.name,
@@ -680,10 +709,145 @@ def admin_get_users():
             'is_guest': user.is_guest,
             'avatar_url': user.avatar_url,
             'created_at': user.created_at.isoformat() if user.created_at else None,
-            'bookings_count': len(user.bookings)
+            'bookings_count': bookings_count,
+            'total_spent': float(total_spent),
+            'chats_count': chats_count,
+            'last_activity': last_activity.isoformat() if last_activity else None
         })
     
     return jsonify(result)
+
+# ========== NEW: GET USER DETAILS ==========
+@admin_bp.route('/users/<int:user_id>/details', methods=['GET'])
+@jwt_required()
+def admin_get_user_details(user_id):
+    """Admin: Get detailed user information including stats"""
+    require_admin()
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    
+    try:
+        # Get user statistics
+        bookings_count = Booking.query.filter_by(user_id=user_id).count()
+        
+        # Calculate total spent from completed payments
+        payments = Payment.query.filter_by(
+            user_id=user_id, 
+            status='completed'
+        ).all()
+        total_spent = sum(float(p.amount) for p in payments) if payments else 0
+        
+        # Get chat count
+        chats_count = Chat.query.filter_by(user_id=user_id).count()
+        
+        # Get recent bookings (last 3)
+        recent_bookings = Booking.query.filter_by(user_id=user_id)\
+            .order_by(Booking.created_at.desc())\
+            .limit(3)\
+            .all()
+        
+        # Get recent messages (last 3)
+        recent_messages = ChatMessage.query.join(Chat)\
+            .filter(Chat.user_id == user_id)\
+            .order_by(ChatMessage.timestamp.desc())\
+            .limit(3)\
+            .all()
+        
+        # Format recent activity
+        recent_activity = []
+        
+        for booking in recent_bookings:
+            property_name = booking.property.name if booking.property else 'Unknown property'
+            recent_activity.append(f"Booked: {property_name} on {booking.created_at.strftime('%b %d, %Y')}")
+        
+        for message in recent_messages:
+            recent_activity.append(f"Message: \"{message.content[:30]}...\" on {message.timestamp.strftime('%b %d, %Y')}")
+        
+        # If no activity, add a default message
+        if not recent_activity:
+            recent_activity = [f"User joined on {user.created_at.strftime('%b %d, %Y')}"]
+        
+        # Get last login (using updated_at as proxy)
+        last_login = user.updated_at if user.updated_at else user.created_at
+        
+        return jsonify({
+            'user_id': user.id,
+            'name': user.name,
+            'email': user.email,
+            'phone': user.phone,
+            'role': user.role,
+            'is_guest': user.is_guest,
+            'created_at': user.created_at.isoformat() if user.created_at else None,
+            'last_login': last_login.isoformat() if last_login else None,
+            'stats': {
+                'bookings_count': bookings_count,
+                'total_spent': float(total_spent),
+                'chats_count': chats_count
+            },
+            'recent_activity': recent_activity[:5]  # Limit to 5 items
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ Error getting user details: {str(e)}")
+        return jsonify({'error': f'Failed to get user details: {str(e)}'}), 500
+
+# ========== NEW: DELETE USER ==========
+@admin_bp.route('/users/<int:user_id>', methods=['DELETE'])
+@jwt_required()
+def admin_delete_user(user_id):
+    """Admin: Delete a user and all related data"""
+    require_admin()
+    
+    # Get current admin user
+    current_user_id = get_jwt_identity()
+    
+    # Don't allow deleting yourself
+    if current_user_id == user_id:
+        return jsonify({'error': 'Cannot delete your own account'}), 400
+    
+    # Find the user to delete
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    
+    # Don't allow deleting other admins
+    if user.role == 'admin':
+        return jsonify({'error': 'Cannot delete other admin users'}), 403
+    
+    try:
+        print(f"🗑️ Deleting user {user_id}: {user.email}")
+        
+        # IMPORTANT: Handle related records in correct order
+        
+        # 1. Delete user's chat messages (through chats)
+        for chat in user.chats:
+            ChatMessage.query.filter_by(chat_id=chat.id).delete()
+        
+        # 2. Delete user's chats
+        Chat.query.filter_by(user_id=user_id).delete()
+        
+        # 3. Delete user's payments
+        Payment.query.filter_by(user_id=user_id).delete()
+        
+        # 4. Delete user's bookings
+        Booking.query.filter_by(user_id=user_id).delete()
+        
+        # 5. Delete user's leads (if assigned)
+        Lead.query.filter_by(assigned_to_id=user_id).delete()
+        
+        # 6. Finally delete the user
+        db.session.delete(user)
+        db.session.commit()
+        
+        print(f"✅ User {user_id} deleted successfully")
+        return jsonify({'message': 'User deleted successfully'}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error deleting user: {str(e)}")
+        return jsonify({'error': f'Failed to delete user: {str(e)}'}), 500
 
 # ========== BOOKING MANAGEMENT ==========
 @admin_bp.route('/bookings', methods=['GET'])

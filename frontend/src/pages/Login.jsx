@@ -3,11 +3,23 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { FaEye, FaEyeSlash, FaSpinner, FaGoogle } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
+import { API_BASE_URL } from '../services/api';
 
 export default function Login() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { login: authLogin } = useAuth();
+  const { login: authLogin, user, loading } = useAuth();
+  
+  // Redirect if already logged in
+  useEffect(() => {
+    if (!loading && user) {
+      if (user?.role === 'admin') {
+        navigate('/admin');
+      } else {
+        navigate('/');
+      }
+    }
+  }, [user, loading, navigate]);
   
   const [formData, setFormData] = useState({
     email: '',
@@ -21,6 +33,9 @@ export default function Login() {
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
+
+  // Prevent rendering if already authenticated
+  if (loading) return <div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-stone-900"></div></div>;
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -66,7 +81,7 @@ export default function Login() {
         setError('');
         try {
           // Send credential to backend for verification
-          const res = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/auth/google`, {
+          const res = await fetch(`${API_BASE_URL.replace('/api', '')}/api/auth/google`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ credential: response.credential })

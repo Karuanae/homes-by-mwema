@@ -6,7 +6,7 @@ import {
   FaPhone, FaQuestionCircle, FaBed, FaSearch, 
   FaFilter, FaChevronRight, FaCrown, FaCalendarAlt, FaHistory, FaMoneyBillWave, FaExclamationTriangle
 } from "react-icons/fa";
-import api from "../services/api";
+import api, { IMAGE_BASE_URL } from "../services/api";
 
 export default function MyBookings() {
   const location = useLocation();
@@ -181,7 +181,7 @@ export default function MyBookings() {
                 {/* Visual Side */}
                 <div className="col-span-12 md:col-span-5 mb-6 md:mb-0">
                   <div className="relative aspect-[4/5] overflow-hidden">
-                    <img src={booking.propertyImage} className="w-full h-full object-cover grayscale-[0.3] group-hover:grayscale-0 transition-all duration-1000 group-hover:scale-105" alt="" />
+                    <img src={booking.propertyImage && !booking.propertyImage.startsWith('http') ? `${IMAGE_BASE_URL}${booking.propertyImage}` : booking.propertyImage} className="w-full h-full object-cover grayscale-[0.3] group-hover:grayscale-0 transition-all duration-1000 group-hover:scale-105" alt="" />
                     <div className={`absolute top-6 left-6 px-4 py-2 text-[9px] uppercase tracking-[0.2em] font-bold shadow-2xl ${getStatusStyle(booking.status)}`}>
                       {booking.status}
                     </div>

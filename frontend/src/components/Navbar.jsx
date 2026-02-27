@@ -26,6 +26,7 @@ const Navbar = () => {
   const navigate = useNavigate();
 
   const [showToast, setShowToast] = useState(false);
+  const [notifications, setNotifications] = useState([]);
 
 
 
@@ -43,20 +44,82 @@ const Navbar = () => {
   }, [location, isAuthenticated, navigate, setIsMenuOpen, setShowServices, setShowConsultModal]);
 
   useEffect(() => {
+    // Only fetch notifications for authenticated users who are not admins
     if (!isAuthenticated || !user) return;
+    
     let isMounted = true;
-    const fetchUnread = async () => {
+    const fetchNotifications = async () => {
       try {
-        const res = await api.chats.getUnreadCount(user.id);
-        const count = res.data?.unread_count ?? res.data?.count ?? res.data?.unread ?? 0;
-        if (isMounted) setShowToast(count > 0);
+        const notificationsList = [];
+        
+        // Only admins see unread message notifications
+        if (user.role === 'admin') {
+          // Fetch unread messages FROM GUESTS
+          try {
+            const chatRes = await api.chats.getUnreadCount();
+            const unreadCount = chatRes.data?.unread_count ?? chatRes.data?.count ?? chatRes.data?.unread ?? 0;
+            if (unreadCount > 0) {
+              notificationsList.push({
+                id: 'chat-' + Date.now(),
+                type: 'message',
+                title: 'New Guest Messages',
+                message: `You have ${unreadCount} unread message${unreadCount > 1 ? 's' : ''} from guests.`,
+                icon: 'message',
+                action: 'View Messages',
+                route: '/admin/messages',
+                timestamp: new Date()
+              });
+            }
+          } catch (err) {
+            console.error('Chat fetch error', err);
+          }
+        }
+        
+        // Guests see upcoming bookings
+        if (user.role !== 'admin') {
+          try {
+            const bookingsRes = await api.bookings.getUserBookings();
+            const upcomingBookings = bookingsRes.data?.filter(b => b.status === 'upcoming').slice(0, 1);
+            if (upcomingBookings && upcomingBookings.length > 0) {
+              const booking = upcomingBookings[0];
+              notificationsList.push({
+                id: 'booking-' + booking.id,
+                type: 'booking',
+                title: 'Upcoming Booking',
+                message: `Your booking at ${booking.propertyName} is coming up on ${new Date(booking.checkIn).toLocaleDateString()}.`,
+                icon: 'calendar',
+                action: 'View Booking',
+                route: '/my-bookings',
+                timestamp: new Date()
+              });
+            }
+          } catch (err) {
+            console.error('Booking fetch error', err);
+          }
+        }
+        
+        if (isMounted) {
+          setNotifications(notificationsList);
+          setShowToast(notificationsList.length > 0);
+        }
       } catch (err) {
-        console.error('Unread fetch error', err);
+        console.error('Notification fetch error', err);
       }
     };
-    fetchUnread();
+    fetchNotifications();
     return () => { isMounted = false; };
   }, [isAuthenticated, user, location]);
+
+  // Auto-dismiss toast notification after 5 seconds
+  useEffect(() => {
+    if (!showToast) return;
+    
+    const timer = setTimeout(() => {
+      setShowToast(false);
+    }, 5000); // 5 seconds
+    
+    return () => clearTimeout(timer);
+  }, [showToast]);
 
   // Close menu on outside click
   useEffect(() => {
@@ -80,32 +143,73 @@ const Navbar = () => {
     navigate('/');
   };
 
+  // Get icon based on notification type
+  const getNotificationIcon = (type) => {
+    switch(type) {
+      case 'message': return <MessageSquare size={16} />;
+      case 'booking': return <Calendar size={16} />;
+      case 'payment': return <Bell size={16} />;
+      case 'consultation': return <Bell size={16} />;
+      default: return <Bell size={16} />;
+    }
+  };
+
+  // Get title color based on notification type
+  const getTitleColor = (type) => {
+    switch(type) {
+      case 'message': return 'text-[#C1A173]';
+      case 'booking': return 'text-blue-400';
+      case 'payment': return 'text-green-400';
+      case 'consultation': return 'text-amber-400';
+      default: return 'text-[#C1A173]';
+    }
+  };
+
   return (
     <>
       <ConsultationModal isOpen={showConsultModal} onClose={() => setShowConsultModal(false)} />
 
-      {/* --- TOAST NOTIFICATION --- */}
+      {/* --- TOAST NOTIFICATIONS (Only for authenticated regular users, not admins or guests) --- */}
       <AnimatePresence>
-        {showToast && (
+        {showToast && isAuthenticated && user && user.role !== 'admin' && notifications.length > 0 && (
           <motion.div 
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95 }}
             className="fixed top-28 right-8 z-[70]"
           >
-            <div className="bg-[#1C1917] text-[#F5F2EE] p-5 shadow-2xl flex items-start gap-4 max-w-sm border-l-2 border-[#C1A173]">
-              <div className="mt-1 text-[#C1A173]">
-                <MessageSquare size={16} />
-              </div>
-              <div className="flex-1">
-                <p className="text-[10px] uppercase tracking-[0.15em] text-[#C1A173] mb-1">Concierge</p>
-                <p className="font-serif italic text-sm text-stone-300">"You have a new message waiting."</p>
-                <div className="flex gap-4 mt-3">
-                  <button onClick={() => { setShowToast(false); navigate('/chat'); }} className="text-[10px] uppercase tracking-widest border-b border-[#F5F2EE] pb-0.5 hover:text-[#C1A173] hover:border-[#C1A173] transition-colors">Read</button>
-                  <button onClick={() => setShowToast(false)} className="text-[10px] uppercase tracking-widest text-stone-500 hover:text-stone-300 transition-colors">Dismiss</button>
+            {notifications.map((notification, index) => (
+              <div key={notification.id} className={`${index === 0 ? 'block' : 'hidden'}`}>
+                <div className="bg-[#1C1917] text-[#F5F2EE] p-5 shadow-2xl flex items-start gap-4 max-w-sm border-l-2 border-[#C1A173]">
+                  <div className={`mt-1 ${getTitleColor(notification.type)}`}>
+                    {getNotificationIcon(notification.type)}
+                  </div>
+                  <div className="flex-1">
+                    <p className={`text-[10px] uppercase tracking-[0.15em] ${getTitleColor(notification.type)} mb-1`}>
+                      {notification.title}
+                    </p>
+                    <p className="font-serif italic text-sm text-stone-300">"{notification.message}"</p>
+                    <div className="flex gap-4 mt-3">
+                      <button 
+                        onClick={() => { 
+                          setShowToast(false); 
+                          navigate(notification.route); 
+                        }} 
+                        className="text-[10px] uppercase tracking-widest border-b border-[#F5F2EE] pb-0.5 hover:text-[#C1A173] hover:border-[#C1A173] transition-colors"
+                      >
+                        {notification.action}
+                      </button>
+                      <button 
+                        onClick={() => setShowToast(false)} 
+                        className="text-[10px] uppercase tracking-widest text-stone-500 hover:text-stone-300 transition-colors"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
+            ))}
           </motion.div>
         )}
       </AnimatePresence>
@@ -169,9 +273,14 @@ const Navbar = () => {
                 <button 
                   onClick={() => navigate('/chat')} 
                   className="relative p-2 transition-opacity hover:opacity-60 text-[#C1A173]"
+                  title={notifications.length > 0 ? `${notifications.length} notification${notifications.length > 1 ? 's' : ''}` : 'No new notifications'}
                 >
                   <Bell size={18} strokeWidth={1.5} />
-                  {showToast && <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-[#C1A173] rounded-full" />}
+                  {notifications.length > 0 && (
+                    <span className="absolute top-0 right-0 w-5 h-5 bg-[#D4AF37] text-[#1C1917] text-xs font-bold rounded-full flex items-center justify-center">
+                      {notifications.length > 9 ? '9+' : notifications.length}
+                    </span>
+                  )}
                 </button>
               )}
 

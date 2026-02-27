@@ -1,5 +1,5 @@
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion'; // used in JSX
 import { FaEye, FaEyeSlash, FaSpinner, FaGoogle } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
@@ -7,6 +7,22 @@ import { useAuth } from '../context/AuthContext';
 export default function Register() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { signup, user, loading } = useAuth();
+  
+  // Redirect if already logged in
+  useEffect(() => {
+    if (!loading && user) {
+      if (user?.role === 'admin') {
+        navigate('/admin');
+      } else {
+        navigate('/');
+      }
+    }
+  }, [user, loading, navigate]);
+  
+  // Prevent rendering if already authenticated
+  if (loading) return <div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-stone-900"></div></div>
+
   const [formData, setFormData] = useState({
     name: '', email: '', password: '', confirmPassword: '', phone: ''
   });
@@ -36,8 +52,6 @@ export default function Register() {
     }
     return true;
   };
-
-  const { signup } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -89,7 +103,7 @@ export default function Register() {
         setError('');
         try {
           // Send credential to backend for verification
-          const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/auth/google`, {
+          const res = await fetch(`${API_BASE_URL.replace('/api', '')}/api/auth/google`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ credential: response.credential })
