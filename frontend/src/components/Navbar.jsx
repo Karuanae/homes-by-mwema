@@ -1,3 +1,4 @@
+// Navbar.jsx - Updated with matching button sizes
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavbarState } from '../hooks/useNavbarState';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -13,7 +14,7 @@ const COLORS = {
   cream: '#F5F2EE',
   creamDark: '#EBE5DE',
   charcoal: '#1C1917',
-  gold: '#C1A173',
+  gold: '#ED9B40',
   white: '#FFFFFF',
 };
 
@@ -169,9 +170,9 @@ const Navbar = () => {
 
   const getTitleColor = (type) => {
     switch (type) {
-      case 'message': return 'text-[#C1A173]';
+      case 'message': return 'text-[#ED9B40]';
       case 'booking': return 'text-blue-400';
-      default: return 'text-[#C1A173]';
+      default: return 'text-[#ED9B40]';
     }
   };
 
@@ -183,7 +184,7 @@ const Navbar = () => {
         <motion.header
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="absolute top-0 left-0 w-full z-[100] bg-transparent py-2"
+          className="absolute top-0 left-0 w-full z-[100] bg-transparent py-3"
         >
           <div className="max-w-[1600px] mx-auto px-6 lg:px-12">
             <div className="flex items-center justify-between">
@@ -193,7 +194,7 @@ const Navbar = () => {
                   <img
                     src="/Logo2.png"
                     alt="Homes by Mwema"
-                    className="w-40 h-24 object-contain drop-shadow-2xl cursor-pointer"
+                    className="w-36 h-20 object-contain drop-shadow-2xl cursor-pointer"
                   />
                 </Link>
               </div>
@@ -201,14 +202,14 @@ const Navbar = () => {
               {/* Back button */}
               <button
                 onClick={() => navigate(-1)}
-                className="flex items-center gap-2 text-[#C1A173] hover:text-white transition-colors duration-300 group"
+                className="flex items-center gap-2 text-[#ED9B40] hover:text-white transition-colors duration-300 group"
               >
                 <ArrowLeft
                   size={16}
                   strokeWidth={1.5}
                   className="group-hover:-translate-x-1 transition-transform duration-300"
                 />
-                <span className="font-sans text-[10px] uppercase tracking-[0.2em] font-medium">
+                <span className="font-sans text-[10px] uppercase tracking-[0.18em] font-medium">
                   Back
                 </span>
               </button>
@@ -235,19 +236,19 @@ const Navbar = () => {
           >
             {notifications.map((notification, index) => (
               <div key={notification.id} className={index === 0 ? 'block' : 'hidden'}>
-                <div className="bg-[#1C1917] text-[#F5F2EE] p-5 shadow-2xl flex items-start gap-4 max-w-sm border-l-2 border-[#C1A173]">
+                <div className="bg-[#1C1917] text-[#F5F2EE] p-5 shadow-2xl flex items-start gap-4 max-w-sm border-l-2 border-[#ED9B40]">
                   <div className={`mt-1 ${getTitleColor(notification.type)}`}>
                     {getNotificationIcon(notification.type)}
                   </div>
                   <div className="flex-1">
-                    <p className={`text-[10px] uppercase tracking-[0.15em] ${getTitleColor(notification.type)} mb-1`}>
+                    <p className={`text-[10px] uppercase tracking-[0.18em] ${getTitleColor(notification.type)} mb-1`}>
                       {notification.title}
                     </p>
                     <p className="font-serif italic text-sm text-stone-300">"{notification.message}"</p>
                     <div className="flex gap-4 mt-3">
                       <button
                         onClick={() => { setShowToast(false); navigate(notification.route); }}
-                        className="text-[10px] uppercase tracking-widest border-b border-[#F5F2EE] pb-0.5 hover:text-[#C1A173] hover:border-[#C1A173] transition-colors"
+                        className="text-[10px] uppercase tracking-widest border-b border-[#F5F2EE] pb-0.5 hover:text-[#ED9B40] hover:border-[#ED9B40] transition-colors"
                       >
                         {notification.action}
                       </button>
@@ -266,8 +267,8 @@ const Navbar = () => {
         )}
       </AnimatePresence>
 
-      {/* --- MAIN NAVBAR --- */}
-      <motion.header className="absolute top-0 left-0 w-full z-[100] bg-transparent py-2 border-b border-transparent">
+      {/* --- MAIN NAVBAR - MATCHING BUTTON SIZES --- */}
+      <motion.header className="absolute top-0 left-0 w-full z-[100] bg-transparent py-3 border-b border-transparent">
         <div className="max-w-[1600px] mx-auto pl-0 pr-6 lg:pl-0 lg:pr-12">
           <div className="flex items-center justify-between">
 
@@ -275,7 +276,7 @@ const Navbar = () => {
             <div className="flex-shrink-0 flex items-center m-0 p-0">
               <Link to="/" aria-label="Go to homepage">
                 <img
-                  src="/Logo2.png"
+                  src="/Logo3.png"
                   alt="Homes by Mwema"
                   className="w-40 h-24 object-contain drop-shadow-2xl cursor-pointer"
                 />
@@ -283,54 +284,53 @@ const Navbar = () => {
             </div>
 
             {/* Right: Actions */}
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-8">
 
               {/* Desktop Nav Links */}
-              <nav className="hidden md:flex items-center gap-5 mr-2">
+              <nav className="hidden md:flex items-center gap-8 mr-2">
 
-                {/* 1. Reserve a Unit — scrolls to properties grid on homepage */}
+                {/* 1. Reserve a Unit - Button style */}
                 <Link
                   to="/#properties"
                   onClick={(e) => {
-                    // If already on homepage, scroll directly without full navigation
                     if (location.pathname === '/') {
                       e.preventDefault();
                       document.getElementById('properties-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }
                   }}
-                  className="relative group py-2 px-5 bg-[#C1A173] hover:bg-[#a8895e] transition-all duration-300"
+                  className="inline-flex items-center justify-center bg-[#ED9B40] hover:bg-[#d48a36] transition-all duration-300 px-6 py-2" // Button styling
                 >
                   <span className="font-sans text-[11px] uppercase tracking-[0.18em] font-semibold text-[#1C1917] whitespace-nowrap">
                     Reserve a Unit
                   </span>
                 </Link>
 
-                {/* 2. Management Services */}
+                {/* 2. Management Services - Link style */}
                 <Link
                   to="/management"
-                  className="relative group py-2"
+                  className="inline-flex items-center justify-center relative group px-2 py-2" // Link styling
                 >
-                  <span className="font-sans text-[11px] uppercase tracking-[0.18em] font-medium transition-colors duration-300 text-[#C1A173] whitespace-nowrap">
+                  <span className="font-sans text-[11px] uppercase tracking-[0.18em] font-medium transition-colors duration-300 text-[#ED9B40] whitespace-nowrap">
                     Management Services
                   </span>
-                  <span className="absolute bottom-0 left-0 w-0 h-[1px] bg-[#C1A173] transition-all duration-500 group-hover:w-full" />
+                  <span className="absolute bottom-0 left-0 w-0 h-[1px] bg-[#ED9B40] transition-all duration-500 group-hover:w-full" />
                 </Link>
 
-                {/* 3. Other Services — dropdown */}
+                {/* 3. Other Services — dropdown - Link style */}
                 <div className="relative" ref={otherServicesRef}>
                   <button
                     onClick={() => setOtherServicesOpen(prev => !prev)}
-                    className="relative group py-2 flex items-center gap-1"
+                    className="inline-flex items-center justify-center relative group px-2 py-2 gap-1.5" // Link styling
                   >
-                    <span className="font-sans text-[11px] uppercase tracking-[0.18em] font-medium transition-colors duration-300 text-[#C1A173] whitespace-nowrap">
+                    <span className="font-sans text-[11px] uppercase tracking-[0.18em] font-medium transition-colors duration-300 text-[#ED9B40] whitespace-nowrap">
                       Other Services
                     </span>
                     <ChevronDown
                       size={12}
                       strokeWidth={2}
-                      className={`text-[#C1A173] transition-transform duration-300 ${otherServicesOpen ? 'rotate-180' : ''}`}
+                      className={`text-[#ED9B40] transition-transform duration-300 ${otherServicesOpen ? 'rotate-180' : ''}`}
                     />
-                    <span className="absolute bottom-0 left-0 w-0 h-[1px] bg-[#C1A173] transition-all duration-500 group-hover:w-full" />
+                    <span className="absolute bottom-0 left-0 w-0 h-[1px] bg-[#ED9B40] transition-all duration-500 group-hover:w-full" />
                   </button>
 
                   <AnimatePresence>
@@ -347,10 +347,10 @@ const Navbar = () => {
                             key={item.to}
                             to={item.to}
                             onClick={() => setOtherServicesOpen(false)}
-                            className="flex items-center justify-between px-6 py-4 text-[10px] uppercase tracking-[0.18em] font-medium text-[#1C1917] hover:bg-white hover:text-[#C1A173] transition-colors duration-200 group border-b border-[#EBE5DE] last:border-0"
+                            className="flex items-center justify-between px-6 py-4 text-[10px] uppercase tracking-[0.18em] font-medium text-[#1C1917] hover:bg-white hover:text-[#ED9B40] transition-colors duration-200 group border-b border-[#EBE5DE] last:border-0"
                           >
                             {item.label}
-                            <ChevronRight size={12} className="opacity-0 group-hover:opacity-100 text-[#C1A173] transition-opacity" />
+                            <ChevronRight size={12} className="opacity-0 group-hover:opacity-100 text-[#ED9B40] transition-opacity" />
                           </Link>
                         ))}
                       </motion.div>
@@ -358,14 +358,15 @@ const Navbar = () => {
                   </AnimatePresence>
                 </div>
 
-                {/* 4. Consultation — bordered CTA */}
+                {/* 4. Consultation - Link style (NO PADDING) */}
                 <button
                   onClick={handleConsultClick}
-                  className="relative group py-2 px-4 border border-[#C1A173]/40 hover:border-[#C1A173] transition-all duration-300"
+                  className="inline-flex items-center justify-center relative group" // No padding, just the text
                 >
-                  <span className="font-sans text-[11px] uppercase tracking-[0.18em] font-medium text-[#C1A173]">
+                  <span className="font-sans text-[11px] uppercase tracking-[0.18em] font-medium text-[#ED9B40] whitespace-nowrap">
                     Consultation
                   </span>
+                  <span className="absolute -bottom-0.5 left-0 w-0 h-[1px] bg-[#ED9B40] transition-all duration-500 group-hover:w-full" />
                 </button>
               </nav>
 
@@ -373,7 +374,7 @@ const Navbar = () => {
               {isAuthenticated && (
                 <button
                   onClick={() => navigate('/chat')}
-                  className="relative p-2 transition-opacity hover:opacity-60 text-[#C1A173]"
+                  className="relative p-2 transition-opacity hover:opacity-60 text-[#ED9B40]"
                   title={notifications.length > 0 ? `${notifications.length} notification${notifications.length > 1 ? 's' : ''}` : 'No new notifications'}
                 >
                   <Bell size={18} strokeWidth={1.5} />
@@ -389,7 +390,7 @@ const Navbar = () => {
               <div className="relative" ref={menuRef}>
                 <button
                   onClick={() => setIsMenuOpen(!isMenuOpen)}
-                  className="flex items-center transition-colors duration-300 text-[#C1A173]"
+                  className="flex items-center transition-colors duration-300 text-[#ED9B40]"
                 >
                   <div className={`p-2 border rounded-full transition-all duration-300 ${isMenuOpen ? 'border-[#1C1917] rotate-90' : 'border-transparent hover:border-[#1C1917]/20'}`}>
                     {isMenuOpen ? <X size={18} strokeWidth={1} /> : <Menu size={18} strokeWidth={1} />}
@@ -409,7 +410,7 @@ const Navbar = () => {
                       {/* User Header */}
                       <div className="p-8 border-b border-[#EBE5DE] bg-white">
                         <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-full bg-[#1C1917] flex items-center justify-center text-[#C1A173]">
+                          <div className="w-10 h-10 rounded-full bg-[#1C1917] flex items-center justify-center text-[#ED9B40]">
                             <User size={16} strokeWidth={1.5} />
                           </div>
                           <div className="overflow-hidden">
@@ -438,7 +439,7 @@ const Navbar = () => {
                                 document.getElementById('properties-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                               }
                             }}
-                            className="w-full flex items-center justify-between px-8 py-3 mb-1 text-[10px] uppercase tracking-[0.18em] font-bold text-[#1C1917] bg-[#C1A173] hover:bg-[#a8895e] transition-colors"
+                            className="w-full flex items-center justify-between px-8 py-3 mb-1 text-[10px] uppercase tracking-[0.18em] font-bold text-[#1C1917] bg-[#ED9B40] hover:bg-[#d48a36] transition-colors"
                           >
                             Reserve a Unit
                             <ChevronRight size={12} />
@@ -448,7 +449,7 @@ const Navbar = () => {
                           <Link
                             to="/management"
                             onClick={() => setIsMenuOpen(false)}
-                            className="w-full text-left px-8 py-2.5 mb-1 text-[10px] uppercase tracking-[0.18em] font-bold text-[#C1A173] hover:bg-white transition-colors block"
+                            className="w-full text-left px-8 py-2.5 mb-1 text-[10px] uppercase tracking-[0.18em] font-bold text-[#ED9B40] hover:bg-white transition-colors block"
                           >
                             Management Services
                           </Link>
@@ -457,7 +458,7 @@ const Navbar = () => {
                           <div>
                             <button
                               onClick={() => setMobileOtherServicesOpen(prev => !prev)}
-                              className="w-full flex items-center justify-between px-8 py-2.5 mb-1 text-[10px] uppercase tracking-[0.18em] font-bold text-[#C1A173] hover:bg-white transition-colors"
+                              className="w-full flex items-center justify-between px-8 py-2.5 mb-1 text-[10px] uppercase tracking-[0.18em] font-bold text-[#ED9B40] hover:bg-white transition-colors"
                             >
                               Other Services
                               <ChevronDown
@@ -479,7 +480,7 @@ const Navbar = () => {
                                       key={item.to}
                                       to={item.to}
                                       onClick={() => { setIsMenuOpen(false); setMobileOtherServicesOpen(false); }}
-                                      className="block px-12 py-2.5 text-[10px] uppercase tracking-[0.15em] text-[#C1A173]/80 hover:text-[#C1A173] hover:bg-white transition-colors"
+                                      className="block px-12 py-2.5 text-[10px] uppercase tracking-[0.18em] text-[#ED9B40]/80 hover:text-[#ED9B40] hover:bg-white transition-colors"
                                     >
                                       {item.label}
                                     </Link>
@@ -489,10 +490,10 @@ const Navbar = () => {
                             </AnimatePresence>
                           </div>
 
-                          {/* Consultation */}
+                          {/* Consultation - Mobile version */}
                           <button
                             onClick={() => { handleConsultClick(); setIsMenuOpen(false); }}
-                            className="w-full text-left px-8 py-3 mb-1 uppercase text-[10px] tracking-[0.2em] font-bold text-[#C1A173] bg-transparent hover:bg-white transition-colors"
+                            className="w-full text-left px-8 py-3 mb-1 uppercase text-[10px] tracking-[0.2em] font-bold text-[#ED9B40] bg-transparent hover:bg-white transition-colors"
                           >
                             Consultation
                           </button>
@@ -503,7 +504,7 @@ const Navbar = () => {
                         {/* Auth-based links */}
                         {!isAuthenticated ? (
                           <>
-                            <MenuLink to="/login" label="Client Login" onClick={() => setIsMenuOpen(false)} />
+                            <MenuLink to="/login" label="Login" onClick={() => setIsMenuOpen(false)} />
                             <MenuLink to="/register" label="Register" onClick={() => setIsMenuOpen(false)} />
                           </>
                         ) : user?.role === 'admin' ? (
@@ -540,7 +541,7 @@ const Navbar = () => {
                         <Link
                           to="/"
                           onClick={() => setIsMenuOpen(false)}
-                          className="text-[#C1A173] text-[9px] uppercase tracking-[0.3em] hover:text-white transition-colors"
+                          className="text-[#ED9B40] text-[9px] uppercase tracking-[0.3em] hover:text-white transition-colors"
                         >
                           Discover The Collection
                         </Link>

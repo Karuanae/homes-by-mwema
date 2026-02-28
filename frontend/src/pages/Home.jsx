@@ -496,11 +496,6 @@ export default function Home() {
                         <p className="text-stone-400 text-[10px] mt-1 uppercase">per night</p>
                       </div>
                     </div>
-                    <div className="mt-3 pt-3 border-t border-stone-100 flex items-center text-xs text-stone-400 gap-4">
-                      <span>⭐ {property.rating || "New"}</span>
-                      <span>🛏 {property.rooms || property.bedrooms || "1"} Bed</span>
-                      {property.max_guests && <span>👤 Up to {property.max_guests}</span>}
-                    </div>
                   </div>
                 </Link>
               ))}

@@ -1,4 +1,4 @@
-// admindashboard.jsx - WITH CONSULTATIONS TAB
+// admindashboard.jsx - WITH CONSULTATIONS TAB and Mobile Sidebar
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -8,6 +8,7 @@ import {
   FaUpload, FaImage, FaCamera, FaComments, FaUser, FaClock,
   FaBell, FaTimes, FaPhone, FaEnvelopeOpen, FaCalendarCheck,
   FaClipboardList, FaCheckCircle, FaHourglassHalf, FaTimesCircle,
+  FaBars, // Added for mobile menu toggle
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 import api, { API_BASE_URL, IMAGE_BASE_URL } from "../services/api";
@@ -39,6 +40,9 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState({
     total_properties: 0, active_bookings: 0, total_users: 0, total_revenue: 0,
   });
+
+  // Mobile menu state
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Data states
   const [properties,      setProperties]      = useState([]);
@@ -194,7 +198,12 @@ export default function AdminDashboard() {
   };
 
   // ── Logout ────────────────────────────────────────────────────────────────
-  const handleLogout = () => { socketService.disconnect(); logout(); navigate("/login"); };
+  const handleLogout = () => { 
+    socketService.disconnect(); 
+    logout(); 
+    navigate("/login"); 
+    setMobileMenuOpen(false); // Close mobile menu on logout
+  };
 
   // ── Property CRUD ─────────────────────────────────────────────────────────
   const handleDeleteProperty = async (id) => {
@@ -356,6 +365,90 @@ export default function AdminDashboard() {
     completed: consultations.filter(c => c.status === "completed").length,
   };
 
+  // Mobile menu component
+  const MobileMenu = () => (
+    <AnimatePresence>
+      {mobileMenuOpen && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-40 md:hidden"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          
+          {/* Sidebar drawer */}
+          <motion.div
+            initial={{ x: "-100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "-100%" }}
+            transition={{ type: "tween", duration: 0.3 }}
+            className="fixed top-0 left-0 bottom-0 w-64 bg-[#1C2321] text-[#E5E5E0] z-50 flex flex-col md:hidden"
+          >
+            <div className="p-6 border-b border-stone-700/50">
+              <div className="flex justify-between items-center">
+                <h1 className="text-xl font-serif tracking-wider text-white">MWEMA<span className="text-stone-400">.</span></h1>
+                <button onClick={() => setMobileMenuOpen(false)} className="text-stone-400 hover:text-white">
+                  <FaTimes size={18} />
+                </button>
+              </div>
+              <p className="text-[9px] uppercase tracking-[0.2em] text-stone-500 mt-2">Estate Administration</p>
+            </div>
+
+            <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
+              {navItems.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setActiveTab(item.id);
+                    if (item.id !== "messages") setSelectedChat(null);
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-3 px-4 py-3 transition-all duration-300 relative ${
+                    activeTab === item.id
+                      ? "bg-white/5 text-white border-r-2 border-[#D4AF37]"
+                      : "text-stone-400 hover:text-stone-100 hover:bg-white/[0.02]"
+                  }`}
+                >
+                  <item.icon className={`text-base ${activeTab === item.id ? "scale-110 text-[#D4AF37]" : ""}`} />
+                  <span className={`font-serif text-sm tracking-wide ${activeTab === item.id ? "font-medium" : "font-light"}`}>
+                    {item.label}
+                  </span>
+                  {item.badge && (
+                    <span className="absolute right-4 bg-red-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center">
+                      {item.badge}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </nav>
+
+            <div className="p-4 border-t border-stone-700/50 space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-full bg-stone-700 flex items-center justify-center text-xs">
+                  {user?.name?.charAt(0) || "A"}
+                </div>
+                <span className="text-xs text-stone-300">{user?.name || "Admin"}</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[10px] text-stone-500">
+                <div className={`w-1.5 h-1.5 rounded-full ${socketConnected ? "bg-green-500" : "bg-red-500"}`} />
+                {socketConnected ? "Live Chat Active" : "Chat Offline"}
+              </div>
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-2 text-stone-400 hover:text-red-300 transition-colors uppercase tracking-widest text-[10px] py-1.5"
+              >
+                <FaSignOutAlt size={12} /> Sign Out
+              </button>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+
   if (loading) return (
     <div className="min-h-screen bg-[#F9F8F6] flex items-center justify-center">
       <div className="text-center">
@@ -367,8 +460,19 @@ export default function AdminDashboard() {
 
   return (
     <div className="flex flex-col md:flex-row h-screen bg-[#F9F8F6] font-sans text-stone-800 overflow-hidden">
+      
+      {/* Mobile Menu Button */}
+      <button
+        onClick={() => setMobileMenuOpen(true)}
+        className="md:hidden fixed top-4 left-4 z-30 bg-[#1C2321] text-white p-3 rounded-lg shadow-lg"
+      >
+        <FaBars size={20} />
+      </button>
 
-      {/* ── Sidebar ── */}
+      {/* Mobile Menu Drawer */}
+      <MobileMenu />
+
+      {/* ── Desktop Sidebar ── */}
       <aside className="hidden md:flex md:w-72 bg-[#1C2321] text-[#E5E5E0] flex-col shadow-2xl z-20 flex-shrink-0">
         <div className="p-10 border-b border-stone-700/50">
           <h1 className="text-2xl font-serif tracking-wider text-white">MWEMA<span className="text-stone-400">.</span></h1>
@@ -407,11 +511,10 @@ export default function AdminDashboard() {
       </aside>
 
       {/* ── Main ── */}
-      <main className="flex-1 overflow-y-auto p-4 md:p-12 relative">
-
-        {/* Header */}
+      <main className="flex-1 overflow-y-auto p-4 md:p-12 relative pt-16 md:pt-12">
+        {/* Header with adjusted padding for mobile menu button */}
         <header className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 md:mb-12 border-b border-stone-200 pb-4 md:pb-6">
-          <div>
+          <div className="ml-12 md:ml-0"> {/* Add margin on mobile to accommodate menu button */}
             <h2 className="text-2xl md:text-4xl font-serif text-[#1C2321] mb-2">
               {navItems.find(i => i.id===activeTab)?.label}
             </h2>
@@ -419,7 +522,7 @@ export default function AdminDashboard() {
               {new Date().toLocaleDateString("en-US",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}
             </p>
           </div>
-          <div className="flex items-center gap-6 mt-4 md:mt-0">
+          <div className="flex items-center gap-6 mt-4 md:mt-0 ml-12 md:ml-0">
             <div className="relative hidden md:block">
               <FaSearch className="absolute left-0 top-3 text-stone-400" />
               <input type="text" placeholder="Search records..." className="pl-8 pr-4 py-2 bg-transparent border-b border-stone-300 focus:border-[#1C2321] outline-none w-48 lg:w-64 placeholder-stone-400 text-stone-800 transition-all" />
@@ -428,7 +531,7 @@ export default function AdminDashboard() {
           </div>
         </header>
 
-        {/* Mobile tab nav */}
+        {/* Mobile tab nav (keep this as secondary navigation) */}
         <div className="md:hidden mb-6 -mx-4 px-4 pb-4 border-b border-stone-200 overflow-x-auto">
           <div className="flex gap-2 min-w-min">
             {navItems.map(item => (
