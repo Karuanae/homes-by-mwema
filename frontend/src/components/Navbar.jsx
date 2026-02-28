@@ -1,4 +1,4 @@
-// Navbar.jsx - Updated with matching button sizes
+// Navbar.jsx - Updated with Reserve a Unit linking to Properties page
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavbarState } from '../hooks/useNavbarState';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -25,6 +25,7 @@ const MINIMAL_NAVBAR_ROUTES = [
   '/booking',
   '/payment',
   '/checkout',
+  '/properties', // Added properties to minimal routes? No, we want full navbar on properties
 ];
 
 // "Other Services" submenu items
@@ -267,7 +268,7 @@ const Navbar = () => {
         )}
       </AnimatePresence>
 
-      {/* --- MAIN NAVBAR - MATCHING BUTTON SIZES --- */}
+      {/* --- MAIN NAVBAR - UPDATED WITH PROPERTIES LINK --- */}
       <motion.header className="absolute top-0 left-0 w-full z-[100] bg-transparent py-3 border-b border-transparent">
         <div className="max-w-[1600px] mx-auto pl-0 pr-6 lg:pl-0 lg:pr-12">
           <div className="flex items-center justify-between">
@@ -289,16 +290,10 @@ const Navbar = () => {
               {/* Desktop Nav Links */}
               <nav className="hidden md:flex items-center gap-8 mr-2">
 
-                {/* 1. Reserve a Unit - Button style */}
+                {/* 1. Reserve a Unit - NOW LINKS TO PROPERTIES PAGE */}
                 <Link
-                  to="/#properties"
-                  onClick={(e) => {
-                    if (location.pathname === '/') {
-                      e.preventDefault();
-                      document.getElementById('properties-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }
-                  }}
-                  className="inline-flex items-center justify-center bg-[#ED9B40] hover:bg-[#d48a36] transition-all duration-300 px-6 py-2" // Button styling
+                  to="/properties"
+                  className="inline-flex items-center justify-center bg-[#ED9B40] hover:bg-[#d48a36] transition-all duration-300 px-6 py-2"
                 >
                   <span className="font-sans text-[11px] uppercase tracking-[0.18em] font-semibold text-[#1C1917] whitespace-nowrap">
                     Reserve a Unit
@@ -308,7 +303,7 @@ const Navbar = () => {
                 {/* 2. Management Services - Link style */}
                 <Link
                   to="/management"
-                  className="inline-flex items-center justify-center relative group px-2 py-2" // Link styling
+                  className="inline-flex items-center justify-center relative group px-2 py-2"
                 >
                   <span className="font-sans text-[11px] uppercase tracking-[0.18em] font-medium transition-colors duration-300 text-[#ED9B40] whitespace-nowrap">
                     Management Services
@@ -320,7 +315,7 @@ const Navbar = () => {
                 <div className="relative" ref={otherServicesRef}>
                   <button
                     onClick={() => setOtherServicesOpen(prev => !prev)}
-                    className="inline-flex items-center justify-center relative group px-2 py-2 gap-1.5" // Link styling
+                    className="inline-flex items-center justify-center relative group px-2 py-2 gap-1.5"
                   >
                     <span className="font-sans text-[11px] uppercase tracking-[0.18em] font-medium transition-colors duration-300 text-[#ED9B40] whitespace-nowrap">
                       Other Services
@@ -358,10 +353,10 @@ const Navbar = () => {
                   </AnimatePresence>
                 </div>
 
-                {/* 4. Consultation - Link style (NO PADDING) */}
+                {/* 4. Consultation - Link style */}
                 <button
                   onClick={handleConsultClick}
-                  className="inline-flex items-center justify-center relative group" // No padding, just the text
+                  className="inline-flex items-center justify-center relative group"
                 >
                   <span className="font-sans text-[11px] uppercase tracking-[0.18em] font-medium text-[#ED9B40] whitespace-nowrap">
                     Consultation
@@ -429,16 +424,10 @@ const Navbar = () => {
                         <div className="px-4 md:hidden">
                           <p className="text-[9px] uppercase tracking-widest text-stone-400 px-8 pt-2 pb-1">Navigation</p>
 
-                          {/* Reserve a Unit */}
+                          {/* Reserve a Unit - NOW LINKS TO PROPERTIES PAGE */}
                           <Link
-                            to="/#properties"
-                            onClick={(e) => {
-                              setIsMenuOpen(false);
-                              if (location.pathname === '/') {
-                                e.preventDefault();
-                                document.getElementById('properties-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                              }
-                            }}
+                            to="/properties"
+                            onClick={() => setIsMenuOpen(false)}
                             className="w-full flex items-center justify-between px-8 py-3 mb-1 text-[10px] uppercase tracking-[0.18em] font-bold text-[#1C1917] bg-[#ED9B40] hover:bg-[#d48a36] transition-colors"
                           >
                             Reserve a Unit

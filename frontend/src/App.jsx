@@ -1,4 +1,4 @@
-// App.jsx - Main application component
+// App.jsx - Main application component with Properties route
 import React from "react";
 import { Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
@@ -22,6 +22,7 @@ import Management from "./pages/Management";
 import ListingOptimization from "./pages/ListingOptimization";
 import PhotographyVideography from "./pages/PhotographyVideography";
 import AdminConsultations from "./pages/AdminConsultations";
+import Properties from "./pages/Properties"; // Import the Properties page
 
 export default function App() {
   return (
@@ -32,6 +33,17 @@ export default function App() {
             <>
               <Header />
               <Home />
+              <Footer />
+            </>
+          </PublicRoute>
+        } />
+
+        {/* New Properties Route */}
+        <Route path="/properties" element={
+          <PublicRoute>
+            <>
+              <Header />
+              <Properties />
               <Footer />
             </>
           </PublicRoute>
@@ -117,11 +129,13 @@ export default function App() {
             <AdminDashboard />
           </AdminRoute>
         } />
+        
         <Route path="/admin/consultations" element={
           <AdminRoute>
             <AdminConsultations />
           </AdminRoute>
         } />
+        
         <Route path="/management" element={
           <PublicRoute>
             <>
@@ -131,6 +145,7 @@ export default function App() {
             </>
           </PublicRoute>
         } />
+        
         <Route path="/photography-videography" element={
           <PublicRoute>
             <>
@@ -140,6 +155,7 @@ export default function App() {
             </>
           </PublicRoute>
         } />
+        
         <Route path="/listing-optimization" element={
           <PublicRoute>
             <>
