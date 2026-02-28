@@ -735,6 +735,11 @@ export const consultationsAPI = {
     const response = await api.get('/consultations');
     return response;
   },
+  // NEW: Admin — update consultation status
+  updateStatus: async (id, status) => {
+    const response = await api.put(`/consultations/${id}/status`, { status });
+    return response;
+  },
 };
 
 // Export everything
