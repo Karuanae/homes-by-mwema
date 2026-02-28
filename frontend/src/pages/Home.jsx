@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { FaSearch } from "react-icons/fa";
+import { FaSearch, FaMapMarkerAlt } from "react-icons/fa";
 import { useState, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
 import api, { IMAGE_BASE_URL } from "../services/api";
@@ -30,51 +30,32 @@ const ROOM_OPTIONS = [
   { label: "4+ Beds",minBeds: 4,  maxBeds: 99 },
 ];
 
-// ─── Social Proof ────────────────────────────────────────────────────────────
-const SocialProof = () => (
-  <div className="flex items-center gap-4 mt-8 mb-2 justify-center">
-    <div className="flex -space-x-3">
-      {[1,2,3].map(i => (
-        <div key={i} className="w-9 h-9 rounded-full border-2 border-white/30 bg-stone-300 overflow-hidden">
-          <img src={`https://i.pravatar.cc/100?img=${i + 25}`} alt="Guest" className="w-full h-full object-cover grayscale" />
-        </div>
-      ))}
-      <div className="w-9 h-9 rounded-full border-2 border-white/30 bg-stone-900 text-white text-[9px] flex items-center justify-center font-bold">50+</div>
-    </div>
-    <div>
-      <div className="flex text-amber-400 text-xs gap-0.5">★★★★★</div>
-      <span className="text-[11px] text-white/60 font-medium tracking-wide">Trusted by 500+ Guests</span>
-    </div>
-  </div>
-);
-
 // ─── Main Component ──────────────────────────────────────────────────────────
 export default function Home() {
-  // Calendar state
-  const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
-  const [showCalendar, setShowCalendar] = useState(false);
+  // Search state
   const [showRooms,    setShowRooms]    = useState(false);
   const [showGuests,   setShowGuests]   = useState(false);
-  const [startDate,    setStartDate]    = useState(null);
-  const [endDate,      setEndDate]      = useState(null);
+  const [showLocations, setShowLocations] = useState(false);
 
   // Filter state
   const [selectedRoom, setSelectedRoom] = useState(ROOM_OPTIONS[0]);
+  const [selectedLocation, setSelectedLocation] = useState("All Locations");
   const [guests,       setGuests]       = useState({ adults: 1, children: 0, infants: 0 });
   const [hasSearched,  setHasSearched]  = useState(false);
 
   // Data state
   const [properties,       setProperties]       = useState([]);
   const [filteredProps,    setFilteredProps]    = useState([]);
+  const [locations,        setLocations]        = useState([]);
   const [visibleCount,     setVisibleCount]     = useState(8);
   const [loading,          setLoading]          = useState(true);
   const [error,            setError]            = useState(null);
   const [openFaq,          setOpenFaq]          = useState(null);
 
   // Refs
-  const calendarRef    = useRef(null);
   const roomsRef       = useRef(null);
   const guestsRef      = useRef(null);
+  const locationsRef   = useRef(null);
   const propertiesRef  = useRef(null);
 
   // ── Static Data ──
@@ -97,7 +78,7 @@ export default function Home() {
   // ── Image helper ──
   const getImageSrc = (url) => url && !url.startsWith("http") ? `${IMAGE_BASE_URL}${url}` : url;
 
-  // ── Fetch properties ──
+  // ── Fetch properties and extract unique locations ──
   useEffect(() => {
     const fetchProperties = async () => {
       try {
@@ -107,6 +88,10 @@ export default function Home() {
         const data = res.data || [];
         setProperties(data);
         setFilteredProps(data);
+        
+        // Extract unique locations from properties
+        const uniqueLocations = ["All Locations", ...new Set(data.map(p => p.location).filter(Boolean))];
+        setLocations(uniqueLocations);
       } catch (err) {
         console.error("Error fetching properties:", err);
         setError("Unable to load residences. Please check if the server is running.");
@@ -120,9 +105,9 @@ export default function Home() {
   // ── Close dropdowns on outside click ──
   useEffect(() => {
     const handler = (e) => {
-      if (calendarRef.current && !calendarRef.current.contains(e.target)) setShowCalendar(false);
-      if (roomsRef.current    && !roomsRef.current.contains(e.target))    setShowRooms(false);
-      if (guestsRef.current   && !guestsRef.current.contains(e.target))   setShowGuests(false);
+      if (roomsRef.current && !roomsRef.current.contains(e.target)) setShowRooms(false);
+      if (guestsRef.current && !guestsRef.current.contains(e.target)) setShowGuests(false);
+      if (locationsRef.current && !locationsRef.current.contains(e.target)) setShowLocations(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -133,6 +118,9 @@ export default function Home() {
     const totalGuests = guests.adults + guests.children + guests.infants;
 
     const results = properties.filter((p) => {
+      // Location filter
+      const locationMatch = selectedLocation === "All Locations" || p.location === selectedLocation;
+
       // Room type filter
       const beds = p.rooms ?? p.bedrooms ?? 0;
       const isStudio = beds === 0 || p.type === "studio";
@@ -149,7 +137,7 @@ export default function Home() {
       const maxGuests = p.max_guests ?? p.maxGuests ?? 99;
       const guestMatch = totalGuests <= maxGuests;
 
-      return roomMatch && guestMatch;
+      return locationMatch && roomMatch && guestMatch;
     });
 
     setFilteredProps(results);
@@ -165,9 +153,8 @@ export default function Home() {
   const clearSearch = () => {
     setFilteredProps(properties);
     setSelectedRoom(ROOM_OPTIONS[0]);
+    setSelectedLocation("All Locations");
     setGuests({ adults: 1, children: 0, infants: 0 });
-    setStartDate(null);
-    setEndDate(null);
     setHasSearched(false);
     setVisibleCount(8);
   };
@@ -187,6 +174,21 @@ export default function Home() {
         }
         .animate-marquee { animation: marquee 40s linear infinite; }
         @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+        
+        /* Custom scrollbar for dropdowns */
+        .dropdown-scroll::-webkit-scrollbar {
+          width: 4px;
+        }
+        .dropdown-scroll::-webkit-scrollbar-track {
+          background: rgba(255, 255, 255, 0.1);
+        }
+        .dropdown-scroll::-webkit-scrollbar-thumb {
+          background: rgba(237, 155, 64, 0.5);
+          border-radius: 4px;
+        }
+        .dropdown-scroll::-webkit-scrollbar-thumb:hover {
+          background: rgba(237, 155, 64, 0.8);
+        }
       `}</style>
       <div className="bg-noise" />
 
@@ -202,7 +204,7 @@ export default function Home() {
 
         <section className="relative z-10 h-full flex flex-col items-center justify-center px-4 md:px-6">
           <motion.div
-            className="w-full max-w-3xl text-center"
+            className="w-full max-w-4xl text-center"
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, ease: "easeOut" }}
@@ -214,76 +216,54 @@ export default function Home() {
 
             {/* Headline */}
             <h1
-              className="text-4xl md:text-6xl font-light tracking-tight mb-4"
+              className="text-4xl md:text-6xl font-light tracking-tight mb-8"
               style={{ fontFamily: "'Playfair Display', serif" }}
             >
               <span className="text-white block leading-[1.1]">Refined</span>
               <span className="text-white/90 italic font-light block leading-[1.1]">Living Awaits</span>
             </h1>
 
-            <SocialProof />
-
             {/* ── SEARCH BAR ── */}
-            <div className="mt-6 bg-white/10 backdrop-blur-lg rounded-2xl border border-white/20 shadow-2xl overflow-visible">
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl border border-white/20 shadow-2xl overflow-visible relative">
 
               {/* Desktop row / Mobile stack */}
               <div className="flex flex-col md:flex-row md:items-center md:divide-x divide-white/20">
 
-                {/* DATES */}
-                <div className="relative flex-1" ref={calendarRef}>
+                {/* LOCATION */}
+                <div className="relative flex-1" ref={locationsRef}>
                   <button
-                    onClick={() => { setShowCalendar(s => !s); setShowRooms(false); setShowGuests(false); }}
+                    onClick={() => { setShowLocations(s => !s); setShowRooms(false); setShowGuests(false); }}
                     className="w-full text-left px-5 py-4 hover:bg-white/5 transition-colors rounded-t-2xl md:rounded-l-2xl md:rounded-tr-none"
                   >
-                    <p className="text-[10px] uppercase tracking-widest text-[#ED9B40]/70 font-medium mb-0.5">Dates</p>
+                    <p className="text-[10px] uppercase tracking-widest text-[#ED9B40]/70 font-medium mb-0.5 flex items-center gap-1">
+                      <FaMapMarkerAlt className="text-[10px]" /> Location
+                    </p>
                     <p className="text-sm text-white font-light truncate">
-                      {startDate && endDate ? `${startDate} → ${endDate}` : startDate ? `${startDate} → ...` : "Select dates"}
+                      {selectedLocation}
                     </p>
                   </button>
 
                   <AnimatePresence>
-                    {showCalendar && (
+                    {showLocations && (
                       <motion.div
                         initial={{ opacity: 0, y: 8, scale: 0.97 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 8, scale: 0.97 }}
-                        className="absolute top-full left-0 mt-2 bg-[#1C1917]/95 backdrop-blur-xl rounded-xl shadow-2xl z-50 p-4 w-[290px] border border-white/10"
+                        className="absolute top-full left-0 mt-2 bg-[#1C1917] rounded-xl shadow-2xl z-[100] w-64 border border-white/10 overflow-hidden"
+                        style={{ position: 'absolute', top: '100%', left: 0, zIndex: 9999 }}
                       >
-                        <div className="flex justify-between items-center mb-4">
-                          <button onClick={() => setCurrentMonth(m => Math.max(0, m - 1))} className="text-[#ED9B40] hover:text-white p-1.5 rounded transition-colors">←</button>
-                          <h4 className="text-white text-sm font-light" style={{ fontFamily: "'Playfair Display', serif" }}>{MONTHS[currentMonth]} {year}</h4>
-                          <button onClick={() => setCurrentMonth(m => Math.min(11, m + 1))} className="text-[#ED9B40] hover:text-white p-1.5 rounded transition-colors">→</button>
+                        <div className="max-h-60 overflow-y-auto dropdown-scroll">
+                          {locations.map((location) => (
+                            <button
+                              key={location}
+                              onClick={() => { setSelectedLocation(location); setShowLocations(false); }}
+                              className={`block w-full text-left px-4 py-3 text-sm transition-colors border-b border-white/5 last:border-0
+                                ${selectedLocation === location ? "text-[#ED9B40] bg-white/5" : "text-white/80 hover:bg-white/5 hover:text-white"}`}
+                            >
+                              {location}
+                            </button>
+                          ))}
                         </div>
-                        <div className="grid grid-cols-7 text-[10px] text-white/40 text-center mb-2">
-                          {["S","M","T","W","T","F","S"].map((d,i) => <div key={i}>{d}</div>)}
-                        </div>
-                        <div className="grid grid-cols-7 gap-0.5 text-center">
-                          {Array(getStartDay(currentMonth, year)).fill(null).map((_, i) => <div key={i} />)}
-                          {Array.from({ length: getDaysInMonth(currentMonth, year) }, (_, idx) => {
-                            const date    = formatDate(currentMonth, idx + 1);
-                            const isStart = date === startDate;
-                            const isEnd   = date === endDate;
-                            const inRange = isBetween(date, startDate, endDate);
-                            return (
-                              <button
-                                key={idx}
-                                onClick={() => {
-                                  if (!startDate || endDate) { setStartDate(date); setEndDate(null); }
-                                  else { setEndDate(date); setShowCalendar(false); }
-                                }}
-                                className={`h-7 w-7 mx-auto rounded-full text-[11px] flex items-center justify-center transition-all
-                                  ${isStart || isEnd ? "bg-[#ED9B40] text-white font-bold" : inRange ? "bg-[#ED9B40]/20 text-white" : "text-white/70 hover:bg-white/10"}`}
-                              >
-                                {idx + 1}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        {startDate && (
-                          <button onClick={() => { setStartDate(null); setEndDate(null); }} className="mt-3 text-[10px] text-white/40 hover:text-white/70 transition-colors w-full text-center">
-                            Clear dates
-                          </button>
-                        )}
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -292,7 +272,7 @@ export default function Home() {
                 {/* ROOM TYPE */}
                 <div className="relative flex-1" ref={roomsRef}>
                   <button
-                    onClick={() => { setShowRooms(s => !s); setShowCalendar(false); setShowGuests(false); }}
+                    onClick={() => { setShowRooms(s => !s); setShowLocations(false); setShowGuests(false); }}
                     className="w-full text-left px-5 py-4 hover:bg-white/5 transition-colors"
                   >
                     <p className="text-[10px] uppercase tracking-widest text-[#ED9B40]/70 font-medium mb-0.5">Room Type</p>
@@ -305,18 +285,21 @@ export default function Home() {
                         initial={{ opacity: 0, y: 8, scale: 0.97 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 8, scale: 0.97 }}
-                        className="absolute top-full left-0 mt-2 bg-[#1C1917]/95 backdrop-blur-xl rounded-xl shadow-2xl z-50 w-44 border border-white/10 overflow-hidden"
+                        className="absolute top-full left-0 mt-2 bg-[#1C1917] rounded-xl shadow-2xl z-[100] w-44 border border-white/10 overflow-hidden"
+                        style={{ position: 'absolute', top: '100%', left: 0, zIndex: 9999 }}
                       >
-                        {ROOM_OPTIONS.map((opt) => (
-                          <button
-                            key={opt.label}
-                            onClick={() => { setSelectedRoom(opt); setShowRooms(false); }}
-                            className={`block w-full text-left px-4 py-3 text-sm transition-colors border-b border-white/5 last:border-0
-                              ${selectedRoom.label === opt.label ? "text-[#ED9B40] bg-white/5" : "text-white/80 hover:bg-white/5 hover:text-white"}`}
-                          >
-                            {opt.label}
-                          </button>
-                        ))}
+                        <div className="max-h-60 overflow-y-auto dropdown-scroll">
+                          {ROOM_OPTIONS.map((opt) => (
+                            <button
+                              key={opt.label}
+                              onClick={() => { setSelectedRoom(opt); setShowRooms(false); }}
+                              className={`block w-full text-left px-4 py-3 text-sm transition-colors border-b border-white/5 last:border-0
+                                ${selectedRoom.label === opt.label ? "text-[#ED9B40] bg-white/5" : "text-white/80 hover:bg-white/5 hover:text-white"}`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -325,7 +308,7 @@ export default function Home() {
                 {/* GUESTS */}
                 <div className="relative flex-1" ref={guestsRef}>
                   <button
-                    onClick={() => { setShowGuests(s => !s); setShowCalendar(false); setShowRooms(false); }}
+                    onClick={() => { setShowGuests(s => !s); setShowLocations(false); setShowRooms(false); }}
                     className="w-full text-left px-5 py-4 hover:bg-white/5 transition-colors"
                   >
                     <p className="text-[10px] uppercase tracking-widest text-[#ED9B40]/70 font-medium mb-0.5">Guests</p>
@@ -340,24 +323,27 @@ export default function Home() {
                         initial={{ opacity: 0, y: 8, scale: 0.97 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 8, scale: 0.97 }}
-                        className="absolute top-full right-0 mt-2 bg-[#1C1917]/95 backdrop-blur-xl rounded-xl shadow-2xl z-50 w-52 p-4 border border-white/10"
+                        className="absolute top-full right-0 mt-2 bg-[#1C1917] rounded-xl shadow-2xl z-[100] w-52 p-4 border border-white/10"
+                        style={{ position: 'absolute', top: '100%', right: 0, zIndex: 9999 }}
                       >
-                        {["adults","children","infants"].map((type) => (
-                          <div key={type} className="flex justify-between items-center mb-4 last:mb-0">
-                            <span className="capitalize text-white/80 text-sm">{type}</span>
-                            <div className="flex gap-2 items-center">
-                              <button
-                                onClick={() => setGuests(g => ({ ...g, [type]: Math.max(0, g[type] - 1) }))}
-                                className="w-7 h-7 rounded-lg bg-white/10 hover:bg-[#ED9B40]/30 text-white transition-all flex items-center justify-center text-sm"
-                              >−</button>
-                              <span className="text-white text-sm w-5 text-center">{guests[type]}</span>
-                              <button
-                                onClick={() => setGuests(g => ({ ...g, [type]: g[type] + 1 }))}
-                                className="w-7 h-7 rounded-lg bg-white/10 hover:bg-[#ED9B40]/30 text-white transition-all flex items-center justify-center text-sm"
-                              >+</button>
+                        <div className="max-h-60 overflow-y-auto dropdown-scroll px-1">
+                          {["adults","children","infants"].map((type) => (
+                            <div key={type} className="flex justify-between items-center mb-4 last:mb-0">
+                              <span className="capitalize text-white/80 text-sm">{type}</span>
+                              <div className="flex gap-2 items-center">
+                                <button
+                                  onClick={() => setGuests(g => ({ ...g, [type]: Math.max(0, g[type] - 1) }))}
+                                  className="w-7 h-7 rounded-lg bg-white/10 hover:bg-[#ED9B40]/30 text-white transition-all flex items-center justify-center text-sm"
+                                >−</button>
+                                <span className="text-white text-sm w-5 text-center">{guests[type]}</span>
+                                <button
+                                  onClick={() => setGuests(g => ({ ...g, [type]: g[type] + 1 }))}
+                                  className="w-7 h-7 rounded-lg bg-white/10 hover:bg-[#ED9B40]/30 text-white transition-all flex items-center justify-center text-sm"
+                                >+</button>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -369,14 +355,19 @@ export default function Home() {
                     onClick={handleSearch}
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
-                    className="w-full md:w-auto h-11 px-6 bg-[#ED9B40] hover:bg-[#d4882d] rounded-xl flex items-center justify-center gap-2 text-white shadow-lg transition-colors duration-300"
+                    className="w-full md:w-auto h-11 px-8 bg-[#ED9B40] hover:bg-[#d4882d] rounded-xl flex items-center justify-center gap-2 text-white shadow-lg transition-colors duration-300"
                   >
                     <FaSearch className="text-sm" />
-                    <span className="text-sm font-medium md:hidden lg:inline">Search</span>
+                    <span className="text-sm font-medium">Search</span>
                   </motion.button>
                 </div>
               </div>
             </div>
+
+            {/* Simple trust indicator */}
+            <p className="text-white/60 text-xs mt-6 tracking-wide">
+              ✦ 500+ happy guests ✦ 4.9/5 rating ✦
+            </p>
           </motion.div>
         </section>
       </div>
@@ -410,6 +401,7 @@ export default function Home() {
               {hasSearched && (
                 <p className="text-stone-500 text-sm mt-1">
                   {filteredProps.length} {filteredProps.length === 1 ? "residence" : "residences"} match your criteria
+                  {selectedLocation !== "All Locations" && ` · ${selectedLocation}`}
                   {selectedRoom.label !== "Any" && ` · ${selectedRoom.label}`}
                   {totalGuests > 1 && ` · ${totalGuests} guests`}
                 </p>
@@ -446,7 +438,7 @@ export default function Home() {
           {!loading && !error && hasSearched && filteredProps.length === 0 && (
             <div className="text-center py-20">
               <p className="text-stone-500 font-light text-lg mb-2">No residences match your search.</p>
-              <p className="text-stone-400 text-sm mb-6">Try adjusting your room type or guest count.</p>
+              <p className="text-stone-400 text-sm mb-6">Try adjusting your location, room type or guest count.</p>
               <button onClick={clearSearch} className="text-xs uppercase tracking-widest border-b border-stone-900 pb-1 hover:text-stone-600">
                 Show all properties
               </button>
@@ -495,7 +487,9 @@ export default function Home() {
                         <h3 className="text-stone-900 text-lg font-serif leading-tight group-hover:text-stone-700 transition-colors">
                           {property.name}
                         </h3>
-                        <p className="text-stone-500 text-xs mt-1 uppercase tracking-wide">{property.location}</p>
+                        <p className="text-stone-500 text-xs mt-1 uppercase tracking-wide flex items-center gap-1">
+                          <FaMapMarkerAlt className="text-[10px]" /> {property.location}
+                        </p>
                       </div>
                       <div className="text-right">
                         <p className="text-stone-900 text-sm font-medium">Ksh {property.price?.toLocaleString()}</p>

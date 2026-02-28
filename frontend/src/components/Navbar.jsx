@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavbarState } from '../hooks/useNavbarState';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Menu, X, User, LogOut, MessageSquare, Bell, ChevronRight, Calendar } from 'lucide-react';
+import { Menu, X, User, LogOut, MessageSquare, Bell, ChevronRight, Calendar, ChevronDown, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../services/api';
 import ConsultationModal from './ConsultationModal';
+import MenuLink from './MenuLink';
 
 // --- STYLING CONSTANTS ---
 const COLORS = {
@@ -16,9 +17,17 @@ const COLORS = {
   white: '#FFFFFF',
 };
 
-// Flat nav links — replaces Services dropdown
-const NAV_LINKS = [
-  { label: 'Management Services', to: '/management' },
+// Pages where the navbar shows ONLY the logo + back button (minimal mode)
+const MINIMAL_NAVBAR_ROUTES = [
+  '/login',
+  '/register',
+  '/booking',
+  '/payment',
+  '/checkout',
+];
+
+// "Other Services" submenu items
+const OTHER_SERVICES = [
   { label: 'Photography & Videography', to: '/photography-videography' },
   { label: 'Listing Optimization', to: '/listing-optimization' },
 ];
@@ -31,9 +40,18 @@ const Navbar = () => {
 
   const [showToast, setShowToast] = useState(false);
   const [notifications, setNotifications] = useState([]);
+  const [otherServicesOpen, setOtherServicesOpen] = useState(false);
+  const [mobileOtherServicesOpen, setMobileOtherServicesOpen] = useState(false);
+  const otherServicesRef = useRef(null);
+
+  // Determine if we're on a page that should show minimal navbar
+  const isMinimalRoute = MINIMAL_NAVBAR_ROUTES.some(route =>
+    location.pathname.startsWith(route)
+  );
 
   useEffect(() => {
     setIsMenuOpen(false);
+    setOtherServicesOpen(false);
 
     const params = new URLSearchParams(location.search);
     if (params.get('consult') === '1' && isAuthenticated) {
@@ -117,10 +135,13 @@ const Navbar = () => {
       if (isMenuOpen && menuRef.current && !menuRef.current.contains(event.target)) {
         setIsMenuOpen(false);
       }
+      if (otherServicesOpen && otherServicesRef.current && !otherServicesRef.current.contains(event.target)) {
+        setOtherServicesOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isMenuOpen, menuRef, setIsMenuOpen]);
+  }, [isMenuOpen, menuRef, setIsMenuOpen, otherServicesOpen]);
 
   const handleLogout = (e) => {
     e.stopPropagation();
@@ -154,6 +175,51 @@ const Navbar = () => {
     }
   };
 
+  // ─── MINIMAL NAVBAR (login, register, booking, payment) ───────────────────
+  if (isMinimalRoute) {
+    return (
+      <>
+        <ConsultationModal isOpen={showConsultModal} onClose={() => setShowConsultModal(false)} />
+        <motion.header
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="absolute top-0 left-0 w-full z-[100] bg-transparent py-2"
+        >
+          <div className="max-w-[1600px] mx-auto px-6 lg:px-12">
+            <div className="flex items-center justify-between">
+              {/* Logo → home */}
+              <div className="flex-shrink-0 flex items-center">
+                <Link to="/" aria-label="Go to homepage">
+                  <img
+                    src="/Logo2.png"
+                    alt="Homes by Mwema"
+                    className="w-40 h-24 object-contain drop-shadow-2xl cursor-pointer"
+                  />
+                </Link>
+              </div>
+
+              {/* Back button */}
+              <button
+                onClick={() => navigate(-1)}
+                className="flex items-center gap-2 text-[#C1A173] hover:text-white transition-colors duration-300 group"
+              >
+                <ArrowLeft
+                  size={16}
+                  strokeWidth={1.5}
+                  className="group-hover:-translate-x-1 transition-transform duration-300"
+                />
+                <span className="font-sans text-[10px] uppercase tracking-[0.2em] font-medium">
+                  Back
+                </span>
+              </button>
+            </div>
+          </div>
+        </motion.header>
+      </>
+    );
+  }
+
+  // ─── FULL NAVBAR ──────────────────────────────────────────────────────────
   return (
     <>
       <ConsultationModal isOpen={showConsultModal} onClose={() => setShowConsultModal(false)} />
@@ -205,7 +271,7 @@ const Navbar = () => {
         <div className="max-w-[1600px] mx-auto pl-0 pr-6 lg:pl-0 lg:pr-12">
           <div className="flex items-center justify-between">
 
-            {/* Left: Logo — using Logo.jpeg, increased size */}
+            {/* Left: Logo */}
             <div className="flex-shrink-0 flex items-center m-0 p-0">
               <Link to="/" aria-label="Go to homepage">
                 <img
@@ -219,22 +285,80 @@ const Navbar = () => {
             {/* Right: Actions */}
             <div className="flex items-center gap-6">
 
-              {/* Desktop Nav Links — flat, no dropdown */}
-              <nav className="hidden md:flex items-center gap-6 mr-2">
-                {NAV_LINKS.map((link) => (
-                  <Link
-                    key={link.to}
-                    to={link.to}
-                    className="relative group py-2"
+              {/* Desktop Nav Links */}
+              <nav className="hidden md:flex items-center gap-5 mr-2">
+
+                {/* 1. Reserve a Unit — scrolls to properties grid on homepage */}
+                <Link
+                  to="/#properties"
+                  onClick={(e) => {
+                    // If already on homepage, scroll directly without full navigation
+                    if (location.pathname === '/') {
+                      e.preventDefault();
+                      document.getElementById('properties-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                  }}
+                  className="relative group py-2 px-5 bg-[#C1A173] hover:bg-[#a8895e] transition-all duration-300"
+                >
+                  <span className="font-sans text-[11px] uppercase tracking-[0.18em] font-semibold text-[#1C1917] whitespace-nowrap">
+                    Reserve a Unit
+                  </span>
+                </Link>
+
+                {/* 2. Management Services */}
+                <Link
+                  to="/management"
+                  className="relative group py-2"
+                >
+                  <span className="font-sans text-[11px] uppercase tracking-[0.18em] font-medium transition-colors duration-300 text-[#C1A173] whitespace-nowrap">
+                    Management Services
+                  </span>
+                  <span className="absolute bottom-0 left-0 w-0 h-[1px] bg-[#C1A173] transition-all duration-500 group-hover:w-full" />
+                </Link>
+
+                {/* 3. Other Services — dropdown */}
+                <div className="relative" ref={otherServicesRef}>
+                  <button
+                    onClick={() => setOtherServicesOpen(prev => !prev)}
+                    className="relative group py-2 flex items-center gap-1"
                   >
                     <span className="font-sans text-[11px] uppercase tracking-[0.18em] font-medium transition-colors duration-300 text-[#C1A173] whitespace-nowrap">
-                      {link.label}
+                      Other Services
                     </span>
+                    <ChevronDown
+                      size={12}
+                      strokeWidth={2}
+                      className={`text-[#C1A173] transition-transform duration-300 ${otherServicesOpen ? 'rotate-180' : ''}`}
+                    />
                     <span className="absolute bottom-0 left-0 w-0 h-[1px] bg-[#C1A173] transition-all duration-500 group-hover:w-full" />
-                  </Link>
-                ))}
+                  </button>
 
-                {/* Consultation — separate CTA style */}
+                  <AnimatePresence>
+                    {otherServicesOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 8 }}
+                        transition={{ duration: 0.25, ease: 'easeOut' }}
+                        className="absolute left-0 top-full mt-2 w-64 bg-[#F5F2EE] shadow-[0_12px_40px_rgba(0,0,0,0.12)] border border-[#EBE5DE] z-50"
+                      >
+                        {OTHER_SERVICES.map((item) => (
+                          <Link
+                            key={item.to}
+                            to={item.to}
+                            onClick={() => setOtherServicesOpen(false)}
+                            className="flex items-center justify-between px-6 py-4 text-[10px] uppercase tracking-[0.18em] font-medium text-[#1C1917] hover:bg-white hover:text-[#C1A173] transition-colors duration-200 group border-b border-[#EBE5DE] last:border-0"
+                          >
+                            {item.label}
+                            <ChevronRight size={12} className="opacity-0 group-hover:opacity-100 text-[#C1A173] transition-opacity" />
+                          </Link>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                {/* 4. Consultation — bordered CTA */}
                 <button
                   onClick={handleConsultClick}
                   className="relative group py-2 px-4 border border-[#C1A173]/40 hover:border-[#C1A173] transition-all duration-300"
@@ -299,25 +423,80 @@ const Navbar = () => {
 
                       {/* Navigation Links */}
                       <div className="py-4">
-                        {/* Mobile: flat service links */}
+
+                        {/* Mobile: reorganized service links */}
                         <div className="px-4 md:hidden">
-                          <p className="text-[9px] uppercase tracking-widest text-stone-400 px-8 pt-2 pb-1">Services</p>
-                          {NAV_LINKS.map((link) => (
-                            <Link
-                              key={link.to}
-                              to={link.to}
-                              onClick={() => setIsMenuOpen(false)}
-                              className="w-full text-left px-8 py-2.5 mb-1 text-[10px] uppercase tracking-[0.18em] font-bold text-[#C1A173] hover:bg-white transition-colors block"
+                          <p className="text-[9px] uppercase tracking-widest text-stone-400 px-8 pt-2 pb-1">Navigation</p>
+
+                          {/* Reserve a Unit */}
+                          <Link
+                            to="/#properties"
+                            onClick={(e) => {
+                              setIsMenuOpen(false);
+                              if (location.pathname === '/') {
+                                e.preventDefault();
+                                document.getElementById('properties-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                              }
+                            }}
+                            className="w-full flex items-center justify-between px-8 py-3 mb-1 text-[10px] uppercase tracking-[0.18em] font-bold text-[#1C1917] bg-[#C1A173] hover:bg-[#a8895e] transition-colors"
+                          >
+                            Reserve a Unit
+                            <ChevronRight size={12} />
+                          </Link>
+
+                          {/* Management Services */}
+                          <Link
+                            to="/management"
+                            onClick={() => setIsMenuOpen(false)}
+                            className="w-full text-left px-8 py-2.5 mb-1 text-[10px] uppercase tracking-[0.18em] font-bold text-[#C1A173] hover:bg-white transition-colors block"
+                          >
+                            Management Services
+                          </Link>
+
+                          {/* Other Services accordion */}
+                          <div>
+                            <button
+                              onClick={() => setMobileOtherServicesOpen(prev => !prev)}
+                              className="w-full flex items-center justify-between px-8 py-2.5 mb-1 text-[10px] uppercase tracking-[0.18em] font-bold text-[#C1A173] hover:bg-white transition-colors"
                             >
-                              {link.label}
-                            </Link>
-                          ))}
+                              Other Services
+                              <ChevronDown
+                                size={12}
+                                className={`transition-transform duration-300 ${mobileOtherServicesOpen ? 'rotate-180' : ''}`}
+                              />
+                            </button>
+                            <AnimatePresence>
+                              {mobileOtherServicesOpen && (
+                                <motion.div
+                                  initial={{ height: 0, opacity: 0 }}
+                                  animate={{ height: 'auto', opacity: 1 }}
+                                  exit={{ height: 0, opacity: 0 }}
+                                  transition={{ duration: 0.25 }}
+                                  className="overflow-hidden bg-white/60"
+                                >
+                                  {OTHER_SERVICES.map(item => (
+                                    <Link
+                                      key={item.to}
+                                      to={item.to}
+                                      onClick={() => { setIsMenuOpen(false); setMobileOtherServicesOpen(false); }}
+                                      className="block px-12 py-2.5 text-[10px] uppercase tracking-[0.15em] text-[#C1A173]/80 hover:text-[#C1A173] hover:bg-white transition-colors"
+                                    >
+                                      {item.label}
+                                    </Link>
+                                  ))}
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+
+                          {/* Consultation */}
                           <button
                             onClick={() => { handleConsultClick(); setIsMenuOpen(false); }}
                             className="w-full text-left px-8 py-3 mb-1 uppercase text-[10px] tracking-[0.2em] font-bold text-[#C1A173] bg-transparent hover:bg-white transition-colors"
                           >
                             Consultation
                           </button>
+
                           <div className="h-px bg-[#EBE5DE] mx-4 my-2" />
                         </div>
 
@@ -377,7 +556,5 @@ const Navbar = () => {
     </>
   );
 };
-
-import MenuLink from './MenuLink';
 
 export default Navbar;
