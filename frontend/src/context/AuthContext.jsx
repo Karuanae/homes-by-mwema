@@ -17,12 +17,71 @@ export const AuthProvider = ({ children }) => {
     const storedUser = localStorage.getItem('user');
     const token = localStorage.getItem('token');
     
+    console.log('🔍 AuthContext initial check:', {
+      hasStoredUser: !!storedUser,
+      hasToken: !!token
+    });
+    
     if (storedUser && token) {
-      // Token will be automatically added to requests via axios interceptor
-      setUser(JSON.parse(storedUser));
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        setUser(parsedUser);
+        console.log('✅ AuthContext restored user:', parsedUser.email);
+      } catch (e) {
+        console.error('❌ Failed to parse stored user:', e);
+        localStorage.removeItem('user');
+      }
     }
     
+    // Listen for storage changes (for Google login in same tab)
+    const handleStorageChange = (e) => {
+      console.log('📦 Storage changed:', e.key);
+      if (e.key === 'user' || e.key === 'token') {
+        const storedUser = localStorage.getItem('user');
+        const token = localStorage.getItem('token');
+        
+        if (storedUser && token) {
+          try {
+            const parsedUser = JSON.parse(storedUser);
+            setUser(parsedUser);
+            console.log('✅ AuthContext updated from storage:', parsedUser.email);
+          } catch (e) {
+            console.error('❌ Failed to parse stored user:', e);
+          }
+        } else {
+          setUser(null);
+        }
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Also check for custom event (for same-tab updates)
+    const handleAuthUpdate = () => {
+      const storedUser = localStorage.getItem('user');
+      const token = localStorage.getItem('token');
+      
+      if (storedUser && token) {
+        try {
+          const parsedUser = JSON.parse(storedUser);
+          setUser(parsedUser);
+          console.log('✅ AuthContext updated via custom event:', parsedUser.email);
+        } catch (e) {
+          console.error('❌ Failed to parse stored user:', e);
+        }
+      } else {
+        setUser(null);
+      }
+    };
+    
+    window.addEventListener('auth-update', handleAuthUpdate);
+    
     setLoading(false);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('auth-update', handleAuthUpdate);
+    };
   }, []);
 
   const login = async (credentials) => {
@@ -30,12 +89,18 @@ export const AuthProvider = ({ children }) => {
       const response = await api.auth.login(credentials.email, credentials.password);
       const { user: userData, token } = response.data;
       
+      console.log('📝 Login API response:', { userData, token: token ? 'received' : 'missing' });
+      
       // Store both user data and token
       localStorage.setItem('user', JSON.stringify(userData));
       localStorage.setItem('token', token);
       
-      // Token will be automatically added to requests via axios interceptor
+      // Update state
       setUser(userData);
+      
+      // Dispatch custom event for same-tab updates
+      window.dispatchEvent(new Event('auth-update'));
+      
       return { user: userData, token };
     } catch (error) {
       throw error;
@@ -50,8 +115,11 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('user', JSON.stringify(newUser));
       localStorage.setItem('token', token);
       
-      // Token will be automatically added to requests via axios interceptor
       setUser(newUser);
+      
+      // Dispatch custom event for same-tab updates
+      window.dispatchEvent(new Event('auth-update'));
+      
       return { user: newUser, token };
     } catch (error) {
       throw error;
@@ -64,6 +132,10 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('token');
     
     setUser(null);
+    
+    // Dispatch custom event
+    window.dispatchEvent(new Event('auth-update'));
+    
     navigate('/');
   };
 
@@ -71,6 +143,7 @@ export const AuthProvider = ({ children }) => {
     const currentUser = { ...user, ...updatedUserData };
     localStorage.setItem('user', JSON.stringify(currentUser));
     setUser(currentUser);
+    window.dispatchEvent(new Event('auth-update'));
   };
 
   const getToken = () => {
@@ -88,7 +161,8 @@ export const AuthProvider = ({ children }) => {
       updateUser,
       getToken,
       isAuthenticated,
-      loading
+      loading,
+      setUser // Expose setUser for direct updates if needed
     }}>
       {children}
     </AuthContext.Provider>
