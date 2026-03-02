@@ -1,37 +1,47 @@
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion'; // used in JSX
+import { motion } from 'framer-motion';
 import { FaEye, FaEyeSlash, FaSpinner, FaGoogle } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
+import { socialAuth } from '../services/socialAuth';
 
 export default function Register() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { signup, user, loading } = useAuth();
-  
-  // Redirect if already logged in
-  useEffect(() => {
-    if (!loading && user) {
-      if (user?.role === 'admin') {
-        navigate('/admin');
-      } else {
-        navigate('/');
-      }
-    }
-  }, [user, loading, navigate]);
-  
-  // Prevent rendering if already authenticated
-  if (loading) return <div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-stone-900"></div></div>
 
   const [formData, setFormData] = useState({
-    name: '', email: '', password: '', confirmPassword: '', phone: ''
+    name: '', email: '', password: '', confirmPassword: '', phone: '',
   });
-
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // Redirect if already logged in
+  useEffect(() => {
+    if (!loading && user) {
+      navigate(user?.role === 'admin' ? '/admin' : '/');
+    }
+  }, [user, loading, navigate]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-stone-900" />
+      </div>
+    );
+  }
+
+  const redirectAfterAuth = (userData) => {
+    if (userData?.role === 'admin') {
+      window.location.href = '/admin';
+    } else {
+      setTimeout(() => navigate(searchParams.get('redirect') || '/'), 1200);
+    }
+  };
+
+  // ── Standard registration ─────────────────────────────────────────────────
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
     setError('');
@@ -64,83 +74,44 @@ export default function Register() {
         name: formData.name,
         email: formData.email,
         password: formData.password,
-        phone: formData.phone || ''
+        phone: formData.phone || '',
       });
-
       setSuccess('Account created.');
-      // after successful signup, the auth context already stored user/token
-      if (user?.role === 'admin') {
-        window.location.href = '/admin';
-      } else {
-        const redirectUrl = searchParams.get('redirect');
-        setTimeout(() => navigate(redirectUrl || '/'), 1500);
-      }
-    } catch (error) {
-      const msg = error.response?.data?.error || 'Registration failed.';
-      setError(msg);
+      redirectAfterAuth(user);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Registration failed.');
     } finally {
       setIsLoading(false);
     }
   };
 
+  // ── Google Sign-Up ────────────────────────────────────────────────────────
+  const handleGoogleClick = () => {
+    setError('');
+    setIsLoading(true);
 
-  // Google Auth Handler (using Google Identity Services)
-  const handleGoogleAuth = () => {
-    // `google` is accessed via window.google
-    if (!window.google) {
-      const script = document.createElement('script');
-      script.src = 'https://accounts.google.com/gsi/client';
-      script.async = true;
-      script.defer = true;
-      script.onload = () => handleGoogleAuth();
-      document.body.appendChild(script);
-      return;
-    }
-    window.google.accounts.id.initialize({
-      client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID || 'YOUR_GOOGLE_CLIENT_ID',
-      callback: async (response) => {
-        setIsLoading(true);
-        setError('');
-        try {
-          // Send credential to backend for verification
-          const res = await fetch(`${API_BASE_URL.replace('/api', '')}/api/auth/google`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ credential: response.credential })
-          });
-          const data = await res.json();
-          if (data.token && data.user) {
-            localStorage.setItem('token', data.token);
-            localStorage.setItem('user', JSON.stringify(data.user));
-            setSuccess('Account created.');
-            if (data.user.role === 'admin') {
-              window.location.href = '/admin';
-            } else {
-              const redirectUrl = searchParams.get('redirect');
-              setTimeout(() => navigate(redirectUrl || '/'), 1000);
-            }
-          } else {
-            setError(data.error || 'Google authentication failed.');
-          }
-        } catch {
-          setError('Google authentication failed.');
-        } finally {
-          setIsLoading(false);
-        }
+    socialAuth.triggerGoogleSignIn(
+      (data) => {
+        setIsLoading(false);
+        setSuccess('Account created.');
+        redirectAfterAuth(data.user);
       },
-    });
-    window.google.accounts.id.prompt();
+      (err) => {
+        setIsLoading(false);
+        setError(err.message || 'Google authentication failed.');
+      }
+    );
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-stone-50 font-sans text-stone-900 p-6 pt-20">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.8, ease: "easeOut" }}
+        transition={{ duration: 0.8, ease: 'easeOut' }}
         className="w-full max-w-lg bg-white border border-stone-200 shadow-2xl shadow-stone-200/50 p-12 relative"
       >
-        <div className="absolute top-0 left-0 right-0 h-1 bg-stone-900 w-full" />
+        <div className="absolute top-0 left-0 right-0 h-1 bg-stone-900" />
 
         <div className="text-center mb-10">
           <h2 className="text-3xl font-serif italic text-stone-900 mb-3">Create Account</h2>
@@ -252,8 +223,8 @@ export default function Register() {
 
           <button
             type="submit"
-            className="w-full py-3 bg-stone-900 text-white uppercase tracking-widest text-xs font-bold rounded hover:bg-stone-800 transition-colors flex items-center justify-center gap-2"
             disabled={isLoading}
+            className="w-full py-3 bg-stone-900 text-white uppercase tracking-widest text-xs font-bold rounded hover:bg-stone-800 transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
           >
             {isLoading ? <FaSpinner className="animate-spin" /> : 'Create Account'}
           </button>
@@ -261,13 +232,22 @@ export default function Register() {
 
         <div className="mt-10 pt-6 border-t border-stone-100 text-center">
           <div className="mb-6">
-            <button type="button" onClick={handleGoogleAuth} className="w-full py-3 border border-stone-200 text-[10px] uppercase tracking-widest hover:bg-stone-50 transition-colors mb-2 flex items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={handleGoogleClick}
+              disabled={isLoading}
+              className="w-full py-3 border border-stone-200 text-[10px] uppercase tracking-widest hover:bg-stone-50 transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
+            >
               <FaGoogle className="text-lg" /> Register with Google
             </button>
           </div>
+
           <p className="text-stone-500 font-serif text-sm">
             Already have an account?{' '}
-            <Link to="/login" className="text-stone-900 italic border-b border-stone-300 hover:border-stone-900 transition-all">
+            <Link
+              to="/login"
+              className="text-stone-900 italic border-b border-stone-300 hover:border-stone-900 transition-all"
+            >
               Sign In
             </Link>
           </p>

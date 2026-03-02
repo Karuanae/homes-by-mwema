@@ -1,4 +1,4 @@
-// api.js - COMPLETE UPDATED VERSION WITH SIMPLIFIED UPLOAD
+// api.js - COMPLETE UPDATED VERSION WITH SIMPLIFIED UPLOAD + GOOGLE AUTH
 import axios from 'axios';
 
 export const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://flask-app-production-c760.up.railway.app/api';
@@ -63,6 +63,19 @@ export const authAPI = {
     }
     return response;
   },
+
+  // ── Google OAuth ──────────────────────────────────────────────────────────
+  // Sends the Google ID token (credential) to your backend for verification.
+  // On success the backend returns { token, user }; we persist both.
+  googleAuth: async (credential) => {
+    const response = await api.post('/auth/google', { credential });
+    if (response.data.token) {
+      localStorage.setItem('token', response.data.token);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+    }
+    return response;
+  },
+  // ─────────────────────────────────────────────────────────────────────────
 
   guestCheckout: async (guestData) => {
     const response = await api.post('/auth/guest', guestData);
@@ -133,19 +146,16 @@ export const propertiesAPI = {
 
 // ==================== UPLOAD API ====================
 export const uploadAPI = {
-  // NEW: Single endpoint for property with images (Simplified Approach)
   createPropertyWithImages: async (formData) => {
     const response = await api.post('/admin/properties/with-images', formData);
     return response;
   },
 
-  // NEW: Add images to existing property
   addPropertyImages: async (propertyId, formData) => {
     const response = await api.post(`/admin/properties/${propertyId}/images`, formData);
     return response;
   },
 
-  // Keep for compatibility (if other parts of app use these)
   uploadPropertyImageToDB: async (file) => {
     const formData = new FormData();
     formData.append('image', file);
@@ -162,7 +172,6 @@ export const uploadAPI = {
     return response;
   },
 
-  // Old filesystem endpoints (keep for compatibility)
   uploadFile: async (file) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -172,7 +181,7 @@ export const uploadAPI = {
 
   uploadMultiple: async (files) => {
     const formData = new FormData();
-    files.forEach((file, index) => {
+    files.forEach((file) => {
       formData.append(`files`, file);
     });
     const response = await api.post('/upload/multiple', formData);
@@ -218,7 +227,6 @@ export const bookingsAPI = {
     return response;
   },
 
-  // Admin endpoints
   getAll: async (params = {}) => {
     const response = await api.get('/admin/bookings', { params });
     return response;
@@ -286,7 +294,6 @@ export const paymentsAPI = {
     return response;
   },
 
-  // Admin endpoints
   getAll: async (params = {}) => {
     const response = await api.get('/admin/payments', { params });
     return response;
@@ -337,14 +344,13 @@ export const paymentsAPI = {
   },
 };
 
-// ==================== CHATS/MESSAGES API - FIXED ====================
+// ==================== CHATS/MESSAGES API ====================
 export const chatsAPI = {
   getUserChats: async (userId) => {
     const response = await api.get(`/chats/user/${userId}`);
     return response;
   },
 
-  // Alternative for getting current user chats
   getMyChats: async () => {
     const response = await api.get('/chats/my-chats');
     return response;
@@ -360,12 +366,10 @@ export const chatsAPI = {
     return response;
   },
 
-  // FIXED: Simplified startChat - only needs userId and propertyId
   startChat: async (userId, hostId = null, propertyId = null) => {
     const response = await api.post('/chats', {
       user_id: userId,
       property_id: propertyId,
-      // host_id is optional and not used by backend
     });
     return response;
   },
@@ -375,7 +379,6 @@ export const chatsAPI = {
     return response;
   },
 
-  // FIXED: Changed endpoint name to match backend
   markRead: async (chatId) => {
     const response = await api.put(`/chats/${chatId}/read`);
     return response;
@@ -391,7 +394,6 @@ export const chatsAPI = {
     return response;
   },
 };
-
 
 // ==================== LEADS API ====================
 export const leadsAPI = {
@@ -454,9 +456,7 @@ export const homepageAPI = {
       formData.append('images', image);
     });
     const response = await api.post('/admin/homepage/upload', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+      headers: { 'Content-Type': 'multipart/form-data' },
     });
     return response;
   },
@@ -489,31 +489,26 @@ export const reportsAPI = {
 
 // ==================== ADMIN API ====================
 export const adminAPI = {
-  // NEW: Single endpoint for property creation with images
   createPropertyWithImages: async (formData) => {
     const response = await api.post('/admin/properties/with-images', formData);
     return response;
   },
 
-  // NEW: Add images to existing property
   addPropertyImages: async (propertyId, formData) => {
     const response = await api.post(`/admin/properties/${propertyId}/images`, formData);
     return response;
   },
 
-  // NEW: Get detailed user information
   getUserDetails: async (userId) => {
     const response = await api.get(`/admin/users/${userId}/details`);
     return response;
   },
 
-  // NEW: Delete a user
   deleteUser: async (userId) => {
     const response = await api.delete(`/admin/users/${userId}`);
     return response;
   },
 
-  // Original admin endpoints
   getStats: async () => {
     const response = await api.get('/admin/stats');
     return response;
@@ -649,9 +644,7 @@ export const miscAPI = {
     formData.append('file', file);
     formData.append('type', type);
     const response = await api.post('/upload', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+      headers: { 'Content-Type': 'multipart/form-data' },
     });
     return response;
   },
@@ -667,7 +660,7 @@ export const miscAPI = {
   },
 };
 
-// Helper function to check if user is authenticated
+// ==================== HELPER FUNCTIONS ====================
 export const isAuthenticated = () => {
   return !!localStorage.getItem('token') || !!localStorage.getItem('guest_token');
 };
@@ -682,7 +675,6 @@ export const getAuthToken = () => {
   return localStorage.getItem('token') || localStorage.getItem('guest_token');
 };
 
-// Helper function to get property image URL
 export const getPropertyImageUrl = (imageId) => {
   return `${API_BASE_URL}/admin/property-image/${imageId}`;
 };
@@ -701,26 +693,21 @@ export const getBookingPayments = async (bookingId) => {
 };
 
 export const socketAPI = {
-  // These methods use the socketService directly
   connect: () => socketService.connect(),
   disconnect: () => socketService.disconnect(),
   authenticate: (userId, userType) => socketService.authenticate(userId, userType),
-  createChat: (userId, propertyId, initialMessage) => 
+  createChat: (userId, propertyId, initialMessage) =>
     socketService.createChat(userId, propertyId, initialMessage),
   joinChat: (chatId) => socketService.joinChat(chatId),
-  sendMessage: (chatId, content, senderName) => 
+  sendMessage: (chatId, content, senderName) =>
     socketService.sendMessage(chatId, content, senderName),
   typing: (chatId, isTyping) => socketService.typing(chatId, isTyping),
   markMessagesRead: (chatId) => socketService.markMessagesRead(chatId),
   getActiveChats: () => socketService.getActiveChats(),
   leaveChat: (chatId) => socketService.leaveChat(chatId),
   ping: () => socketService.ping(),
-  
-  // Event subscription
   on: (event, callback) => socketService.on(event, callback),
   off: (event, callback) => socketService.off(event, callback),
-  
-  // Status
   getStatus: () => socketService.getConnectionStatus(),
   isConnected: () => socketService.isConnected,
 };
@@ -735,7 +722,6 @@ export const consultationsAPI = {
     const response = await api.get('/consultations');
     return response;
   },
-  // NEW: Admin — update consultation status
   updateStatus: async (id, status) => {
     const response = await api.put(`/consultations/${id}/status`, { status });
     return response;
@@ -744,7 +730,6 @@ export const consultationsAPI = {
 
 // Export everything
 export default {
-  // API categories
   auth: authAPI,
   properties: propertiesAPI,
   bookings: bookingsAPI,
@@ -761,14 +746,12 @@ export default {
   upload: uploadAPI,
   socket: socketAPI,
   consultations: consultationsAPI,
-  
-  // Helper functions
+
   isAuthenticated,
   getCurrentUser,
   getAuthToken,
   getPropertyImageUrl,
-  
-  // M-Pesa helpers
+
   initiateMpesaPayment,
   checkPaymentStatus,
   getBookingPayments,

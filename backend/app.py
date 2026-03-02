@@ -20,7 +20,6 @@ app.url_map.strict_slashes = False
 # Database configuration - Force PostgreSQL in production, SQLite only for local dev
 database_url = os.environ.get('DATABASE_URL')
 if not database_url:
-    # Only use SQLite if explicitly in development mode and no DATABASE_URL
     if os.environ.get('FLASK_ENV') == 'development':
         database_url = 'sqlite:///homes.db'
         print("⚠️  WARNING: Using SQLite database - not suitable for production!")
@@ -30,7 +29,7 @@ if not database_url:
 # Handle Railway's PostgreSQL URL format
 if database_url and database_url.startswith('postgres://'):
     database_url = database_url.replace('postgres://', 'postgresql://', 1)
-    
+
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -46,45 +45,36 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 app.config['ALLOWED_EXTENSIONS'] = ALLOWED_EXTENSIONS
 
-# Create upload folder if it doesn't exist
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 print(f"📁 Upload directory: {UPLOAD_FOLDER}")
 
 migrate = Migrate(app, db)
 db.init_app(app)
 
-# ===== UPDATED CORS CONFIGURATION WITH ALL YOUR DOMAINS =====
-# Get allowed origins from environment or use defaults
+# ===== CORS CONFIGURATION =====
 default_origins = 'http://localhost:3000,http://localhost:5173'
 allowed_origins = os.environ.get('ALLOWED_ORIGINS', default_origins).split(',')
 
-# Add Vercel domains (temporary and production)
 vercel_domains = [
     'https://homes-by-mwema-bc0hneof2-karuanaes-projects.vercel.app',
     'https://homes-by-mwema.vercel.app',
 ]
 
-# Add Truehost/Custom domains
 custom_domains = [
     'https://homesbymwema.com',
     'https://www.homesbymwema.com',
 ]
 
-# Add Railway domain if available
 railway_domain = os.environ.get('RAILWAY_PUBLIC_DOMAIN')
 if railway_domain:
     allowed_origins.append(f'https://{railway_domain}')
     allowed_origins.append(f'https://www.{railway_domain}')
 
-# Combine all domains (remove duplicates by converting to set)
-all_domains = set(allowed_origins + vercel_domains + custom_domains)
-# Filter out any empty strings
-all_domains = [domain for domain in all_domains if domain]
+all_domains = list({d for d in allowed_origins + vercel_domains + custom_domains if d})
 
-# Update CORS configuration
 CORS(app, resources={
     r"/api/*": {
-        "origins": list(all_domains),
+        "origins": all_domains,
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
         "expose_headers": ["Content-Type", "Authorization"],
@@ -92,15 +82,14 @@ CORS(app, resources={
         "max_age": 600
     },
     r"/socket.io/*": {
-        "origins": list(all_domains),
+        "origins": all_domains,
         "supports_credentials": True
     }
 })
 
-# Print configured origins for debugging
 print("=" * 50)
 print("🌐 CORS Allowed Origins:")
-for origin in sorted(list(all_domains)):
+for origin in sorted(all_domains):
     print(f"  • {origin}")
 print("=" * 50)
 
@@ -141,7 +130,7 @@ jwt.init_app(app)
 # Initialize SocketIO with production settings
 socketio = SocketIO(
     app,
-    cors_allowed_origins=list(all_domains),
+    cors_allowed_origins=all_domains,
     async_mode='eventlet',
     logger=True,
     engineio_logger=False,
@@ -160,13 +149,11 @@ def check_if_token_revoked(jwt_header, jwt_payload):
 # Serve uploaded files
 @app.route('/uploads/properties/<filename>')
 def uploaded_file(filename):
-    """Serve uploaded property images"""
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 # Health check endpoint for Railway
 @app.route('/health')
 def health_check():
-    """Health check endpoint for Railway"""
     return jsonify({
         'status': 'healthy',
         'timestamp': datetime.utcnow().isoformat(),
@@ -184,8 +171,9 @@ def index():
         'timestamp': datetime.utcnow().isoformat()
     })
 
-# Register blueprints
+# ── Register blueprints ────────────────────────────────────────────────────
 from views.auth import auth_bp
+from views.auth_google import google_auth_bp          # ← NEW
 from views.properties import properties_bp
 from views.admin import admin_bp
 from views.booking import booking_bp
@@ -194,14 +182,16 @@ from views.user import user_bp
 from views.chat import chat_bp
 from views.main import bp as main_bp
 
-app.register_blueprint(auth_bp, url_prefix='/api/auth')
-app.register_blueprint(properties_bp, url_prefix='/api/properties')
-app.register_blueprint(admin_bp, url_prefix='/api/admin')
-app.register_blueprint(booking_bp, url_prefix='/api/bookings')
-app.register_blueprint(payment_bp, url_prefix='/api/payments')
-app.register_blueprint(user_bp, url_prefix='/api/users')
-app.register_blueprint(chat_bp, url_prefix='/api/chats')
-app.register_blueprint(main_bp, url_prefix='/api')
+app.register_blueprint(auth_bp,        url_prefix='/api/auth')
+app.register_blueprint(google_auth_bp, url_prefix='/api/auth')   # ← NEW  →  POST /api/auth/google
+app.register_blueprint(properties_bp,  url_prefix='/api/properties')
+app.register_blueprint(admin_bp,       url_prefix='/api/admin')
+app.register_blueprint(booking_bp,     url_prefix='/api/bookings')
+app.register_blueprint(payment_bp,     url_prefix='/api/payments')
+app.register_blueprint(user_bp,        url_prefix='/api/users')
+app.register_blueprint(chat_bp,        url_prefix='/api/chats')
+app.register_blueprint(main_bp,        url_prefix='/api')
+# ──────────────────────────────────────────────────────────────────────────
 
 # SocketIO event handlers
 @socketio.on('connect')
@@ -213,7 +203,6 @@ def handle_connect():
 def handle_disconnect():
     print(f'[SOCKETIO] Client disconnected: {request.sid}')
 
-# Simple test event
 @socketio.on('ping')
 def handle_ping():
     emit('pong', {'message': 'pong', 'timestamp': datetime.utcnow().isoformat()})
@@ -226,42 +215,38 @@ try:
 except ImportError as e:
     print(f"⚠️  Could not import socket_events: {e}")
     print("⚠️  Creating socket_events.py file...")
-    
+
     socket_events_content = '''# socket_events.py
 def register_chat_events(socketio):
     """Placeholder for chat events"""
     print("ℹ️  Using placeholder socket events")
-    
+
     @socketio.on('authenticate')
     def handle_authentication(data):
         print(f"Authentication attempt: {data}")
         socketio.emit('authenticated', {'status': 'success'})
 '''
-    
+
     with open('socket_events.py', 'w') as f:
         f.write(socket_events_content)
-    
+
     from socket_events import register_chat_events
     register_chat_events(socketio)
 
-# ===== UPDATED ADMIN USER SECTION - CONFIGURABLE VIA ENV VARIABLES =====
-# Create database tables on startup
+# ===== ADMIN USER SECTION =====
 with app.app_context():
     try:
         db.create_all()
         print("✅ Database tables created/verified")
-        
-        # Get admin credentials from environment variables
-        admin_email = os.environ.get('ADMIN_EMAIL', 'homesbymwema@gmail.com')  # Default changed
+
+        admin_email    = os.environ.get('ADMIN_EMAIL', 'homesbymwema@gmail.com')
         admin_password = os.environ.get('ADMIN_PASSWORD', 'admin123')
-        admin_name = os.environ.get('ADMIN_NAME', 'Homes by Mwema Admin')
-        admin_phone = os.environ.get('ADMIN_PHONE', '+254700000000')
-        
-        # Check if admin user exists
+        admin_name     = os.environ.get('ADMIN_NAME', 'Homes by Mwema Admin')
+        admin_phone    = os.environ.get('ADMIN_PHONE', '+254700000000')
+
         admin_user = User.query.filter_by(email=admin_email).first()
-        
+
         if not admin_user:
-            # Create new admin user
             admin_user = User(
                 name=admin_name,
                 email=admin_email,
@@ -273,39 +258,34 @@ with app.app_context():
             db.session.commit()
             print(f"✅ Created admin user: {admin_email}")
         else:
-            # Update existing admin user if credentials changed
             updated = False
-            
-            # Check if password needs update
+
             if not admin_user.check_password(admin_password):
                 admin_user.set_password(admin_password)
                 updated = True
-                print(f"🔄 Updated admin password from environment variable")
-            
-            # Check if email changed
+                print("🔄 Updated admin password from environment variable")
+
             if admin_user.email != admin_email:
                 admin_user.email = admin_email
                 updated = True
                 print(f"🔄 Updated admin email to: {admin_email}")
-            
-            # Check if name changed
+
             if admin_user.name != admin_name:
                 admin_user.name = admin_name
                 updated = True
                 print(f"🔄 Updated admin name to: {admin_name}")
-            
-            # Check if phone changed
+
             if admin_user.phone != admin_phone:
                 admin_user.phone = admin_phone
                 updated = True
                 print(f"🔄 Updated admin phone to: {admin_phone}")
-            
+
             if updated:
                 db.session.commit()
                 print(f"✅ Admin user updated: {admin_email}")
             else:
                 print(f"✅ Admin user already exists: {admin_email}")
-            
+
     except Exception as e:
         print(f"⚠️  Database initialization warning: {e}")
         print("This is normal if migrations haven't been applied yet.")
@@ -320,24 +300,21 @@ def internal_error(error):
     db.session.rollback()
     return jsonify({'error': 'Internal server error'}), 500
 
-# Update the main block for Railway
 if __name__ == '__main__':
-    # Local development
     port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('FLASK_DEBUG', 'True').lower() == 'true'
     print("=" * 50)
     print("🚀 Starting MWEMA Estate server locally...")
     print(f"📡 Server will run on: http://0.0.0.0:{port}")
     print(f"📁 Upload folder: {UPLOAD_FOLDER}")
-    print(f"🌐 CORS allowed origins: {list(all_domains)}")
+    print(f"🌐 CORS allowed origins: {all_domains}")
     print("🔌 WebSocket endpoint: ws://localhost:5000/socket.io/")
     print("=" * 50)
     socketio.run(app, debug=debug, host='0.0.0.0', port=port)
 else:
-    # Production (imported by gunicorn)
     print("=" * 50)
     print("🚀 MWEMA Estate app initialized for production")
     print(f"📡 Database: {app.config['SQLALCHEMY_DATABASE_URI']}")
     print(f"📁 Upload folder: {app.config['UPLOAD_FOLDER']}")
-    print(f"🌐 CORS allowed origins: {list(all_domains)}")
+    print(f"🌐 CORS allowed origins: {all_domains}")
     print("=" * 50)
