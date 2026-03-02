@@ -1,6 +1,15 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { MessageSquare, Calendar, User, LogOut, Home, X } from 'lucide-react';
+import { 
+  MessageSquare, 
+  Calendar, 
+  User, 
+  LogOut, 
+  Home, 
+  X,
+  CalendarCheck, // For consultations
+  PlusCircle    // For new consultation
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -10,9 +19,38 @@ const UserSidebar = ({ isOpen, onClose }) => {
   const { user, logout } = useAuth();
 
   const menuItems = [
-    { path: '/my-bookings', label: 'My Bookings', icon: Calendar },
-    { path: '/chat', label: 'Messages', icon: MessageSquare },
-    { path: '/profile', label: 'Profile Settings', icon: User },
+    { 
+      path: '/my-bookings', 
+      label: 'My Bookings', 
+      icon: Calendar,
+      description: 'View your reservations'
+    },
+    { 
+      path: '/my-consultations', 
+      label: 'My Consultations', 
+      icon: CalendarCheck,
+      description: 'Track consultation requests',
+      badge: null // You can add count later if needed
+    },
+    { 
+      path: '/consultation/new', 
+      label: 'New Consultation', 
+      icon: PlusCircle,
+      description: 'Schedule a consultation',
+      highlight: true // Makes this stand out
+    },
+    { 
+      path: '/chat', 
+      label: 'Concierge Service', 
+      icon: MessageSquare,
+      description: 'Concierge chat'
+    },
+    { 
+      path: '/profile', 
+      label: 'Profile Settings', 
+      icon: User,
+      description: 'Manage your account'
+    },
   ];
 
   const handleLogout = () => {
@@ -74,7 +112,7 @@ const UserSidebar = ({ isOpen, onClose }) => {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-1">
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {menuItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.path);
@@ -84,16 +122,24 @@ const UserSidebar = ({ isOpen, onClose }) => {
                 key={item.path}
                 to={item.path}
                 onClick={onClose}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group ${
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group relative ${
                   active
                     ? 'bg-white/10 text-white'
-                    : 'text-stone-400 hover:bg-white/5 hover:text-white'
+                    : item.highlight 
+                      ? 'text-amber-400 hover:bg-amber-500/10 hover:text-amber-300' 
+                      : 'text-stone-400 hover:bg-white/5 hover:text-white'
                 }`}
+                title={item.description}
               >
                 <Icon size={18} strokeWidth={1.5} />
-                <span className="text-sm font-medium">{item.label}</span>
+                <span className="text-sm font-medium flex-1">{item.label}</span>
                 {active && (
-                  <div className="ml-auto w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                )}
+                {item.badge && (
+                  <span className="bg-amber-500 text-stone-900 text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                    {item.badge}
+                  </span>
                 )}
               </Link>
             );
@@ -164,7 +210,7 @@ const UserSidebar = ({ isOpen, onClose }) => {
             </div>
 
             {/* Navigation */}
-            <nav className="flex-1 p-4 space-y-1">
+            <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
               {menuItems.map((item) => {
                 const Icon = item.icon;
                 const active = isActive(item.path);
@@ -177,13 +223,15 @@ const UserSidebar = ({ isOpen, onClose }) => {
                     className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group ${
                       active
                         ? 'bg-white/10 text-white'
-                        : 'text-stone-400 hover:bg-white/5 hover:text-white'
+                        : item.highlight 
+                          ? 'text-amber-400 hover:bg-amber-500/10 hover:text-amber-300' 
+                          : 'text-stone-400 hover:bg-white/5 hover:text-white'
                     }`}
                   >
                     <Icon size={18} strokeWidth={1.5} />
-                    <span className="text-sm font-medium">{item.label}</span>
+                    <span className="text-sm font-medium flex-1">{item.label}</span>
                     {active && (
-                      <div className="ml-auto w-1.5 h-1.5 rounded-full bg-amber-400" />
+                      <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
                     )}
                   </Link>
                 );

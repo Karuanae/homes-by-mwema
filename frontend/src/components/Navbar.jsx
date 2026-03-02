@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavbarState } from '../hooks/useNavbarState';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Menu, X, User, LogOut, MessageSquare, Bell, ChevronRight, Calendar, ChevronDown, ArrowLeft } from 'lucide-react';
+import { Menu, X, User, LogOut, MessageSquare, Bell, ChevronRight, Calendar, ChevronDown, ArrowLeft, LayoutDashboard } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../services/api';
@@ -25,7 +25,6 @@ const MINIMAL_NAVBAR_ROUTES = [
   '/booking',
   '/payment',
   '/checkout',
-  '/properties', // Added properties to minimal routes? No, we want full navbar on properties
 ];
 
 // "Other Services" submenu items
@@ -44,7 +43,9 @@ const Navbar = () => {
   const [notifications, setNotifications] = useState([]);
   const [otherServicesOpen, setOtherServicesOpen] = useState(false);
   const [mobileOtherServicesOpen, setMobileOtherServicesOpen] = useState(false);
+  const [notifPanelOpen, setNotifPanelOpen] = useState(false);
   const otherServicesRef = useRef(null);
+  const notifRef = useRef(null);
 
   // Determine if we're on a page that should show minimal navbar
   const isMinimalRoute = MINIMAL_NAVBAR_ROUTES.some(route =>
@@ -54,6 +55,7 @@ const Navbar = () => {
   useEffect(() => {
     setIsMenuOpen(false);
     setOtherServicesOpen(false);
+    setNotifPanelOpen(false);
 
     const params = new URLSearchParams(location.search);
     if (params.get('consult') === '1' && isAuthenticated) {
@@ -131,7 +133,7 @@ const Navbar = () => {
     return () => clearTimeout(timer);
   }, [showToast]);
 
-  // Close menu on outside click
+  // Close menu/panels on outside click
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (isMenuOpen && menuRef.current && !menuRef.current.contains(event.target)) {
@@ -140,10 +142,13 @@ const Navbar = () => {
       if (otherServicesOpen && otherServicesRef.current && !otherServicesRef.current.contains(event.target)) {
         setOtherServicesOpen(false);
       }
+      if (notifPanelOpen && notifRef.current && !notifRef.current.contains(event.target)) {
+        setNotifPanelOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isMenuOpen, menuRef, setIsMenuOpen, otherServicesOpen]);
+  }, [isMenuOpen, menuRef, setIsMenuOpen, otherServicesOpen, notifPanelOpen]);
 
   const handleLogout = (e) => {
     e.stopPropagation();
@@ -157,7 +162,7 @@ const Navbar = () => {
       const dest = `${location.pathname}${location.search ? location.search + '&' : '?'}consult=1`;
       navigate(`/login?redirect=${encodeURIComponent(dest)}`);
     } else {
-      setShowConsultModal(true);
+      navigate('/consultation/new');
     }
   };
 
@@ -175,6 +180,10 @@ const Navbar = () => {
       case 'booking': return 'text-blue-400';
       default: return 'text-[#ED9B40]';
     }
+  };
+
+  const dismissNotification = (id) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
   // ─── MINIMAL NAVBAR (login, register, booking, payment) ───────────────────
@@ -268,7 +277,7 @@ const Navbar = () => {
         )}
       </AnimatePresence>
 
-      {/* --- MAIN NAVBAR - UPDATED WITH PROPERTIES LINK --- */}
+      {/* --- MAIN NAVBAR --- */}
       <motion.header className="absolute top-0 left-0 w-full z-[100] bg-transparent py-3 border-b border-transparent">
         <div className="max-w-[1600px] mx-auto pl-0 pr-6 lg:pl-0 lg:pr-12">
           <div className="flex items-center justify-between">
@@ -290,7 +299,7 @@ const Navbar = () => {
               {/* Desktop Nav Links */}
               <nav className="hidden md:flex items-center gap-8 mr-2">
 
-                {/* 1. Reserve a Unit - NOW LINKS TO PROPERTIES PAGE */}
+                {/* 1. Reserve a Unit */}
                 <Link
                   to="/properties"
                   className="inline-flex items-center justify-center bg-[#ED9B40] hover:bg-[#d48a36] transition-all duration-300 px-6 py-2"
@@ -300,7 +309,7 @@ const Navbar = () => {
                   </span>
                 </Link>
 
-                {/* 2. Management Services - Link style */}
+                {/* 2. Management Services */}
                 <Link
                   to="/management"
                   className="inline-flex items-center justify-center relative group px-2 py-2"
@@ -311,7 +320,7 @@ const Navbar = () => {
                   <span className="absolute bottom-0 left-0 w-0 h-[1px] bg-[#ED9B40] transition-all duration-500 group-hover:w-full" />
                 </Link>
 
-                {/* 3. Other Services — dropdown - Link style */}
+                {/* 3. Other Services dropdown */}
                 <div className="relative" ref={otherServicesRef}>
                   <button
                     onClick={() => setOtherServicesOpen(prev => !prev)}
@@ -353,7 +362,7 @@ const Navbar = () => {
                   </AnimatePresence>
                 </div>
 
-                {/* 4. Consultation - Link style */}
+                {/* 4. Consultation */}
                 <button
                   onClick={handleConsultClick}
                   className="inline-flex items-center justify-center relative group"
@@ -365,20 +374,104 @@ const Navbar = () => {
                 </button>
               </nav>
 
-              {/* Notification Bell */}
+              {/* Notification Bell with popup panel */}
               {isAuthenticated && (
-                <button
-                  onClick={() => navigate('/chat')}
-                  className="relative p-2 transition-opacity hover:opacity-60 text-[#ED9B40]"
-                  title={notifications.length > 0 ? `${notifications.length} notification${notifications.length > 1 ? 's' : ''}` : 'No new notifications'}
-                >
-                  <Bell size={18} strokeWidth={1.5} />
-                  {notifications.length > 0 && (
-                    <span className="absolute top-0 right-0 w-5 h-5 bg-[#D4AF37] text-[#1C1917] text-xs font-bold rounded-full flex items-center justify-center">
-                      {notifications.length > 9 ? '9+' : notifications.length}
-                    </span>
-                  )}
-                </button>
+                <div className="relative" ref={notifRef}>
+                  <button
+                    onClick={() => setNotifPanelOpen(prev => !prev)}
+                    className="relative p-2 transition-opacity hover:opacity-60 text-[#ED9B40]"
+                    title={notifications.length > 0 ? `${notifications.length} notification${notifications.length > 1 ? 's' : ''}` : 'No new notifications'}
+                  >
+                    <Bell size={18} strokeWidth={1.5} />
+                    {notifications.length > 0 && (
+                      <span className="absolute top-0 right-0 w-5 h-5 bg-[#D4AF37] text-[#1C1917] text-xs font-bold rounded-full flex items-center justify-center">
+                        {notifications.length > 9 ? '9+' : notifications.length}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* Notification Popup Panel */}
+                  <AnimatePresence>
+                    {notifPanelOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10, scale: 0.97 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 10, scale: 0.97 }}
+                        transition={{ duration: 0.2, ease: 'easeOut' }}
+                        className="absolute right-0 top-full mt-3 w-80 bg-[#F5F2EE] shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-[#EBE5DE] z-50 flex flex-col"
+                        style={{ maxHeight: '420px' }}
+                      >
+                        {/* Panel Header */}
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-[#EBE5DE] bg-white flex-shrink-0">
+                          <div className="flex items-center gap-2">
+                            <Bell size={13} className="text-[#ED9B40]" strokeWidth={1.5} />
+                            <span className="text-[10px] uppercase tracking-[0.2em] font-semibold text-[#1C1917]">
+                              Notifications
+                            </span>
+                          </div>
+                          {notifications.length > 0 && (
+                            <button
+                              onClick={() => setNotifications([])}
+                              className="text-[9px] uppercase tracking-widest text-stone-400 hover:text-[#ED9B40] transition-colors"
+                            >
+                              Clear all
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Scrollable Notification List */}
+                        <div className="overflow-y-auto flex-1" style={{ maxHeight: '340px' }}>
+                          {notifications.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-10 px-6 text-center">
+                              <Bell size={28} className="text-stone-300 mb-3" strokeWidth={1} />
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-stone-400">
+                                No new notifications
+                              </p>
+                            </div>
+                          ) : (
+                            notifications.map((notification, index) => (
+                              <motion.div
+                                key={notification.id}
+                                initial={{ opacity: 0, x: -8 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: 8 }}
+                                transition={{ delay: index * 0.05 }}
+                                className="flex items-start gap-3 px-5 py-4 border-b border-[#EBE5DE] last:border-0 hover:bg-white transition-colors group"
+                              >
+                                <div className={`mt-0.5 flex-shrink-0 ${getTitleColor(notification.type)}`}>
+                                  {getNotificationIcon(notification.type)}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-[9px] uppercase tracking-[0.18em] font-semibold mb-1 ${getTitleColor(notification.type)}`}>
+                                    {notification.title}
+                                  </p>
+                                  <p className="text-[11px] text-stone-600 leading-relaxed line-clamp-2">
+                                    {notification.message}
+                                  </p>
+                                  <button
+                                    onClick={() => {
+                                      setNotifPanelOpen(false);
+                                      navigate(notification.route);
+                                    }}
+                                    className="mt-2 text-[9px] uppercase tracking-widest text-[#ED9B40] border-b border-[#ED9B40]/40 pb-0.5 hover:border-[#ED9B40] transition-colors"
+                                  >
+                                    {notification.action}
+                                  </button>
+                                </div>
+                                <button
+                                  onClick={() => dismissNotification(notification.id)}
+                                  className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-stone-300 hover:text-stone-500 mt-0.5"
+                                >
+                                  <X size={12} />
+                                </button>
+                              </motion.div>
+                            ))
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               )}
 
               {/* Hamburger Menu Toggle */}
@@ -424,7 +517,7 @@ const Navbar = () => {
                         <div className="px-4 md:hidden">
                           <p className="text-[9px] uppercase tracking-widest text-stone-400 px-8 pt-2 pb-1">Navigation</p>
 
-                          {/* Reserve a Unit - NOW LINKS TO PROPERTIES PAGE */}
+                          {/* Reserve a Unit */}
                           <Link
                             to="/properties"
                             onClick={() => setIsMenuOpen(false)}
@@ -479,7 +572,7 @@ const Navbar = () => {
                             </AnimatePresence>
                           </div>
 
-                          {/* Consultation - Mobile version */}
+                          {/* Consultation - Mobile */}
                           <button
                             onClick={() => { handleConsultClick(); setIsMenuOpen(false); }}
                             className="w-full text-left px-8 py-3 mb-1 uppercase text-[10px] tracking-[0.2em] font-bold text-[#ED9B40] bg-transparent hover:bg-white transition-colors"
@@ -510,10 +603,22 @@ const Navbar = () => {
                           </>
                         ) : (
                           <>
-                            <MenuLink to="/profile" label="Profile & Settings" onClick={() => setIsMenuOpen(false)} />
-                            <MenuLink to="/my-bookings" label="My Reservations" onClick={() => setIsMenuOpen(false)} />
-                            <MenuLink to="/chat" label="Concierge Service" onClick={() => setIsMenuOpen(false)} />
+                            {/* My Dashboard - replaces individual account links */}
+                            <Link
+                              to="/my-bookings"
+                              onClick={() => setIsMenuOpen(false)}
+                              className="w-full flex items-center justify-between px-8 py-3 text-[10px] uppercase tracking-[0.18em] font-bold text-[#1C1917] bg-[#ED9B40] hover:bg-[#d48a36] transition-colors mx-0 mb-2"
+                            >
+                              <div className="flex items-center gap-2">
+                                <LayoutDashboard size={13} strokeWidth={2} />
+                                My Dashboard
+                              </div>
+                              <ChevronRight size={12} />
+                            </Link>
+
                             <div className="h-px bg-[#EBE5DE] mx-6 my-2" />
+
+                            {/* Sign Out */}
                             <button
                               onClick={handleLogout}
                               className="w-full text-left px-8 py-3 text-[10px] uppercase tracking-[0.2em] font-bold text-red-900/60 hover:text-red-900 hover:bg-red-50/50 transition-colors flex items-center justify-between group"
