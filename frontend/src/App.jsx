@@ -1,7 +1,7 @@
 // App.jsx - Main application component with Properties route
-import React from "react";
-import { Routes, Route } from "react-router-dom";
-import { AuthProvider } from "./context/AuthContext";
+import React, { useEffect } from "react";
+import { Routes, Route, useNavigate } from "react-router-dom";
+import { AuthProvider, useAuth } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminRoute from "./components/AdminRoute";
 import PublicRoute from "./components/PublicRoute";
@@ -22,11 +22,45 @@ import Management from "./pages/Management";
 import ListingOptimization from "./pages/ListingOptimization";
 import PhotographyVideography from "./pages/PhotographyVideography";
 import AdminConsultations from "./pages/AdminConsultations";
-import Properties from "./pages/Properties"; // Import the Properties page
+import Properties from "./pages/Properties";
 
-export default function App() {
+// AuthSync component to handle auth state synchronization
+const AuthSync = () => {
+  const { refreshUserFromStorage } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // Listen for storage events (changes from other tabs)
+    const handleStorageChange = (e) => {
+      if (e.key === 'user' || e.key === 'token') {
+        console.log('🔄 Storage changed, refreshing auth context');
+        refreshUserFromStorage();
+      }
+    };
+
+    // Listen for custom auth update events (from same tab)
+    const handleAuthUpdate = () => {
+      console.log('🔄 Auth update event received, refreshing auth context');
+      refreshUserFromStorage();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('auth-update', handleAuthUpdate);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('auth-update', handleAuthUpdate);
+    };
+  }, [refreshUserFromStorage, navigate]);
+
+  return null; // This component doesn't render anything
+};
+
+// Wrapper component to use hooks that need Auth context
+function AppContent() {
   return (
-    <AuthProvider>
+    <>
+      <AuthSync />
       <Routes>
         <Route path="/" element={
           <PublicRoute>
@@ -166,6 +200,14 @@ export default function App() {
           </PublicRoute>
         } />
       </Routes>
+    </>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
     </AuthProvider>
   );
 }

@@ -4,25 +4,16 @@ import { motion } from 'framer-motion';
 import { FaEye, FaEyeSlash, FaSpinner, FaGoogle } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
 import { socialAuth } from '../services/socialAuth';
-import api from '../services/api'; // Import api for direct calls
 
 export default function Login() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { login: authLogin, user, loading, setUser } = useAuth(); // Add setUser if available
+  const { login: authLogin, user, loading, refreshUserFromStorage } = useAuth();
 
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-
-  // Debug: Check localStorage on mount
-  useEffect(() => {
-    console.log('🔍 Login mounted - localStorage:', {
-      token: localStorage.getItem('token') ? 'exists' : 'missing',
-      user: localStorage.getItem('user') ? 'exists' : 'missing'
-    });
-  }, []);
 
   // Redirect if already logged in
   useEffect(() => {
@@ -62,9 +53,7 @@ export default function Login() {
     setError('');
     setIsLoading(true);
     try {
-      console.log('📧 Attempting email login...');
       const response = await authLogin({ email: formData.email, password: formData.password });
-      console.log('✅ Email login response:', response);
       redirectAfterLogin(response.user);
     } catch (err) {
       console.error('❌ Login error:', err);
@@ -77,28 +66,31 @@ export default function Login() {
   // ── Google Sign-In ────────────────────────────────────────────────────────
   const handleGoogleSuccess = async (data) => {
     console.log('✅ Google auth success - received data:', data);
-    console.log('📦 localStorage after google auth:', {
-      token: localStorage.getItem('token') ? 'saved' : 'missing',
-      user: localStorage.getItem('user') ? 'saved' : 'missing'
-    });
     
     setIsLoading(false);
     
-    // Force a small delay to ensure localStorage is written
-    setTimeout(() => {
-      // Manually trigger a storage event for AuthContext to pick up
-      window.dispatchEvent(new Event('storage'));
+    // Check if user was saved
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+      console.log('✅ User saved to localStorage, refreshing AuthContext...');
       
-      // Check if user was saved
-      const savedUser = localStorage.getItem('user');
-      if (savedUser) {
-        console.log('✅ User saved to localStorage, redirecting...');
-        redirectAfterLogin(JSON.parse(savedUser));
+      // Force refresh the auth context
+      const refreshed = refreshUserFromStorage();
+      
+      if (refreshed) {
+        console.log('✅ AuthContext refreshed, redirecting...');
+        // Small delay to ensure state is updated
+        setTimeout(() => {
+          redirectAfterLogin(JSON.parse(savedUser));
+        }, 50);
       } else {
-        console.error('❌ User not saved to localStorage!');
-        setError('Authentication succeeded but failed to save session');
+        console.log('⚠️ AuthContext refresh failed, reloading page...');
+        window.location.reload();
       }
-    }, 100);
+    } else {
+      console.error('❌ User not saved to localStorage!');
+      setError('Authentication succeeded but failed to save session');
+    }
   };
 
   const handleGoogleError = (err) => {
@@ -112,27 +104,7 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      // Method 1: Use your socialAuth service
       await socialAuth.triggerGoogleSignIn(handleGoogleSuccess, handleGoogleError);
-      
-      // Method 2: Alternative direct approach (uncomment if needed)
-      /*
-      await socialAuth.loadGoogleScript();
-      window.google.accounts.id.initialize({
-        client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
-        callback: async (response) => {
-          try {
-            const result = await api.auth.googleAuth(response.credential);
-            handleGoogleSuccess(result.data);
-          } catch (err) {
-            handleGoogleError(err);
-          }
-        },
-        auto_select: false,
-        cancel_on_tap_outside: true,
-      });
-      window.google.accounts.id.prompt();
-      */
     } catch (err) {
       handleGoogleError(err);
     }

@@ -8,7 +8,7 @@ import { socialAuth } from '../services/socialAuth';
 export default function Register() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { signup, user, loading } = useAuth();
+  const { signup, user, loading, refreshUserFromStorage } = useAuth(); // Add refreshUserFromStorage
 
   const [formData, setFormData] = useState({
     name: '', email: '', password: '', confirmPassword: '', phone: '',
@@ -21,6 +21,7 @@ export default function Register() {
   // Redirect if already logged in
   useEffect(() => {
     if (!loading && user) {
+      console.log('✅ User already logged in, redirecting:', user);
       navigate(user?.role === 'admin' ? '/admin' : '/');
     }
   }, [user, loading, navigate]);
@@ -34,10 +35,12 @@ export default function Register() {
   }
 
   const redirectAfterAuth = (userData) => {
+    console.log('🔄 Redirecting after auth:', userData);
     if (userData?.role === 'admin') {
       window.location.href = '/admin';
     } else {
-      setTimeout(() => navigate(searchParams.get('redirect') || '/'), 1200);
+      const redirectUrl = searchParams.get('redirect');
+      setTimeout(() => navigate(redirectUrl || '/'), 1200);
     }
   };
 
@@ -79,6 +82,7 @@ export default function Register() {
       setSuccess('Account created.');
       redirectAfterAuth(user);
     } catch (err) {
+      console.error('❌ Registration error:', err);
       setError(err.response?.data?.error || 'Registration failed.');
     } finally {
       setIsLoading(false);
@@ -86,21 +90,51 @@ export default function Register() {
   };
 
   // ── Google Sign-Up ────────────────────────────────────────────────────────
-  const handleGoogleClick = () => {
+  const handleGoogleSuccess = async (data) => {
+    console.log('✅ Google auth success - received data:', data);
+    
+    setIsLoading(false);
+    setSuccess('Account created.');
+    
+    // Check if user was saved
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+      console.log('✅ User saved to localStorage, refreshing AuthContext...');
+      
+      // Force refresh the auth context
+      const refreshed = refreshUserFromStorage();
+      
+      if (refreshed) {
+        console.log('✅ AuthContext refreshed, redirecting...');
+        // Small delay to ensure state is updated
+        setTimeout(() => {
+          redirectAfterAuth(JSON.parse(savedUser));
+        }, 50);
+      } else {
+        console.log('⚠️ AuthContext refresh failed, reloading page...');
+        window.location.reload();
+      }
+    } else {
+      console.error('❌ User not saved to localStorage!');
+      setError('Authentication succeeded but failed to save session');
+    }
+  };
+
+  const handleGoogleError = (err) => {
+    console.error('❌ Google auth error:', err);
+    setIsLoading(false);
+    setError(err.message || 'Google authentication failed.');
+  };
+
+  const handleGoogleClick = async () => {
     setError('');
     setIsLoading(true);
 
-    socialAuth.triggerGoogleSignIn(
-      (data) => {
-        setIsLoading(false);
-        setSuccess('Account created.');
-        redirectAfterAuth(data.user);
-      },
-      (err) => {
-        setIsLoading(false);
-        setError(err.message || 'Google authentication failed.');
-      }
-    );
+    try {
+      await socialAuth.triggerGoogleSignIn(handleGoogleSuccess, handleGoogleError);
+    } catch (err) {
+      handleGoogleError(err);
+    }
   };
 
   return (
@@ -119,10 +153,11 @@ export default function Register() {
         </div>
 
         {error && (
-          <div className="mb-8 p-4 bg-stone-50 border-l-2 border-red-900 text-red-900 text-xs tracking-wide">
+          <div className="mb-8 p-4 bg-stone-50 border-l-2 border-red-900 text-red-900 text-xs tracking-wide whitespace-pre-wrap">
             {error}
           </div>
         )}
+        
         {success && (
           <div className="mb-8 p-4 bg-stone-50 border-l-2 border-green-900 text-green-900 text-xs tracking-wide">
             {success}
