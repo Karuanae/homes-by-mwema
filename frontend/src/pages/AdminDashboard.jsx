@@ -15,6 +15,7 @@ import api, { API_BASE_URL, IMAGE_BASE_URL } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import ChatWindow from "../components/Chat/ChatWindow";
 import socketService from "../services/socketService";
+import ConsultationsManager from '../components/admin/ConsultationsManager';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -1115,17 +1116,9 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ══ CONSULTATIONS — uses the extracted component ══ */}
         {activeTab === "consultations" && (
-          <ConsultationsTab
-            consultations={consultations}
-            loading={loadingConsults}
-            error={consultsError}
-            onRefresh={fetchConsultations}
-            onStatusChange={updateConsultStatus}
-            updatingId={updatingConsult}
-          />
-        )}
+  <ConsultationsManager />
+)}
 
         {/* ══ MESSAGES ══ */}
         {activeTab === "messages" && (

@@ -714,16 +714,66 @@ export const socketAPI = {
 
 // ==================== CONSULTATIONS API ====================
 export const consultationsAPI = {
+  // Client endpoints
   create: async (data) => {
     const response = await api.post('/consultations', data);
     return response;
   },
-  list: async () => {
-    const response = await api.get('/consultations');
+  
+  getMyConsultations: async () => {
+    const response = await api.get('/consultations/my-consultations');
     return response;
   },
-  updateStatus: async (id, status) => {
-    const response = await api.put(`/consultations/${id}/status`, { status });
+  
+  getById: async (id) => {
+    const response = await api.get(`/consultations/${id}`);
+    return response;
+  },
+  
+  cancel: async (id) => {
+    const response = await api.put(`/consultations/${id}/cancel`);
+    return response;
+  },
+  
+  // Admin endpoints
+  adminList: async (params = '') => {
+    const response = await api.get(`/consultations/admin/list?${params}`);
+    return response;
+  },
+  
+  adminGet: async (id) => {
+    const response = await api.get(`/consultations/admin/${id}`);
+    return response;
+  },
+  
+  updateStatus: async (id, data) => {
+    const response = await api.put(`/consultations/admin/${id}/status`, data);
+    return response;
+  },
+  
+  confirmWithEmail: async (id, data) => {
+    const response = await api.post(`/consultations/admin/${id}/confirm-with-email`, data);
+    return response;
+  },
+  
+  getStats: async () => {
+    const response = await api.get('/consultations/admin/stats');
+    return response;
+  },
+  
+  delete: async (id) => {
+    const response = await api.delete(`/consultations/admin/${id}`);
+    return response;
+  },
+  
+  bulkDelete: async (data) => {
+    const response = await api.post('/consultations/admin/bulk-delete', data);
+    return response;
+  },
+  
+  // Legacy (keep for compatibility)
+  list: async () => {
+    const response = await api.get('/consultations');
     return response;
   },
 };

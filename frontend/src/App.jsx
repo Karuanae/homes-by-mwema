@@ -23,6 +23,8 @@ import ListingOptimization from "./pages/ListingOptimization";
 import PhotographyVideography from "./pages/PhotographyVideography";
 import AdminConsultations from "./pages/AdminConsultations";
 import Properties from "./pages/Properties";
+import MyConsultations from "./pages/MyConsultations"; // NEW - User consultations page
+import NewConsultation from "./pages/NewConsultation"; // NEW - Create consultation page
 
 // AuthSync component to handle auth state synchronization
 const AuthSync = () => {
@@ -72,7 +74,7 @@ function AppContent() {
           </PublicRoute>
         } />
 
-        {/* New Properties Route */}
+        {/* Properties Route */}
         <Route path="/properties" element={
           <PublicRoute>
             <>
@@ -83,6 +85,7 @@ function AppContent() {
           </PublicRoute>
         } />
 
+        {/* Auth Routes */}
         <Route path="/login" element={
           <>
             <Header />
@@ -99,6 +102,7 @@ function AppContent() {
           </>
         } />
 
+        {/* Booking Routes */}
         <Route path="/booking/:id" element={
           <>
             <Header />
@@ -131,6 +135,7 @@ function AppContent() {
           </>
         } />
 
+        {/* User Routes */}
         <Route path="/my-bookings" element={
           <ProtectedRoute>
             <UserLayout>
@@ -158,6 +163,24 @@ function AppContent() {
           </ProtectedRoute>
         } />
 
+        {/* NEW Consultation Routes */}
+        <Route path="/consultation/new" element={
+          <ProtectedRoute>
+            <UserLayout>
+              <NewConsultation />
+            </UserLayout>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/my-consultations" element={
+          <ProtectedRoute>
+            <UserLayout>
+              <MyConsultations />
+            </UserLayout>
+          </ProtectedRoute>
+        } />
+
+        {/* Admin Routes */}
         <Route path="/admin" element={
           <AdminRoute>
             <AdminDashboard />
@@ -170,6 +193,7 @@ function AppContent() {
           </AdminRoute>
         } />
         
+        {/* Service Pages */}
         <Route path="/management" element={
           <PublicRoute>
             <>

@@ -9,6 +9,7 @@ from flask_migrate import Migrate
 from dotenv import load_dotenv
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import eventlet
+from flask_mail import Mail
 
 # Load environment variables from .env file
 load_dotenv()
@@ -123,6 +124,21 @@ app.config['PAYPAL_WEBHOOK_ID'] = os.environ.get('PAYPAL_WEBHOOK_ID', '')
 # Currency conversion rate (KES to USD)
 app.config['KES_TO_USD_RATE'] = float(os.environ.get('KES_TO_USD_RATE', '129.0'))
 
+# Mail configuration
+app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
+app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
+app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'true').lower() == 'true'
+app.config['MAIL_USE_SSL'] = os.environ.get('MAIL_USE_SSL', 'false').lower() == 'true'
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', 'noreply@homesbymwema.com')
+app.config['MAIL_FROM_NAME'] = os.environ.get('MAIL_FROM_NAME', 'Homes by Mwema')
+
+# Initialize Mail
+mail = Mail(app)
+
+app.mail = mail 
+
 # Initialize extensions
 jwt = JWTManager(app)
 jwt.init_app(app)
@@ -181,6 +197,7 @@ from views.payment import payment_bp
 from views.user import user_bp
 from views.chat import chat_bp
 from views.main import bp as main_bp
+from views.consultation import consultation_bp
 
 app.register_blueprint(auth_bp,        url_prefix='/api/auth')
 app.register_blueprint(google_auth_bp, url_prefix='/api/auth')   # ← NEW  →  POST /api/auth/google
@@ -191,6 +208,7 @@ app.register_blueprint(payment_bp,     url_prefix='/api/payments')
 app.register_blueprint(user_bp,        url_prefix='/api/users')
 app.register_blueprint(chat_bp,        url_prefix='/api/chats')
 app.register_blueprint(main_bp,        url_prefix='/api')
+app.register_blueprint(consultation_bp, url_prefix='/api/consultations')
 # ──────────────────────────────────────────────────────────────────────────
 
 # SocketIO event handlers

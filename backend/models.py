@@ -159,17 +159,86 @@ class Consultation(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    name = db.Column(db.String(100), nullable=True)  # Store name in case user updates profile later
+    email = db.Column(db.String(120), nullable=True) # Store email for notifications
+    phone = db.Column(db.String(20), nullable=True)
+    
+    # Scheduling
     date = db.Column(db.DateTime, nullable=False)
     hour = db.Column(db.Integer)
     minute = db.Column(db.Integer)
+    
+    # Consultation details
     notes = db.Column(db.Text)
-    status = db.Column(db.String(20), default='pending')  # 'pending', 'scheduled', 'completed', etc.
+    topic = db.Column(db.String(100), default='General Inquiry')  # Type of consultation
+    
+    # Status tracking
+    status = db.Column(db.String(20), default='pending')  # pending, confirmed, completed, cancelled, rejected
+    
+    # Admin fields
+    admin_notes = db.Column(db.Text)  # Private notes for admin
+    meeting_link = db.Column(db.String(255))  # Zoom/Google Meet link for confirmed consultations
+    meeting_time = db.Column(db.DateTime)  # Actual scheduled meeting time (if different from requested)
+    
+    # Email tracking
+    email_sent = db.Column(db.Boolean, default=False)
+    email_sent_at = db.Column(db.DateTime)
+    email_content = db.Column(db.Text)  # Store the email that was sent
+    
+    # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    confirmed_at = db.Column(db.DateTime)
+    completed_at = db.Column(db.DateTime)
+    cancelled_at = db.Column(db.DateTime)
 
-    # chat relationship (one-to-one)
+    # Relationships
+    user = db.relationship('User', backref=db.backref('consultations', lazy=True))
     chat = db.relationship('Chat', backref='consultation', uselist=False)
-
+    
+    def to_dict(self, include_user=False, detailed=False):
+        """Convert consultation to dictionary"""
+        data = {
+            'id': self.id,
+            'user_id': self.user_id,
+            'name': self.name or (self.user.name if self.user else None),
+            'email': self.email or (self.user.email if self.user else None),
+            'phone': self.phone or (self.user.phone if self.user else None),
+            'date': self.date.isoformat() if self.date else None,
+            'hour': self.hour,
+            'minute': self.minute,
+            'notes': self.notes,
+            'topic': self.topic,
+            'status': self.status,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+        
+        if detailed or include_user:
+            data['user'] = {
+                'id': self.user.id,
+                'name': self.user.name,
+                'email': self.user.email,
+                'phone': self.user.phone,
+                'avatar_url': self.user.avatar_url
+            } if self.user else None
+        
+        if detailed:
+            data.update({
+                'admin_notes': self.admin_notes,
+                'meeting_link': self.meeting_link,
+                'meeting_time': self.meeting_time.isoformat() if self.meeting_time else None,
+                'email_sent': self.email_sent,
+                'email_sent_at': self.email_sent_at.isoformat() if self.email_sent_at else None,
+                'confirmed_at': self.confirmed_at.isoformat() if self.confirmed_at else None,
+                'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+                'cancelled_at': self.cancelled_at.isoformat() if self.cancelled_at else None,
+            })
+        
+        return data
+    
+    def __repr__(self):
+        return f'<Consultation {self.id} - {self.status}>'
 
 class Chat(db.Model):
     __tablename__ = 'chats'
