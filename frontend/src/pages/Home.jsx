@@ -163,7 +163,7 @@ export default function Home() {
   const totalGuests = guests.adults + guests.children + guests.infants;
 
   return (
-    <div className="bg-[#f5f2ee] font-sans text-stone-900 overflow-x-hidden selection:bg-stone-200">
+    <div className="bg-[#f5f2ee] font-sans text-black overflow-x-hidden selection:bg-stone-200">
 
       {/* Global styles */}
       <style>{`
@@ -193,16 +193,16 @@ export default function Home() {
       <div className="bg-noise" />
 
       {/* ═══════════════════════════════════════════════════════
-          HERO — static Capital3.jpeg background
+          HERO — static Capital3.jpeg background with navbar offset
       ═══════════════════════════════════════════════════════ */}
       <div
-        className="h-screen bg-cover bg-center relative"
+        className="min-h-screen bg-cover bg-center relative pt-24 md:pt-28"
         style={{ backgroundImage: "url('/Capital3.jpeg')" }}
       >
-        {/* Dark overlay */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/40 to-black/60" />
+        {/* Dark teal #093A3E overlay fading downwards */}
+        <div className="absolute inset-0 bg-gradient-to-b from-[#093A3E]/90 via-[#093A3E]/50 to-transparent" />
 
-        <section className="relative z-10 h-full flex flex-col items-center justify-center px-4 md:px-6">
+        <section className="relative z-10 min-h-screen flex flex-col items-center justify-center px-4 md:px-6">
           <motion.div
             className="w-full max-w-4xl text-center"
             initial={{ opacity: 0, y: 24 }}
@@ -216,10 +216,10 @@ export default function Home() {
 
             {/* Headline */}
             <h1
-              className="text-4xl md:text-6xl font-light tracking-tight mb-8"
+              className="text-4xl md:text-6xl font-light tracking-tight mb-8 text-white"
               style={{ fontFamily: "'Playfair Display', serif" }}
             >
-              <span className="text-white block leading-[1.1]">Refined</span>
+              <span className="block leading-[1.1]">Refined</span>
               <span className="text-white/90 italic font-light block leading-[1.1]">Living Awaits</span>
             </h1>
 
@@ -375,7 +375,7 @@ export default function Home() {
       {/* ═══════════════════════════════════════════════════════
           MARQUEE STRIP
       ═══════════════════════════════════════════════════════ */}
-      <div className="w-full bg-[#ED9B40] text-stone-900 overflow-hidden py-3 z-20 relative">
+      <div className="w-full bg-[#ED9B40] text-black overflow-hidden py-3 z-20 relative">
         <div className="whitespace-nowrap animate-marquee flex gap-12 text-xs font-medium tracking-[0.2em] uppercase">
           {Array(10).fill("Concierge • Privacy • Luxury • Comfort • Design • ").map((text, i) => (
             <span key={i}>{text}</span>
@@ -386,13 +386,13 @@ export default function Home() {
       {/* ═══════════════════════════════════════════════════════
           PROPERTIES COLLECTION
       ═══════════════════════════════════════════════════════ */}
-      <section ref={propertiesRef} className="py-16 px-6 relative z-10 bg-white scroll-mt-20">
+      <section ref={propertiesRef} className="py-16 px-6 relative z-10 bg-white scroll-mt-24">
         <div className="max-w-[1400px] mx-auto">
 
           {/* Section header */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12">
             <div>
-              <h2 className="text-3xl md:text-4xl text-stone-900" style={{ fontFamily: "'Playfair Display', serif" }}>
+              <h2 className="text-3xl md:text-4xl text-black" style={{ fontFamily: "'Playfair Display', serif" }}>
                 {hasSearched ? "Search " : "Featured "}
                 <span className="italic font-light text-stone-500">
                   {hasSearched ? "Results" : "Properties"}
@@ -420,7 +420,7 @@ export default function Home() {
           {/* Loading */}
           {loading && (
             <div className="flex justify-center items-center py-20">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-stone-900" />
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black" />
             </div>
           )}
 
@@ -428,7 +428,7 @@ export default function Home() {
           {error && !loading && (
             <div className="text-center py-20">
               <p className="text-stone-500 mb-4">{error}</p>
-              <button onClick={() => window.location.reload()} className="text-xs uppercase tracking-widest border-b border-stone-900 pb-1 hover:text-stone-600">
+              <button onClick={() => window.location.reload()} className="text-xs uppercase tracking-widest border-b border-black pb-1 hover:text-stone-600">
                 Try Again
               </button>
             </div>
@@ -439,7 +439,7 @@ export default function Home() {
             <div className="text-center py-20">
               <p className="text-stone-500 font-light text-lg mb-2">No residences match your search.</p>
               <p className="text-stone-400 text-sm mb-6">Try adjusting your location, room type or guest count.</p>
-              <button onClick={clearSearch} className="text-xs uppercase tracking-widest border-b border-stone-900 pb-1 hover:text-stone-600">
+              <button onClick={clearSearch} className="text-xs uppercase tracking-widest border-b border-black pb-1 hover:text-stone-600">
                 Show all properties
               </button>
             </div>
@@ -470,12 +470,12 @@ export default function Home() {
                       className="w-full h-full object-cover"
                     />
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-300 flex items-center justify-center">
-                      <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 backdrop-blur-sm px-4 py-2 text-xs font-bold uppercase tracking-widest">
+                      <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 backdrop-blur-sm px-4 py-2 text-xs font-bold uppercase tracking-widest text-black">
                         View Details
                       </span>
                     </div>
                     {property.tag && (
-                      <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm px-2 py-1 text-[10px] uppercase tracking-widest font-bold text-stone-900">
+                      <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm px-2 py-1 text-[10px] uppercase tracking-widest font-bold text-black">
                         {property.tag}
                       </div>
                     )}
@@ -484,7 +484,7 @@ export default function Home() {
                   <div className="p-3">
                     <div className="flex justify-between items-start">
                       <div>
-                        <h3 className="text-stone-900 text-lg font-serif leading-tight group-hover:text-stone-700 transition-colors">
+                        <h3 className="text-black text-lg font-serif leading-tight group-hover:text-stone-700 transition-colors">
                           {property.name}
                         </h3>
                         <p className="text-stone-500 text-xs mt-1 uppercase tracking-wide flex items-center gap-1">
@@ -492,7 +492,7 @@ export default function Home() {
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-stone-900 text-sm font-medium">Ksh {property.price?.toLocaleString()}</p>
+                        <p className="text-black text-sm font-medium">Ksh {property.price?.toLocaleString()}</p>
                         <p className="text-stone-400 text-[10px] mt-1 uppercase">per night</p>
                       </div>
                     </div>
@@ -507,7 +507,7 @@ export default function Home() {
             <div className="mt-16 text-center">
               <button
                 onClick={() => setVisibleCount(c => c + 4)}
-                className="text-xs uppercase tracking-widest border-b border-stone-900 pb-1 hover:text-stone-600 hover:border-stone-600 transition-colors"
+                className="text-xs uppercase tracking-widest border-b border-black pb-1 hover:text-stone-600 hover:border-stone-600 transition-colors"
               >
                 Load More
               </button>
@@ -517,24 +517,26 @@ export default function Home() {
       </section>
 
       {/* ═══════════════════════════════════════════════════════
-          EDITORIAL FEATURES
+          EDITORIAL FEATURES - UPDATED WITH ALL CONTENT TEXT IN BLACK
       ═══════════════════════════════════════════════════════ */}
       <section className="py-24 px-6 bg-[#EBE5DE] relative z-10">
         <div className="max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
           <div>
-            <h2 className="text-4xl md:text-5xl text-stone-900 mb-6 leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>
+            <h2 className="text-4xl md:text-5xl text-[#093A3E] mb-6 leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>
               The Standard of <br /><i>Exceptional</i> Living.
             </h2>
-            <p className="text-stone-600 mb-8 max-w-md font-light leading-relaxed">
+            <p className="text-black mb-8 max-w-md font-light leading-relaxed">
               We don't just offer beds; we curate environments. Each home is selected for its architectural merit, location, and ability to provide a serene escape from the mundane.
             </p>
             <div className="space-y-8">
               {premiumFeatures.map((f) => (
                 <div key={f.id} className="flex gap-6 items-start group">
-                  <span className="text-stone-400 font-serif text-2xl group-hover:text-stone-900 transition-colors">{f.number}</span>
+                  <span className="text-[#093A3E] font-serif text-2xl group-hover:text-black transition-colors">{f.number}</span>
                   <div>
-                    <h4 className="text-stone-900 font-medium uppercase text-xs tracking-widest mb-2">{f.title}</h4>
-                    <p className="text-stone-600 text-sm font-light leading-relaxed max-w-sm">{f.description}</p>
+                    <h4 className="text-[#093A3E] font-medium uppercase text-xs tracking-widest mb-2">{f.title}</h4>
+                    <p className="text-black text-sm font-light leading-relaxed max-w-sm">
+                      {f.description}
+                    </p>
                   </div>
                 </div>
               ))}
@@ -560,9 +562,9 @@ export default function Home() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:divide-x divide-stone-100">
             {testimonials.map((t) => (
               <div key={t.id} className="px-4 flex flex-col items-center">
-                <p className="font-serif text-lg italic text-stone-800 mb-6 leading-relaxed">"{t.content}"</p>
+                <p className="font-serif text-lg italic text-black mb-6 leading-relaxed">"{t.content}"</p>
                 <div className="mt-auto">
-                  <p className="text-xs font-bold uppercase tracking-widest text-stone-900">{t.name}</p>
+                  <p className="text-xs font-bold uppercase tracking-widest text-black">{t.name}</p>
                   <p className="text-[10px] text-stone-400 uppercase tracking-wide mt-1">{t.location}</p>
                 </div>
               </div>
@@ -572,20 +574,22 @@ export default function Home() {
       </section>
 
       {/* ═══════════════════════════════════════════════════════
-          FAQ
+          FAQ - UPDATED WITH BLACK TEXT
       ═══════════════════════════════════════════════════════ */}
       <section className="py-24 px-6 bg-[#f7f5f2] border-t border-stone-200">
         <div className="max-w-2xl mx-auto">
-          <h2 className="text-3xl text-center mb-12 font-serif text-stone-900">Information</h2>
+          <h2 className="text-3xl text-center mb-12 font-serif text-black">Information</h2>
           <div className="divide-y divide-stone-200">
             {faqData.map((faq) => (
               <div key={faq.id} className="group">
                 <button
                   onClick={() => setOpenFaq(openFaq === faq.id ? null : faq.id)}
-                  className="w-full py-6 flex justify-between items-center text-left hover:text-stone-900 transition-colors"
+                  className="w-full py-6 flex justify-between items-center text-left hover:text-black transition-colors"
                 >
-                  <span className="text-sm uppercase tracking-widest font-medium text-stone-700 group-hover:text-stone-900 transition-colors">{faq.question}</span>
-                  <span className="font-serif italic text-stone-400 text-xl">{openFaq === faq.id ? "−" : "+"}</span>
+                  <span className="text-sm uppercase tracking-widest font-medium text-black group-hover:text-[#093A3E] transition-colors">
+                    {faq.question}
+                  </span>
+                  <span className="font-serif italic text-black text-xl">{openFaq === faq.id ? "−" : "+"}</span>
                 </button>
                 <AnimatePresence>
                   {openFaq === faq.id && (
@@ -595,7 +599,9 @@ export default function Home() {
                       exit={{ height: 0, opacity: 0 }}
                       className="overflow-hidden"
                     >
-                      <p className="pb-6 text-stone-500 font-light leading-relaxed">{faq.answer}</p>
+                      <p className="pb-6 text-black font-light leading-relaxed">
+                        {faq.answer}
+                      </p>
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -606,19 +612,19 @@ export default function Home() {
       </section>
 
       {/* ═══════════════════════════════════════════════════════
-          CTA FOOTER
+          CTA FOOTER - Updated to match navbar color
       ═══════════════════════════════════════════════════════ */}
-      <section className="py-20 bg-stone-900 text-[#f5f2ee] text-center px-6 relative z-10">
+      <section className="py-20 bg-[#093A3E] text-[#f5f2ee] text-center px-6 relative z-10">
         <h2 className="text-4xl md:text-6xl font-serif mb-6">Ready to Book?</h2>
-        <p className="text-stone-400 max-w-lg mx-auto mb-10 font-light">Experience the finest homes Kenya has to offer. Book your sanctuary today.</p>
+        <p className="text-[#F5F2EE]/70 max-w-lg mx-auto mb-10 font-light">Experience the finest homes Kenya has to offer. Book your sanctuary today.</p>
         <div className="flex justify-center gap-6">
           <button
             onClick={() => propertiesRef.current?.scrollIntoView({ behavior: "smooth" })}
-            className="px-8 py-3 bg-[#f5f2ee] text-stone-900 text-xs uppercase tracking-widest font-bold hover:bg-white transition-colors"
+            className="px-8 py-3 bg-[#ED9B40] text-[#093A3E] text-xs uppercase tracking-widest font-bold hover:bg-white transition-colors"
           >
             Browse Properties
           </button>
-          <Link to="/management" className="px-8 py-3 border border-stone-700 text-[#f5f2ee] text-xs uppercase tracking-widest font-bold hover:border-[#f5f2ee] transition-colors">
+          <Link to="/management" className="px-8 py-3 border border-[#ED9B40]/50 text-[#f5f2ee] text-xs uppercase tracking-widest font-bold hover:border-[#ED9B40] hover:text-[#ED9B40] transition-colors">
             Our Services
           </Link>
         </div>
@@ -627,7 +633,7 @@ export default function Home() {
       {/* Floating action */}
       <motion.a
         href="mailto:hello@homesbymwema.com"
-        className="fixed bottom-8 right-8 z-50 bg-stone-900 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-2xl"
+        className="fixed bottom-8 right-8 z-50 bg-black text-white w-14 h-14 rounded-full flex items-center justify-center shadow-2xl"
         whileHover={{ scale: 1.1, rotate: 15 }}
         whileTap={{ scale: 0.9 }}
         title="Contact us"
