@@ -350,38 +350,55 @@ def check_availability():
     Public endpoint to check property availability
     No login required - used on booking page
     """
-    data = request.json
-    
-    property_id = data.get('property_id')
-    check_in = data.get('check_in')
-    check_out = data.get('check_out')
-    
-    if not all([property_id, check_in, check_out]):
-        return jsonify({
-            'success': False,
-            'error': 'Missing required fields'
-        }), 400
-    
     try:
-        check_in_date = datetime.strptime(check_in, '%Y-%m-%d').date()
-        check_out_date = datetime.strptime(check_out, '%Y-%m-%d').date()
-    except ValueError:
+        data = request.json
+        
+        property_id = data.get('property_id')
+        check_in = data.get('check_in')
+        check_out = data.get('check_out')
+        
+        if not all([property_id, check_in, check_out]):
+            return jsonify({
+                'success': False,
+                'error': 'Missing required fields'
+            }), 400
+        
+        try:
+            check_in_date = datetime.strptime(check_in, '%Y-%m-%d').date()
+            check_out_date = datetime.strptime(check_out, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid date format'
+            }), 400
+        
+        # Verify property exists
+        property_obj = Property.query.get(property_id)
+        if not property_obj:
+            return jsonify({
+                'success': False,
+                'error': 'Property not found',
+                'available': False
+            }), 404
+        
+        is_available, conflicts = check_property_availability(
+            property_id, check_in_date, check_out_date
+        )
+        
+        return jsonify({
+            'success': True,
+            'available': is_available,
+            'check_in': check_in,
+            'check_out': check_out,
+            'message': 'Dates are available' if is_available else 'Dates are not available'
+        }), 200
+    except Exception as e:
+        logger.error(f"Availability check error: {str(e)}")
         return jsonify({
             'success': False,
-            'error': 'Invalid date format'
-        }), 400
-    
-    is_available, conflicts = check_property_availability(
-        property_id, check_in_date, check_out_date
-    )
-    
-    return jsonify({
-        'success': True,
-        'available': is_available,
-        'check_in': check_in,
-        'check_out': check_out,
-        'message': 'Dates are available' if is_available else 'Dates are not available'
-    }), 200
+            'error': 'Failed to check availability',
+            'available': False
+        }), 500
 
 @booking_bp.route('/my-bookings', methods=['GET'])
 @jwt_required()
@@ -390,55 +407,77 @@ def get_my_bookings():
     Get all bookings for current user
     Includes pending, upcoming, past
     """
-    user_id = get_jwt_identity()
-    
-    # Get all user bookings
-    bookings = Booking.query.filter_by(user_id=user_id).order_by(
-        Booking.created_at.desc()
-    ).all()
-    
-    result = []
-    now = datetime.now().date()
-    
-    for booking in bookings:
-        # Auto-update expired pending bookings
-        if (booking.status == 'pending' and 
-            booking.expires_at and 
-            booking.expires_at < datetime.utcnow()):
-            booking.status = 'expired'
-            db.session.commit()
+    try:
+        user_id = get_jwt_identity()
         
-        # Determine display status
-        display_status = booking.status
-        if booking.status == 'confirmed' and booking.check_out < now:
-            display_status = 'completed'
-        elif booking.status == 'confirmed' and booking.check_in <= now <= booking.check_out:
-            display_status = 'active'
+        # Get all user bookings
+        bookings = Booking.query.filter_by(user_id=user_id).order_by(
+            Booking.created_at.desc()
+        ).all()
         
-        result.append({
-            'id': booking.id,
-            'property_id': booking.property_id,
-            'property_name': booking.property.name,
-            'property_location': booking.property.location,
-            'property_image': booking.property.images[0] if booking.property.images else None,
-            'check_in': booking.check_in.strftime('%Y-%m-%d'),
-            'check_out': booking.check_out.strftime('%Y-%m-%d'),
-            'check_in_display': booking.check_in.strftime('%b %d, %Y'),
-            'check_out_display': booking.check_out.strftime('%b %d, %Y'),
-            'nights': booking.nights,
-            'guests': booking.guests,
-            'total_amount': float(booking.total_amount),
-            'paid_amount': float(booking.total_amount - booking.pending_amount),
-            'pending_amount': float(booking.pending_amount) if booking.pending_amount else 0,
-            'payment_status': booking.payment_status,
-            'status': display_status,
-            'original_status': booking.status,
-            'expires_at': booking.expires_at.isoformat() if booking.expires_at else None,
-            'created_at': booking.created_at.isoformat() if booking.created_at else None,
-            'can_cancel': booking.status in ['pending', 'confirmed'] and booking.check_in > now
-        })
-    
-    return jsonify(result), 200
+        result = []
+        now = datetime.now().date()
+        
+        for booking in bookings:
+            try:
+                # Auto-update expired pending bookings
+                if (booking.status == 'pending' and 
+                    booking.expires_at and 
+                    booking.expires_at < datetime.utcnow()):
+                    booking.status = 'expired'
+                    db.session.commit()
+                
+                # Determine display status
+                display_status = booking.status
+                if booking.status == 'confirmed' and booking.check_out < now:
+                    display_status = 'completed'
+                elif booking.status == 'confirmed' and booking.check_in <= now <= booking.check_out:
+                    display_status = 'active'
+                
+                # Safely get property information
+                property_obj = booking.property
+                if not property_obj:
+                    logger.warning(f"Booking {booking.id} has no associated property")
+                    continue
+                
+                # Get property image safely
+                property_image = None
+                if property_obj.images and len(property_obj.images) > 0:
+                    property_image = property_obj.images[0]
+                
+                result.append({
+                    'id': booking.id,
+                    'property_id': booking.property_id,
+                    'property_name': property_obj.name,
+                    'property_location': property_obj.location,
+                    'property_image': property_image,
+                    'check_in': booking.check_in.strftime('%Y-%m-%d'),
+                    'check_out': booking.check_out.strftime('%Y-%m-%d'),
+                    'check_in_display': booking.check_in.strftime('%b %d, %Y'),
+                    'check_out_display': booking.check_out.strftime('%b %d, %Y'),
+                    'nights': booking.nights,
+                    'guests': booking.guests,
+                    'total_amount': float(booking.total_amount),
+                    'paid_amount': float(booking.total_amount - booking.pending_amount),
+                    'pending_amount': float(booking.pending_amount) if booking.pending_amount else 0,
+                    'payment_status': booking.payment_status,
+                    'status': display_status,
+                    'original_status': booking.status,
+                    'expires_at': booking.expires_at.isoformat() if booking.expires_at else None,
+                    'created_at': booking.created_at.isoformat() if booking.created_at else None,
+                    'can_cancel': booking.status in ['pending', 'confirmed'] and booking.check_in > now
+                })
+            except Exception as e:
+                logger.error(f"Error processing booking {booking.id}: {str(e)}")
+                continue
+        
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error(f"Get my bookings error: {str(e)}")
+        return jsonify({
+            'error': 'Failed to fetch bookings',
+            'message': str(e)
+        }), 500
 
 @booking_bp.route('/<int:booking_id>/cancel', methods=['POST'])
 @jwt_required()
