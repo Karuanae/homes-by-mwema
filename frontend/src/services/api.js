@@ -1,4 +1,4 @@
-// api.js - COMPLETE UPDATED VERSION WITH SIMPLIFIED UPLOAD + GOOGLE AUTH
+// api.js - COMPLETE UPDATED VERSION WITH NEW BOOKING/PAYMENT METHODS
 import axios from 'axios';
 
 export const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://flask-app-production-c760.up.railway.app/api';
@@ -64,9 +64,6 @@ export const authAPI = {
     return response;
   },
 
-  // ── Google OAuth ──────────────────────────────────────────────────────────
-  // Sends the Google ID token (credential) to your backend for verification.
-  // On success the backend returns { token, user }; we persist both.
   googleAuth: async (credential) => {
     const response = await api.post('/auth/google', { credential });
     if (response.data.token) {
@@ -75,7 +72,6 @@ export const authAPI = {
     }
     return response;
   },
-  // ─────────────────────────────────────────────────────────────────────────
 
   guestCheckout: async (guestData) => {
     const response = await api.post('/auth/guest', guestData);
@@ -90,6 +86,7 @@ export const authAPI = {
     localStorage.removeItem('user');
     localStorage.removeItem('guest_token');
     localStorage.removeItem('guest');
+    localStorage.removeItem('pendingBooking');
   },
 
   getCurrentUser: async () => {
@@ -120,7 +117,16 @@ export const propertiesAPI = {
     return response;
   },
 
-  // Keep for compatibility
+  checkAvailability: async (propertyId, checkIn, checkOut) => {
+    const response = await api.post('/bookings/check-availability', {
+      property_id: propertyId,
+      check_in: checkIn,
+      check_out: checkOut
+    });
+    return response;
+  },
+
+  // Admin methods
   create: async (propertyData) => {
     const response = await api.post('/admin/properties', propertyData);
     return response;
@@ -135,10 +141,128 @@ export const propertiesAPI = {
     const response = await api.delete(`/admin/properties/${id}`);
     return response;
   },
+};
 
-  checkAvailability: async (propertyId, checkIn, checkOut) => {
-    const response = await api.get(`/properties/${propertyId}/availability`, {
-      params: { check_in: checkIn, check_out: checkOut }
+// ==================== BOOKINGS API - ENHANCED ====================
+export const bookingsAPI = {
+  // Create a new booking with 15-minute hold
+  create: async (bookingData, idempotencyKey = null) => {
+    const config = idempotencyKey ? {
+      headers: { 'Idempotency-Key': idempotencyKey }
+    } : {};
+    const response = await api.post('/bookings', bookingData, config);
+    return response;
+  },
+
+  // Get all bookings for current user
+  getUserBookings: async () => {
+    const response = await api.get('/bookings/my-bookings');
+    return response;
+  },
+
+  // Get single booking by ID
+  getById: async (id) => {
+    const response = await api.get(`/bookings/${id}`);
+    return response;
+  },
+
+  // Check booking status (for timer)
+  getStatus: async (bookingId) => {
+    const response = await api.get(`/bookings/${bookingId}/status`);
+    return response;
+  },
+
+  // Cancel a booking
+  cancel: async (id) => {
+    const response = await api.post(`/bookings/${id}/cancel`);
+    return response;
+  },
+
+  // Admin: Get all bookings
+  getAll: async (params = {}) => {
+    const response = await api.get('/admin/bookings', { params });
+    return response;
+  },
+
+  // Admin: Update booking status
+  updateStatus: async (id, status) => {
+    const response = await api.put(`/admin/bookings/${id}/status`, { status });
+    return response;
+  },
+
+  // Get booking statistics
+  getStats: async () => {
+    const response = await api.get('/admin/bookings/stats');
+    return response;
+  }
+};
+
+// ==================== PAYMENTS API - ENHANCED ====================
+export const paymentsAPI = {
+  // M-PESA: Initiate STK Push
+  initiateMpesa: async (bookingId, phoneNumber, amount) => {
+    const response = await api.post('/payments/mpesa/initiate', {
+      booking_id: bookingId,
+      phone_number: phoneNumber,
+      amount: amount
+    });
+    return response.data;
+  },
+
+  // M-PESA: Check payment status
+  checkMpesaStatus: async (checkoutRequestId) => {
+    const response = await api.get(`/payments/mpesa/status/${checkoutRequestId}`);
+    return response.data;
+  },
+
+  // Get all payments for a booking
+  getBookingPayments: async (bookingId) => {
+    const response = await api.get(`/payments/booking/${bookingId}`);
+    return response.data;
+  },
+
+  // Process payment (legacy)
+  processPayment: async (paymentData) => {
+    const response = await api.post('/payments/process', paymentData);
+    return response.data;
+  },
+
+  // PayPal: Create order
+  createPayPalOrder: async (bookingId, amount, currency = 'KES', returnUrl = null, cancelUrl = null) => {
+    const response = await api.post('/payments/paypal/create-order', {
+      booking_id: bookingId,
+      amount: amount,
+      currency: currency,
+      return_url: returnUrl,
+      cancel_url: cancelUrl
+    });
+    return response.data;
+  },
+
+  // PayPal: Capture order
+  capturePayPalOrder: async (orderId) => {
+    const response = await api.post('/payments/paypal/capture-order', {
+      order_id: orderId
+    });
+    return response.data;
+  },
+
+  // Admin: Get all payments
+  getAll: async (params = {}) => {
+    const response = await api.get('/admin/payments', { params });
+    return response;
+  },
+
+  // Admin: Update payment status
+  updateStatus: async (id, status) => {
+    const response = await api.put(`/admin/payments/${id}/status`, { status });
+    return response;
+  },
+
+  // Admin: Export payments
+  export: async (format = 'csv') => {
+    const response = await api.get(`/admin/payments/export?format=${format}`, {
+      responseType: 'blob',
     });
     return response;
   },
@@ -187,161 +311,6 @@ export const uploadAPI = {
     const response = await api.post('/upload/multiple', formData);
     return response;
   },
-
-  uploadPropertyImage: async (file) => {
-    const formData = new FormData();
-    formData.append('image', file);
-    const response = await api.post('/upload/property', formData);
-    return response;
-  },
-
-  uploadPropertyImages: async (files) => {
-    const formData = new FormData();
-    files.forEach((file) => {
-      formData.append('images', file);
-    });
-    const response = await api.post('/upload/property-images', formData);
-    return response;
-  },
-};
-
-// ==================== BOOKINGS API ====================
-export const bookingsAPI = {
-  create: async (bookingData) => {
-    const response = await api.post('/bookings', bookingData);
-    return response;
-  },
-
-  getUserBookings: async () => {
-    const response = await api.get('/bookings/my-bookings');
-    return response;
-  },
-
-  getById: async (id) => {
-    const response = await api.get(`/bookings/${id}`);
-    return response;
-  },
-
-  cancel: async (id) => {
-    const response = await api.put(`/bookings/${id}/cancel`);
-    return response;
-  },
-
-  getAll: async (params = {}) => {
-    const response = await api.get('/admin/bookings', { params });
-    return response;
-  },
-
-  updateStatus: async (id, status) => {
-    const response = await api.put(`/admin/bookings/${id}/status`, { status });
-    return response;
-  },
-};
-
-// ==================== PAYMENTS API ====================
-export const paymentsAPI = {
-  initialize: async (paymentData) => {
-    const response = await api.post('/payments/initialize', paymentData);
-    return response;
-  },
-
-  initiateMpesa: async (bookingId, phoneNumber, amount) => {
-    const response = await api.post('/payments/mpesa/initiate', {
-      booking_id: bookingId,
-      phone_number: phoneNumber,
-      amount: amount
-    });
-    return response.data;
-  },
-
-  checkMpesaStatus: async (checkoutRequestId) => {
-    const response = await api.get(`/payments/mpesa/query/${checkoutRequestId}`);
-    return response.data;
-  },
-
-  getBookingPayments: async (bookingId) => {
-    const response = await api.get(`/payments/booking/${bookingId}`);
-    return response.data;
-  },
-
-  mpesaPayment: async (data) => {
-    const response = await api.post('/payments/mpesa', data);
-    return response;
-  },
-
-  processPayment: async (paymentData) => {
-    const response = await api.post('/payments/process', paymentData);
-    return response.data;
-  },
-
-  cardPayment: async (data) => {
-    const response = await api.post('/payments/card', data);
-    return response;
-  },
-
-  verify: async (transactionId) => {
-    const response = await api.get(`/payments/verify/${transactionId}`);
-    return response;
-  },
-
-  getUserPayments: async (userId) => {
-    const response = await api.get(`/users/${userId}/payments`);
-    return response;
-  },
-
-  getById: async (id) => {
-    const response = await api.get(`/payments/${id}`);
-    return response;
-  },
-
-  getAll: async (params = {}) => {
-    const response = await api.get('/admin/payments', { params });
-    return response;
-  },
-
-  updateStatus: async (id, status) => {
-    const response = await api.put(`/admin/payments/${id}/status`, { status });
-    return response;
-  },
-
-  export: async (format = 'csv') => {
-    const response = await api.get(`/admin/payments/export?format=${format}`, {
-      responseType: 'blob',
-    });
-    return response;
-  },
-
-  createPayPalOrder: async (bookingId, amount, currency = 'KES', returnUrl = null, cancelUrl = null) => {
-    const response = await api.post('/payments/paypal/create-order', {
-      booking_id: bookingId,
-      amount: amount,
-      currency: currency,
-      return_url: returnUrl,
-      cancel_url: cancelUrl
-    });
-    return response.data;
-  },
-
-  capturePayPalOrder: async (orderId) => {
-    const response = await api.post('/payments/paypal/capture-order', {
-      order_id: orderId
-    });
-    return response.data;
-  },
-
-  getPayPalOrder: async (orderId) => {
-    const response = await api.get(`/payments/paypal/order/${orderId}`);
-    return response.data;
-  },
-
-  refundPayPal: async (paymentId, amount = null, note = null) => {
-    const response = await api.post('/payments/paypal/refund', {
-      payment_id: paymentId,
-      amount: amount,
-      note: note
-    });
-    return response.data;
-  },
 };
 
 // ==================== CHATS/MESSAGES API ====================
@@ -371,11 +340,6 @@ export const chatsAPI = {
       user_id: userId,
       property_id: propertyId,
     });
-    return response;
-  },
-
-  markAsRead: async (chatId) => {
-    const response = await api.put(`/chats/${chatId}/read`);
     return response;
   },
 
@@ -487,8 +451,9 @@ export const reportsAPI = {
   },
 };
 
-// ==================== ADMIN API ====================
+// ==================== ADMIN API - ENHANCED ====================
 export const adminAPI = {
+  // Property management
   createPropertyWithImages: async (formData) => {
     const response = await api.post('/admin/properties/with-images', formData);
     return response;
@@ -499,6 +464,7 @@ export const adminAPI = {
     return response;
   },
 
+  // User management
   getUserDetails: async (userId) => {
     const response = await api.get(`/admin/users/${userId}/details`);
     return response;
@@ -509,11 +475,13 @@ export const adminAPI = {
     return response;
   },
 
+  // Dashboard stats
   getStats: async () => {
     const response = await api.get('/admin/stats');
     return response;
   },
 
+  // Properties
   getProperties: async () => {
     const response = await api.get('/admin/properties');
     return response;
@@ -534,30 +502,62 @@ export const adminAPI = {
     return response;
   },
 
+  // Bookings (admin)
   getBookings: async () => {
     const response = await api.get('/admin/bookings');
     return response;
   },
 
+  getBookingDetails: async (id) => {
+    const response = await api.get(`/admin/bookings/${id}`);
+    return response;
+  },
+
+  updateBookingStatus: async (id, status) => {
+    const response = await api.put(`/admin/bookings/${id}/status`, { status });
+    return response;
+  },
+
+  // Users
   getUsers: async () => {
     const response = await api.get('/admin/users');
     return response;
   },
 
+  // Payments (admin)
   getPayments: async () => {
     const response = await api.get('/admin/payments');
     return response;
   },
 
+  getPaymentDetails: async (id) => {
+    const response = await api.get(`/admin/payments/${id}`);
+    return response;
+  },
+
+  // Leads
   getLeads: async () => {
     const response = await api.get('/admin/leads');
     return response;
   },
 
+  // Homepage
   getHomepage: async () => {
     const response = await api.get('/admin/homepage');
     return response;
   },
+
+  // Booking statistics
+  getBookingStats: async () => {
+    const response = await api.get('/admin/bookings/stats');
+    return response;
+  },
+
+  // Revenue statistics
+  getRevenueStats: async (period = 'month') => {
+    const response = await api.get(`/admin/revenue/stats?period=${period}`);
+    return response;
+  }
 };
 
 // ==================== USER PROFILE API ====================
@@ -637,81 +637,6 @@ export const settingsAPI = {
   },
 };
 
-// ==================== MISC API ====================
-export const miscAPI = {
-  uploadFile: async (file, type = 'general') => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('type', type);
-    const response = await api.post('/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
-    return response;
-  },
-
-  contact: async (contactData) => {
-    const response = await api.post('/contact', contactData);
-    return response;
-  },
-
-  getFAQs: async () => {
-    const response = await api.get('/faqs');
-    return response;
-  },
-};
-
-// ==================== HELPER FUNCTIONS ====================
-export const isAuthenticated = () => {
-  return !!localStorage.getItem('token') || !!localStorage.getItem('guest_token');
-};
-
-export const getCurrentUser = () => {
-  const user = localStorage.getItem('user');
-  const guest = localStorage.getItem('guest');
-  return user ? JSON.parse(user) : (guest ? JSON.parse(guest) : null);
-};
-
-export const getAuthToken = () => {
-  return localStorage.getItem('token') || localStorage.getItem('guest_token');
-};
-
-export const getPropertyImageUrl = (imageId) => {
-  return `${API_BASE_URL}/admin/property-image/${imageId}`;
-};
-
-// ==================== M-PESA HELPER FUNCTIONS ====================
-export const initiateMpesaPayment = async (bookingId, phoneNumber, amount) => {
-  return await paymentsAPI.initiateMpesa(bookingId, phoneNumber, amount);
-};
-
-export const checkPaymentStatus = async (checkoutRequestId) => {
-  return await paymentsAPI.checkMpesaStatus(checkoutRequestId);
-};
-
-export const getBookingPayments = async (bookingId) => {
-  return await paymentsAPI.getBookingPayments(bookingId);
-};
-
-export const socketAPI = {
-  connect: () => socketService.connect(),
-  disconnect: () => socketService.disconnect(),
-  authenticate: (userId, userType) => socketService.authenticate(userId, userType),
-  createChat: (userId, propertyId, initialMessage) =>
-    socketService.createChat(userId, propertyId, initialMessage),
-  joinChat: (chatId) => socketService.joinChat(chatId),
-  sendMessage: (chatId, content, senderName) =>
-    socketService.sendMessage(chatId, content, senderName),
-  typing: (chatId, isTyping) => socketService.typing(chatId, isTyping),
-  markMessagesRead: (chatId) => socketService.markMessagesRead(chatId),
-  getActiveChats: () => socketService.getActiveChats(),
-  leaveChat: (chatId) => socketService.leaveChat(chatId),
-  ping: () => socketService.ping(),
-  on: (event, callback) => socketService.on(event, callback),
-  off: (event, callback) => socketService.off(event, callback),
-  getStatus: () => socketService.getConnectionStatus(),
-  isConnected: () => socketService.isConnected,
-};
-
 // ==================== CONSULTATIONS API ====================
 export const consultationsAPI = {
   // Client endpoints
@@ -771,14 +696,106 @@ export const consultationsAPI = {
     return response;
   },
   
-  // Legacy (keep for compatibility)
+  // Legacy
   list: async () => {
     const response = await api.get('/consultations');
     return response;
   },
 };
 
-// Export everything
+// ==================== MISC API ====================
+export const miscAPI = {
+  uploadFile: async (file, type = 'general') => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('type', type);
+    const response = await api.post('/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response;
+  },
+
+  contact: async (contactData) => {
+    const response = await api.post('/contact', contactData);
+    return response;
+  },
+
+  getFAQs: async () => {
+    const response = await api.get('/faqs');
+    return response;
+  },
+};
+
+// ==================== SOCKET API ====================
+export const socketAPI = {
+  connect: () => socketService?.connect(),
+  disconnect: () => socketService?.disconnect(),
+  authenticate: (userId, userType) => socketService?.authenticate(userId, userType),
+  createChat: (userId, propertyId, initialMessage) =>
+    socketService?.createChat(userId, propertyId, initialMessage),
+  joinChat: (chatId) => socketService?.joinChat(chatId),
+  sendMessage: (chatId, content, senderName) =>
+    socketService?.sendMessage(chatId, content, senderName),
+  typing: (chatId, isTyping) => socketService?.typing(chatId, isTyping),
+  markMessagesRead: (chatId) => socketService?.markMessagesRead(chatId),
+  getActiveChats: () => socketService?.getActiveChats(),
+  leaveChat: (chatId) => socketService?.leaveChat(chatId),
+  ping: () => socketService?.ping(),
+  on: (event, callback) => socketService?.on(event, callback),
+  off: (event, callback) => socketService?.off(event, callback),
+  getStatus: () => socketService?.getConnectionStatus(),
+  isConnected: () => socketService?.isConnected,
+};
+
+// ==================== HELPER FUNCTIONS ====================
+export const isAuthenticated = () => {
+  return !!localStorage.getItem('token') || !!localStorage.getItem('guest_token');
+};
+
+export const getCurrentUser = () => {
+  const user = localStorage.getItem('user');
+  const guest = localStorage.getItem('guest');
+  return user ? JSON.parse(user) : (guest ? JSON.parse(guest) : null);
+};
+
+export const getAuthToken = () => {
+  return localStorage.getItem('token') || localStorage.getItem('guest_token');
+};
+
+export const getPropertyImageUrl = (imageId) => {
+  return `${API_BASE_URL}/admin/property-image/${imageId}`;
+};
+
+// ==================== M-PESA HELPER FUNCTIONS ====================
+export const initiateMpesaPayment = async (bookingId, phoneNumber, amount) => {
+  return await paymentsAPI.initiateMpesa(bookingId, phoneNumber, amount);
+};
+
+export const checkPaymentStatus = async (checkoutRequestId) => {
+  return await paymentsAPI.checkMpesaStatus(checkoutRequestId);
+};
+
+export const getBookingPayments = async (bookingId) => {
+  return await paymentsAPI.getBookingPayments(bookingId);
+};
+
+// ==================== BOOKING HELPER FUNCTIONS ====================
+export const generateIdempotencyKey = () => {
+  return `${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+};
+
+export const calculateNights = (checkIn, checkOut) => {
+  const start = new Date(checkIn);
+  const end = new Date(checkOut);
+  return Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)));
+};
+
+export const formatDateForAPI = (date) => {
+  const d = new Date(date);
+  return d.toISOString().split('T')[0];
+};
+
+// ==================== EXPORT ALL ====================
 export default {
   auth: authAPI,
   properties: propertiesAPI,
@@ -805,4 +822,7 @@ export default {
   initiateMpesaPayment,
   checkPaymentStatus,
   getBookingPayments,
+  generateIdempotencyKey,
+  calculateNights,
+  formatDateForAPI,
 };

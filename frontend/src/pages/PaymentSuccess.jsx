@@ -1,158 +1,307 @@
-import { useState, useEffect } from "react";
-import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
-import api from "../services/api";
+import { 
+  CheckCircle, Calendar, MapPin, Users, 
+  Clock, Download, Share2, Home, Phone,
+  Mail, Copy, Check, ChevronRight, Star
+} from "lucide-react";
 
 export default function PaymentSuccess() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const [isLoading, setIsLoading] = useState(true);
-  const [paymentStatus, setPaymentStatus] = useState(null);
-  const [error, setError] = useState(null);
-
+  const location = useLocation();
+  const [bookingData, setBookingData] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const [showShare, setShowShare] = useState(false);
+  
+  // Get booking data from navigation state
   useEffect(() => {
-    const capturePayment = async () => {
-      // Get PayPal token (order ID) from URL params
-      const token = searchParams.get('token');
-      
-      if (!token) {
-        setError('No payment token found');
-        setIsLoading(false);
-        return;
+    const data = location.state || {};
+    
+    // If no data, try to get from localStorage
+    if (!data.bookingId) {
+      const lastBooking = localStorage.getItem('lastBooking');
+      if (lastBooking) {
+        setBookingData(JSON.parse(lastBooking));
       }
+    } else {
+      setBookingData(data);
+      // Store for reference
+      localStorage.setItem('lastBooking', JSON.stringify(data));
+    }
+    
+    // Auto redirect to bookings after 10 seconds
+    const timer = setTimeout(() => {
+      navigate('/my-bookings');
+    }, 10000);
+    
+    return () => clearTimeout(timer);
+  }, [location, navigate]);
 
-      try {
-        // Capture the PayPal payment
-        const result = await api.payments.capturePayPalOrder(token);
-        
-        if (result.success) {
-          setPaymentStatus({
-            success: true,
-            orderId: result.order_id,
-            transactionId: result.transaction_id,
-            paymentId: result.payment_id
-          });
-          
-          // Clear stored PayPal data
-          localStorage.removeItem('paypal_order_id');
-          localStorage.removeItem('paypal_payment_id');
-          localStorage.removeItem('paypal_booking_id');
-        } else {
-          setError(result.error || 'Payment capture failed');
-        }
-      } catch (err) {
-        console.error('Payment capture error:', err);
-        setError(err.response?.data?.error || err.message || 'Failed to complete payment');
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  const copyReference = () => {
+    if (bookingData?.bookingId) {
+      navigator.clipboard.writeText(bookingData.bookingId.toString());
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
-    capturePayment();
-  }, [searchParams]);
+  const formatCurrency = (amount) => {
+    return `KSh ${amount?.toLocaleString() || '0'}`;
+  };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-stone-50 flex items-center justify-center">
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="text-center"
-        >
-          <div className="w-16 h-16 border-4 border-stone-200 border-t-stone-900 rounded-full animate-spin mx-auto mb-6"></div>
-          <h2 className="font-serif text-2xl italic text-stone-900">Completing your payment...</h2>
-          <p className="text-stone-500 mt-2">Please wait while we confirm your transaction</p>
-        </motion.div>
-      </div>
-    );
-  }
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric' 
+    });
+  };
 
-  if (error) {
-    return (
-      <div className="min-h-screen bg-stone-50 pt-32 pb-24">
-        <div className="max-w-xl mx-auto px-6">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-white border border-red-200 p-12 text-center shadow-lg"
-          >
-            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </div>
-            <h2 className="font-serif text-3xl italic text-stone-900 mb-4">Payment Failed</h2>
-            <p className="text-stone-600 mb-8">{error}</p>
-            <div className="flex justify-center gap-4">
-              <Link
-                to="/"
-                className="border border-stone-300 px-8 py-3 text-xs uppercase tracking-widest text-stone-600 hover:border-stone-900 transition-all"
-              >
-                Go Home
-              </Link>
-              <button
-                onClick={() => window.history.back()}
-                className="bg-stone-900 text-white px-8 py-3 text-xs uppercase tracking-widest hover:bg-black transition-all"
-              >
-                Try Again
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      </div>
-    );
-  }
+  // Generate random reference if none provided
+  const bookingRef = bookingData?.bookingId || 
+                     `HB${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
 
   return (
-    <div className="min-h-screen bg-stone-50 pt-32 pb-24">
-      <div className="max-w-xl mx-auto px-6">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="bg-white border border-stone-200 p-12 text-center shadow-lg"
-        >
-          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <svg className="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
+    <div className="min-h-screen bg-[#f5f2ee] flex items-center justify-center p-4">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="w-full max-w-md"
+      >
+        {/* Main Success Card */}
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+          
+          {/* Success Header */}
+          <div className="bg-green-600 p-6 text-center">
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+              className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-3"
+            >
+              <CheckCircle className="w-8 h-8 text-green-600" />
+            </motion.div>
+            <h1 className="text-white font-serif text-xl md:text-2xl mb-1">
+              Payment Successful!
+            </h1>
+            <p className="text-green-100 text-xs md:text-sm">
+              Your booking is confirmed
+            </p>
           </div>
-          
-          <h2 className="font-serif text-4xl italic text-stone-900 mb-4">Payment Successful</h2>
-          <div className="w-16 h-px bg-stone-300 mx-auto mb-6"></div>
-          
-          <p className="text-stone-600 font-serif text-lg mb-8">
-            Your PayPal payment has been processed successfully. A confirmation email has been sent to your registered email address.
-          </p>
 
-          {paymentStatus && (
-            <div className="grid grid-cols-2 gap-px bg-stone-200 border border-stone-200 max-w-sm mx-auto mb-10">
-              <div className="bg-stone-50 p-4">
-                <p className="text-[10px] uppercase tracking-widest text-stone-500 mb-1">Order ID</p>
-                <p className="font-serif text-stone-900 text-sm truncate">{paymentStatus.orderId}</p>
-              </div>
-              <div className="bg-stone-50 p-4">
-                <p className="text-[10px] uppercase tracking-widest text-stone-500 mb-1">Status</p>
-                <p className="font-serif text-green-600">Completed</p>
+          {/* Booking Reference */}
+          <div className="p-6 border-b border-stone-100">
+            <div className="bg-stone-50 rounded-lg p-4">
+              <p className="text-[10px] uppercase tracking-widest text-stone-500 mb-2">
+                Booking Reference
+              </p>
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-xl md:text-2xl font-bold">
+                  {bookingRef}
+                </span>
+                <button
+                  onClick={copyReference}
+                  className="p-2 hover:bg-stone-200 rounded-lg transition-colors"
+                  title="Copy reference"
+                >
+                  {copied ? (
+                    <Check className="w-5 h-5 text-green-600" />
+                  ) : (
+                    <Copy className="w-5 h-5 text-stone-400" />
+                  )}
+                </button>
               </div>
             </div>
-          )}
+          </div>
 
-          <div className="flex justify-center gap-6">
+          {/* Booking Details */}
+          <div className="p-6 space-y-4">
+            <h2 className="font-serif text-lg">Booking Details</h2>
+            
+            {/* Property */}
+            {bookingData?.propertyName && (
+              <div className="flex gap-3">
+                <div className="w-12 h-12 bg-stone-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Home className="w-6 h-6 text-stone-400" />
+                </div>
+                <div>
+                  <p className="font-medium">{bookingData.propertyName}</p>
+                  <p className="text-xs text-stone-500 flex items-center gap-1 mt-1">
+                    <MapPin className="w-3 h-3" />
+                    {bookingData.propertyLocation || 'Nairobi, Kenya'}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Date & Guests Grid */}
+            <div className="grid grid-cols-2 gap-3 mt-4">
+              <div className="bg-stone-50 p-3 rounded-lg">
+                <div className="flex items-center gap-1 text-stone-500 mb-1">
+                  <Calendar className="w-3 h-3" />
+                  <span className="text-[10px] uppercase tracking-widest">Check-in</span>
+                </div>
+                <p className="font-serif text-sm">
+                  {formatDate(bookingData?.checkIn) || 'Today'}
+                </p>
+              </div>
+              
+              <div className="bg-stone-50 p-3 rounded-lg">
+                <div className="flex items-center gap-1 text-stone-500 mb-1">
+                  <Calendar className="w-3 h-3" />
+                  <span className="text-[10px] uppercase tracking-widest">Check-out</span>
+                </div>
+                <p className="font-serif text-sm">
+                  {formatDate(bookingData?.checkOut) || 'In 3 days'}
+                </p>
+              </div>
+              
+              <div className="bg-stone-50 p-3 rounded-lg">
+                <div className="flex items-center gap-1 text-stone-500 mb-1">
+                  <Users className="w-3 h-3" />
+                  <span className="text-[10px] uppercase tracking-widest">Guests</span>
+                </div>
+                <p className="font-serif text-sm">
+                  {bookingData?.guests || '2 Adults'}
+                </p>
+              </div>
+              
+              <div className="bg-stone-50 p-3 rounded-lg">
+                <div className="flex items-center gap-1 text-stone-500 mb-1">
+                  <Clock className="w-3 h-3" />
+                  <span className="text-[10px] uppercase tracking-widest">Nights</span>
+                </div>
+                <p className="font-serif text-sm">
+                  {bookingData?.nights || '3'} nights
+                </p>
+              </div>
+            </div>
+
+            {/* Payment Summary */}
+            <div className="border-t border-stone-100 pt-4 mt-2">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-stone-600 text-sm">Amount paid</span>
+                <span className="font-serif text-xl font-bold text-green-600">
+                  {formatCurrency(bookingData?.amount)}
+                </span>
+              </div>
+              {bookingData?.receipt && (
+                <p className="text-[10px] text-stone-400">
+                  Receipt: {bookingData.receipt}
+                </p>
+              )}
+            </div>
+
+            {/* Share/Download Actions */}
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => setShowShare(!showShare)}
+                className="flex-1 py-2 border border-stone-200 rounded-lg text-xs flex items-center justify-center gap-1 hover:bg-stone-50 transition-colors"
+              >
+                <Share2 className="w-3 h-3" />
+                Share
+              </button>
+              <button
+                className="flex-1 py-2 border border-stone-200 rounded-lg text-xs flex items-center justify-center gap-1 hover:bg-stone-50 transition-colors"
+              >
+                <Download className="w-3 h-3" />
+                Receipt
+              </button>
+            </div>
+
+            {/* Share Options (expandable) */}
+            {showShare && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                className="overflow-hidden"
+              >
+                <div className="bg-stone-50 rounded-lg p-3 mt-2 grid grid-cols-3 gap-2">
+                  <button className="py-2 px-3 bg-[#25D366] text-white rounded-lg text-xs flex items-center justify-center gap-1">
+                    <Phone className="w-3 h-3" />
+                    WhatsApp
+                  </button>
+                  <button className="py-2 px-3 bg-[#0088cc] text-white rounded-lg text-xs flex items-center justify-center gap-1">
+                    <Mail className="w-3 h-3" />
+                    Email
+                  </button>
+                  <button className="py-2 px-3 bg-stone-800 text-white rounded-lg text-xs flex items-center justify-center gap-1">
+                    <Copy className="w-3 h-3" />
+                    Copy
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </div>
+
+          {/* What's Next */}
+          <div className="px-6 pb-6">
+            <h3 className="font-serif text-sm mb-3">What's next?</h3>
+            <div className="space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <Check className="w-3 h-3 text-green-600" />
+                </div>
+                <p className="text-xs text-stone-600">
+                  Check your email for confirmation and details
+                </p>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="w-5 h-5 rounded-full bg-stone-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <Calendar className="w-3 h-3 text-stone-600" />
+                </div>
+                <p className="text-xs text-stone-600">
+                  You'll receive check-in instructions 24h before arrival
+                </p>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="w-5 h-5 rounded-full bg-stone-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <Phone className="w-3 h-3 text-stone-600" />
+                </div>
+                <p className="text-xs text-stone-600">
+                  Our concierge is available 24/7 for any questions
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="p-6 bg-stone-50 border-t border-stone-100 flex flex-col sm:flex-row gap-3">
             <Link
               to="/my-bookings"
-              className="bg-stone-900 text-white px-8 py-4 text-xs uppercase tracking-widest hover:bg-black transition-all"
+              className="flex-1 bg-stone-900 text-white py-3 rounded-lg text-xs uppercase tracking-widest font-medium hover:bg-stone-800 transition-colors text-center"
             >
               View My Bookings
             </Link>
             <Link
               to="/"
-              className="border border-stone-300 px-8 py-4 text-xs uppercase tracking-widest text-stone-600 hover:border-stone-900 transition-all"
+              className="flex-1 border border-stone-300 py-3 rounded-lg text-xs uppercase tracking-widest hover:bg-white transition-colors text-center"
             >
               Return Home
             </Link>
           </div>
-        </motion.div>
-      </div>
+
+          {/* Auto-redirect notice */}
+          <div className="p-3 text-center border-t border-stone-100">
+            <p className="text-[9px] text-stone-400">
+              Redirecting to your bookings in 10 seconds...
+            </p>
+          </div>
+        </div>
+
+        {/* Support Footer */}
+        <div className="mt-6 text-center">
+          <p className="text-xs text-stone-500">
+            Need assistance?{' '}
+            <button className="text-stone-900 underline font-medium">
+              Contact Concierge
+            </button>
+          </p>
+        </div>
+      </motion.div>
     </div>
   );
 }

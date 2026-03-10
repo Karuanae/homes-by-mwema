@@ -16,6 +16,9 @@ import { useAuth } from "../context/AuthContext";
 import ChatWindow from "../components/Chat/ChatWindow";
 import socketService from "../services/socketService";
 import ConsultationsManager from '../components/admin/ConsultationsManager';
+import AdminBookingsTab from '../pages/AdminBookingsTab'; 
+
+
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -985,40 +988,16 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ══ BOOKINGS ══ */}
-        {activeTab === "bookings" && (
-          <div className="bg-white border border-stone-100 p-4 md:p-8 overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[800px]">
-              <thead>
-                <tr className="border-b-2 border-[#1C2321]">
-                  {["Property","Guest","Dates","Status","Amount","Actions"].map(h=>(
-                    <th key={h} className="py-4 px-4 font-serif text-[#1C2321] text-lg font-normal">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="text-stone-600">
-                {bookings.map(b=>(
-                  <tr key={b.id} className="border-b border-stone-100 hover:bg-[#F9F8F6] transition-colors">
-                    <td className="py-4 md:py-6 px-4"><p className="font-serif text-[#1C2321]">{b.property_name}</p><p className="text-xs text-stone-400">ID: {b.id}</p></td>
-                    <td className="py-4 md:py-6 px-4"><p className="font-medium">{b.guest_name}</p><p className="text-sm text-stone-400">{b.email}</p></td>
-                    <td className="py-4 md:py-6 px-4 text-sm font-light">{b.check_in} — {b.check_out}</td>
-                    <td className="py-4 md:py-6 px-4">
-                      <span className={`text-xs uppercase tracking-widest font-medium ${b.status==="confirmed"?"text-[#1C2321]":b.status==="pending"?"text-[#D4AF37]":"text-stone-400"}`}>{b.status}</span>
-                    </td>
-                    <td className="py-4 md:py-6 px-4 font-serif">Ksh {b.total_amount?.toLocaleString()}</td>
-                    <td className="py-4 md:py-6 px-4"><button className="text-stone-400 hover:text-[#1C2321] uppercase text-xs tracking-widest">View</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {bookings.length===0 && (
-              <div className="text-center py-20">
-                <FaCalendarAlt className="text-4xl text-stone-200 mx-auto mb-4"/>
-                <p className="font-serif text-stone-400 italic">No reservations found in the registry.</p>
-              </div>
-            )}
-          </div>
-        )}
+       {/* ══ BOOKINGS ══ */}
+{activeTab === "bookings" && (
+  <motion.div
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.4 }}
+  >
+    <AdminBookingsTab />
+  </motion.div>
+)}
 
         {/* ══ CLIENTS ══ */}
         {activeTab === "customers" && (

@@ -77,13 +77,13 @@ const UserSidebar = ({ isOpen, onClose }) => {
 
       {/* Sidebar */}
       <aside
-        className={`hidden lg:flex lg:sticky lg:top-0 lg:h-screen w-64 bg-stone-900 text-white flex-col shadow-2xl flex-shrink-0`}
+        className={`hidden lg:flex lg:sticky lg:top-0 lg:h-screen w-64 bg-[#093A3E] text-white flex-col shadow-2xl flex-shrink-0`}
       >
         {/* Header */}
-        <div className="p-6 border-b border-stone-800">
+        <div className="p-6 border-b border-[#ED9B40]/20">
           <div className="flex items-center justify-between">
             <Link to="/" className="text-xl font-serif tracking-tighter text-white">
-              MWEMA<span className="italic font-light text-stone-500">.</span>
+              MWEMA<span className="italic font-light text-[#ED9B40]/60">.</span>
             </Link>
             <button
               onClick={onClose}
@@ -95,16 +95,16 @@ const UserSidebar = ({ isOpen, onClose }) => {
         </div>
 
         {/* User Info */}
-        <div className="p-6 border-b border-stone-800">
+        <div className="p-6 border-b border-[#ED9B40]/20">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-stone-700 flex items-center justify-center">
-              <User size={18} className="text-stone-300" />
+            <div className="w-10 h-10 rounded-full bg-[#062a2d] flex items-center justify-center">
+              <User size={18} className="text-[#ED9B40]" />
             </div>
             <div>
               <p className="text-sm font-medium text-white truncate">
                 {user?.name || user?.email?.split('@')[0] || 'Guest'}
               </p>
-              <p className="text-[10px] uppercase tracking-widest text-stone-500">
+              <p className="text-[10px] uppercase tracking-widest text-[#ED9B40]/60">
                 Member
               </p>
             </div>
@@ -124,20 +124,20 @@ const UserSidebar = ({ isOpen, onClose }) => {
                 onClick={onClose}
                 className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group relative ${
                   active
-                    ? 'bg-white/10 text-white'
+                    ? 'bg-[#ED9B40]/20 text-white'
                     : item.highlight 
-                      ? 'text-amber-400 hover:bg-amber-500/10 hover:text-amber-300' 
-                      : 'text-stone-400 hover:bg-white/5 hover:text-white'
+                      ? 'text-[#ED9B40] hover:bg-[#ED9B40]/10 hover:text-[#ED9B40]' 
+                      : 'text-white/70 hover:bg-white/5 hover:text-white'
                 }`}
                 title={item.description}
               >
                 <Icon size={18} strokeWidth={1.5} />
                 <span className="text-sm font-medium flex-1">{item.label}</span>
                 {active && (
-                  <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  <div className="w-1.5 h-1.5 rounded-full bg-[#ED9B40]" />
                 )}
                 {item.badge && (
-                  <span className="bg-amber-500 text-stone-900 text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                  <span className="bg-[#ED9B40] text-[#093A3E] text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
                     {item.badge}
                   </span>
                 )}
@@ -147,11 +147,11 @@ const UserSidebar = ({ isOpen, onClose }) => {
         </nav>
 
         {/* Footer Actions */}
-        <div className="p-4 border-t border-stone-800 space-y-1">
+        <div className="p-4 border-t border-[#ED9B40]/20 space-y-1">
           <Link
             to="/"
             onClick={onClose}
-            className="flex items-center gap-3 px-4 py-3 rounded-lg text-stone-400 hover:bg-white/5 hover:text-white transition-all"
+            className="flex items-center gap-3 px-4 py-3 rounded-lg text-white/70 hover:bg-white/5 hover:text-white transition-all"
           >
             <Home size={18} strokeWidth={1.5} />
             <span className="text-sm font-medium">Back to Home</span>
@@ -175,13 +175,13 @@ const UserSidebar = ({ isOpen, onClose }) => {
             animate={{ x: 0 }}
             exit={{ x: -280 }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="lg:hidden fixed top-0 left-0 h-full w-64 bg-stone-900 text-white z-50 flex flex-col shadow-2xl"
+            className="lg:hidden fixed top-0 left-0 h-full w-64 bg-[#093A3E] text-white z-50 flex flex-col shadow-2xl"
           >
             {/* Header */}
-            <div className="p-6 border-b border-stone-800">
+            <div className="p-6 border-b border-[#ED9B40]/20">
               <div className="flex items-center justify-between">
                 <Link to="/" className="text-xl font-serif tracking-tighter text-white">
-                  MWEMA<span className="italic font-light text-stone-500">.</span>
+                  MWEMA<span className="italic font-light text-[#ED9B40]/60">.</span>
                 </Link>
                 <button
                   onClick={onClose}
@@ -193,16 +193,16 @@ const UserSidebar = ({ isOpen, onClose }) => {
             </div>
 
             {/* User Info */}
-            <div className="p-6 border-b border-stone-800">
+            <div className="p-6 border-b border-[#ED9B40]/20">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-stone-700 flex items-center justify-center">
-                  <User size={18} className="text-stone-300" />
+                <div className="w-10 h-10 rounded-full bg-[#062a2d] flex items-center justify-center">
+                  <User size={18} className="text-[#ED9B40]" />
                 </div>
                 <div>
                   <p className="text-sm font-medium text-white truncate">
                     {user?.name || user?.email?.split('@')[0] || 'Guest'}
                   </p>
-                  <p className="text-[10px] uppercase tracking-widest text-stone-500">
+                  <p className="text-[10px] uppercase tracking-widest text-[#ED9B40]/60">
                     Member
                   </p>
                 </div>
@@ -222,16 +222,16 @@ const UserSidebar = ({ isOpen, onClose }) => {
                     onClick={onClose}
                     className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group ${
                       active
-                        ? 'bg-white/10 text-white'
+                        ? 'bg-[#ED9B40]/20 text-white'
                         : item.highlight 
-                          ? 'text-amber-400 hover:bg-amber-500/10 hover:text-amber-300' 
-                          : 'text-stone-400 hover:bg-white/5 hover:text-white'
+                          ? 'text-[#ED9B40] hover:bg-[#ED9B40]/10 hover:text-[#ED9B40]' 
+                          : 'text-white/70 hover:bg-white/5 hover:text-white'
                     }`}
                   >
                     <Icon size={18} strokeWidth={1.5} />
                     <span className="text-sm font-medium flex-1">{item.label}</span>
                     {active && (
-                      <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#ED9B40]" />
                     )}
                   </Link>
                 );
@@ -239,11 +239,11 @@ const UserSidebar = ({ isOpen, onClose }) => {
             </nav>
 
             {/* Footer Actions */}
-            <div className="p-4 border-t border-stone-800 space-y-1">
+            <div className="p-4 border-t border-[#ED9B40]/20 space-y-1">
               <Link
                 to="/"
                 onClick={onClose}
-                className="flex items-center gap-3 px-4 py-3 rounded-lg text-stone-400 hover:bg-white/5 hover:text-white transition-all"
+                className="flex items-center gap-3 px-4 py-3 rounded-lg text-white/70 hover:bg-white/5 hover:text-white transition-all"
               >
                 <Home size={18} strokeWidth={1.5} />
                 <span className="text-sm font-medium">Back to Home</span>

@@ -224,8 +224,7 @@ export default function Home() {
             </h1>
 
             {/* ── SEARCH BAR ── */}
-            <div className="bg-white/10 backdrop-blur-lg rounded-2xl border border-white/20 shadow-2xl overflow-visible relative">
-
+           <div className="bg-[#093A3E]/40 backdrop-blur-lg rounded-2xl border border-[#ED9B40]/30 shadow-2xl overflow-visible relative">
               {/* Desktop row / Mobile stack */}
               <div className="flex flex-col md:flex-row md:items-center md:divide-x divide-white/20">
 
