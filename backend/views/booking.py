@@ -49,161 +49,226 @@ def create_booking():
     Create a new booking with configurable timeout
     All settings come from environment variables
     """
-    user_id = get_jwt_identity()
-    data = request.json
-    
-    # Get all settings from app config (which comes from env vars)
-    cleaning_fee = Decimal(str(current_app.config['CLEANING_FEE']))
-    service_fee_percentage = Decimal(str(current_app.config['SERVICE_FEE_PERCENTAGE'])) / 100
-    timeout_minutes = current_app.config['BOOKING_TIMEOUT_MINUTES']
-    max_guests = current_app.config['MAX_GUESTS_PER_BOOKING']
-    min_nights = current_app.config['MIN_NIGHTS_BOOKING']
-    max_nights = current_app.config['MAX_NIGHTS_BOOKING']
-    
-    # Generate unique idempotency key (prevents duplicate bookings)
-    idempotency_key = request.headers.get('Idempotency-Key')
-    if not idempotency_key:
-        idempotency_key = str(uuid.uuid4())
-    
-    # Check if this request was already processed
-    existing = Booking.query.filter_by(idempotency_key=idempotency_key).first()
-    if existing:
-        return jsonify({
-            'success': True,
-            'booking_id': existing.id,
-            'status': existing.status,
-            'message': 'Booking already created'
-        }), 200
-    
-    # Validate required fields
-    required_fields = ['property_id', 'check_in', 'check_out', 'guests']
-    for field in required_fields:
-        if field not in data:
+    try:
+        user_id = get_jwt_identity()
+        data = request.json
+        
+        # LOG INCOMING DATA
+        logger.info(f"📥 Booking request from user {user_id}")
+        logger.info(f"📦 Booking data: {data}")
+        
+        # CHECK CONFIG VALUES
+        logger.info("🔍 Checking configuration values:")
+        try:
+            cleaning_fee = Decimal(str(current_app.config['CLEANING_FEE']))
+            logger.info(f"  ✅ CLEANING_FEE: {cleaning_fee}")
+        except Exception as e:
+            logger.error(f"  ❌ CLEANING_FEE error: {str(e)}")
+            return jsonify({'error': 'Configuration error: CLEANING_FEE'}), 500
+            
+        try:
+            service_fee_percentage = Decimal(str(current_app.config['SERVICE_FEE_PERCENTAGE'])) / 100
+            logger.info(f"  ✅ SERVICE_FEE_PERCENTAGE: {current_app.config['SERVICE_FEE_PERCENTAGE']}")
+        except Exception as e:
+            logger.error(f"  ❌ SERVICE_FEE_PERCENTAGE error: {str(e)}")
+            return jsonify({'error': 'Configuration error: SERVICE_FEE_PERCENTAGE'}), 500
+            
+        try:
+            timeout_minutes = current_app.config['BOOKING_TIMEOUT_MINUTES']
+            logger.info(f"  ✅ BOOKING_TIMEOUT_MINUTES: {timeout_minutes}")
+        except Exception as e:
+            logger.error(f"  ❌ BOOKING_TIMEOUT_MINUTES error: {str(e)}")
+            return jsonify({'error': 'Configuration error: BOOKING_TIMEOUT_MINUTES'}), 500
+            
+        try:
+            max_guests = current_app.config['MAX_GUESTS_PER_BOOKING']
+            logger.info(f"  ✅ MAX_GUESTS_PER_BOOKING: {max_guests}")
+        except Exception as e:
+            logger.error(f"  ❌ MAX_GUESTS_PER_BOOKING error: {str(e)}")
+            return jsonify({'error': 'Configuration error: MAX_GUESTS_PER_BOOKING'}), 500
+            
+        try:
+            min_nights = current_app.config['MIN_NIGHTS_BOOKING']
+            logger.info(f"  ✅ MIN_NIGHTS_BOOKING: {min_nights}")
+        except Exception as e:
+            logger.error(f"  ❌ MIN_NIGHTS_BOOKING error: {str(e)}")
+            return jsonify({'error': 'Configuration error: MIN_NIGHTS_BOOKING'}), 500
+            
+        try:
+            max_nights = current_app.config['MAX_NIGHTS_BOOKING']
+            logger.info(f"  ✅ MAX_NIGHTS_BOOKING: {max_nights}")
+        except Exception as e:
+            logger.error(f"  ❌ MAX_NIGHTS_BOOKING error: {str(e)}")
+            return jsonify({'error': 'Configuration error: MAX_NIGHTS_BOOKING'}), 500
+        
+        # Generate unique idempotency key
+        idempotency_key = request.headers.get('Idempotency-Key')
+        if not idempotency_key:
+            idempotency_key = str(uuid.uuid4())
+        logger.info(f"🔑 Idempotency Key: {idempotency_key}")
+        
+        # Check if already processed
+        existing = Booking.query.filter_by(idempotency_key=idempotency_key).first()
+        if existing:
+            logger.info(f"🔄 Booking already exists with id: {existing.id}")
+            return jsonify({
+                'success': True,
+                'booking_id': existing.id,
+                'status': existing.status,
+                'message': 'Booking already created'
+            }), 200
+        
+        # Validate required fields
+        logger.info("🔍 Validating required fields...")
+        required_fields = ['property_id', 'check_in', 'check_out', 'guests']
+        for field in required_fields:
+            if field not in data:
+                logger.error(f"❌ Missing required field: {field}")
+                return jsonify({
+                    'success': False,
+                    'error': f'Missing required field: {field}'
+                }), 400
+        
+        # Parse and validate dates
+        try:
+            check_in = datetime.strptime(data['check_in'], '%Y-%m-%d').date()
+            check_out = datetime.strptime(data['check_out'], '%Y-%m-%d').date()
+            logger.info(f"📅 Dates: {check_in} to {check_out}")
+        except ValueError as e:
+            logger.error(f"❌ Invalid date format: {str(e)}")
             return jsonify({
                 'success': False,
-                'error': f'Missing required field: {field}'
+                'error': 'Invalid date format. Use YYYY-MM-DD'
             }), 400
-    
-    # Parse and validate dates
-    try:
-        check_in = datetime.strptime(data['check_in'], '%Y-%m-%d').date()
-        check_out = datetime.strptime(data['check_out'], '%Y-%m-%d').date()
-    except ValueError:
-        return jsonify({
-            'success': False,
-            'error': 'Invalid date format. Use YYYY-MM-DD'
-        }), 400
-    
-    # Validate date logic
-    if check_in >= check_out:
-        return jsonify({
-            'success': False,
-            'error': 'Check-out must be after check-in'
-        }), 400
-    
-    if check_in < datetime.now().date():
-        return jsonify({
-            'success': False,
-            'error': 'Check-in cannot be in the past'
-        }), 400
-    
-    # Validate nights
-    nights = (check_out - check_in).days
-    if nights < min_nights:
-        return jsonify({
-            'success': False,
-            'error': f'Minimum stay is {min_nights} night{"s" if min_nights > 1 else ""}'
-        }), 400
-    
-    if nights > max_nights:
-        return jsonify({
-            'success': False,
-            'error': f'Maximum stay is {max_nights} nights'
-        }), 400
-    
-    # Validate guests
-    total_guests = data['guests'].get('adults', 0) + data['guests'].get('children', 0)
-    if total_guests > max_guests:
-        return jsonify({
-            'success': False,
-            'error': f'Maximum {max_guests} guests allowed'
-        }), 400
-    
-    # Get property
-    property = Property.query.get(data['property_id'])
-    if not property:
-        return jsonify({
-            'success': False,
-            'error': 'Property not found'
-        }), 404
-    
-    # CRITICAL: Check availability
-    is_available, conflicts = check_property_availability(
-        property.id, check_in, check_out
-    )
-    
-    if not is_available:
-        # Format conflicting dates for user-friendly message
-        conflict_dates = []
-        for c in conflicts[:3]:  # Show max 3 conflicts
-            conflict_dates.append({
-                'check_in': c.check_in.strftime('%b %d'),
-                'check_out': c.check_out.strftime('%b %d'),
-                'status': c.status
-            })
         
-        return jsonify({
-            'success': False,
-            'error': 'Property not available for selected dates',
-            'conflicts': conflict_dates,
-            'message': 'These dates are already booked. Please try different dates.'
-        }), 409
-    
-    # Calculate amounts using env variables
-    base_amount = Decimal(str(property.price)) * Decimal(nights)
-    cleaning_fee_amount = cleaning_fee
-    service_fee = base_amount * service_fee_percentage
-    total_amount = base_amount + cleaning_fee_amount + service_fee
-    
-    # Payment type (default to full)
-    payment_type = data.get('payment_type', 'full')
-    pending_amount = Decimal('0')
-    
-    if payment_type == 'partial':
-        # 50% deposit required
-        pending_amount = total_amount * Decimal('0.5')
-    
-    # Create booking with configurable expiry
-    booking = Booking(
-        user_id=user_id,
-        property_id=property.id,
-        check_in=check_in,
-        check_out=check_out,
-        guests=data['guests'],
-        nights=nights,
-        base_amount=base_amount,
-        cleaning_fee=cleaning_fee_amount,
-        service_fee=service_fee,
-        total_amount=total_amount,
-        pending_amount=pending_amount,
-        payment_type=payment_type,
-        payment_method=data.get('payment_method'),
-        message_to_host=data.get('message_to_host'),
-        status='pending',  # Starts as pending
-        confirmation='pending',
-        payment_status='pending',
-        idempotency_key=idempotency_key,
-        expires_at=datetime.utcnow() + timedelta(minutes=timeout_minutes),
-        created_at=datetime.utcnow()
-    )
-    
-    try:
+        # Validate date logic
+        if check_in >= check_out:
+            logger.error("❌ Check-out must be after check-in")
+            return jsonify({
+                'success': False,
+                'error': 'Check-out must be after check-in'
+            }), 400
+        
+        if check_in < datetime.now().date():
+            logger.error("❌ Check-in cannot be in the past")
+            return jsonify({
+                'success': False,
+                'error': 'Check-in cannot be in the past'
+            }), 400
+        
+        # Validate nights
+        nights = (check_out - check_in).days
+        logger.info(f"🌙 Nights: {nights}")
+        
+        if nights < min_nights:
+            logger.error(f"❌ Minimum stay is {min_nights} nights")
+            return jsonify({
+                'success': False,
+                'error': f'Minimum stay is {min_nights} night{"s" if min_nights > 1 else ""}'
+            }), 400
+        
+        if nights > max_nights:
+            logger.error(f"❌ Maximum stay is {max_nights} nights")
+            return jsonify({
+                'success': False,
+                'error': f'Maximum stay is {max_nights} nights'
+            }), 400
+        
+        # Validate guests
+        total_guests = data['guests'].get('adults', 0) + data['guests'].get('children', 0)
+        logger.info(f"👥 Total guests: {total_guests}")
+        
+        if total_guests > max_guests:
+            logger.error(f"❌ Maximum {max_guests} guests allowed")
+            return jsonify({
+                'success': False,
+                'error': f'Maximum {max_guests} guests allowed'
+            }), 400
+        
+        # Get property
+        property = Property.query.get(data['property_id'])
+        if not property:
+            logger.error(f"❌ Property not found: {data['property_id']}")
+            return jsonify({
+                'success': False,
+                'error': 'Property not found'
+            }), 404
+        
+        logger.info(f"🏠 Property found: {property.name} (${property.price})")
+        
+        # Check availability
+        is_available, conflicts = check_property_availability(
+            property.id, check_in, check_out
+        )
+        
+        if not is_available:
+            logger.warning(f"⚠️ Property not available for selected dates")
+            conflict_dates = []
+            for c in conflicts[:3]:
+                conflict_dates.append({
+                    'check_in': c.check_in.strftime('%b %d'),
+                    'check_out': c.check_out.strftime('%b %d'),
+                    'status': c.status
+                })
+            
+            return jsonify({
+                'success': False,
+                'error': 'Property not available for selected dates',
+                'conflicts': conflict_dates,
+                'message': 'These dates are already booked. Please try different dates.'
+            }), 409
+        
+        # Calculate amounts
+        logger.info("💰 Calculating amounts...")
+        base_amount = Decimal(str(property.price)) * Decimal(nights)
+        cleaning_fee_amount = cleaning_fee
+        service_fee = base_amount * service_fee_percentage
+        total_amount = base_amount + cleaning_fee_amount + service_fee
+        
+        logger.info(f"  Base amount: {base_amount}")
+        logger.info(f"  Cleaning fee: {cleaning_fee_amount}")
+        logger.info(f"  Service fee: {service_fee}")
+        logger.info(f"  Total: {total_amount}")
+        
+        # Payment type
+        payment_type = data.get('payment_type', 'full')
+        pending_amount = Decimal('0')
+        
+        if payment_type == 'partial':
+            pending_amount = total_amount * Decimal('0.5')
+            logger.info(f"💰 Partial payment: {pending_amount} deposit")
+        
+        # Create booking
+        logger.info("📝 Creating booking object...")
+        booking = Booking(
+            user_id=user_id,
+            property_id=property.id,
+            check_in=check_in,
+            check_out=check_out,
+            guests=data['guests'],
+            nights=nights,
+            base_amount=base_amount,
+            cleaning_fee=cleaning_fee_amount,
+            service_fee=service_fee,
+            total_amount=total_amount,
+            pending_amount=pending_amount,
+            payment_type=payment_type,
+            payment_method=data.get('payment_method'),
+            message_to_host=data.get('message_to_host'),
+            status='pending',
+            confirmation='pending',
+            payment_status='pending',
+            idempotency_key=idempotency_key,
+            expires_at=datetime.utcnow() + timedelta(minutes=timeout_minutes),
+            created_at=datetime.utcnow()
+        )
+        
+        logger.info("💾 Saving to database...")
         db.session.add(booking)
         db.session.commit()
         
-        logger.info(f"✅ Booking created: {booking.id} for property {property.id}")
+        logger.info(f"✅ Booking created successfully with ID: {booking.id}")
         
-        # Return success with clear expiry info
         return jsonify({
             'success': True,
             'booking': {
@@ -233,10 +298,14 @@ def create_booking():
         
     except Exception as e:
         db.session.rollback()
-        logger.error(f"❌ Booking creation failed: {str(e)}")
+        logger.error(f"❌❌❌ UNHANDLED EXCEPTION: {str(e)}")
+        logger.error(f"❌ Error type: {type(e).__name__}")
+        import traceback
+        logger.error(f"❌ Traceback: {traceback.format_exc()}")
         return jsonify({
             'success': False,
-            'error': 'Failed to create booking. Please try again.'
+            'error': 'Failed to create booking. Please try again.',
+            'details': str(e)  # Remove in production
         }), 500
 
 @booking_bp.route('/<int:booking_id>/status', methods=['GET'])

@@ -109,26 +109,32 @@ class Booking(db.Model):
     property_id = db.Column(db.Integer, db.ForeignKey('properties.id'), nullable=False)
     check_in = db.Column(db.Date, nullable=False)
     check_out = db.Column(db.Date, nullable=False)
-    guests = db.Column(db.JSON)  # {'adults': 2, 'children': 0, 'infants': 0}
+    guests = db.Column(db.JSON)
     nights = db.Column(db.Integer, nullable=False)
     base_amount = db.Column(db.Numeric(10, 2), nullable=False)
     cleaning_fee = db.Column(db.Numeric(10, 2), default=1500)
     service_fee = db.Column(db.Numeric(10, 2), default=0)
     total_amount = db.Column(db.Numeric(10, 2), nullable=False)
     pending_amount = db.Column(db.Numeric(10, 2), default=0)
-    payment_type = db.Column(db.String(20), default='full')  # 'full', 'partial'
-    payment_method = db.Column(db.String(20))  # 'mpesa', 'card', 'bank', 'cash'
-    payment_status = db.Column(db.String(20), default='pending')  # 'pending', 'partial', 'completed', 'failed'
-    confirmation = db.Column(db.String(20), default='pending')  # 'pending', 'confirmed', 'cancelled'
-    status = db.Column(db.String(20), default='upcoming')  # 'upcoming', 'active', 'completed', 'cancelled'
+    payment_type = db.Column(db.String(20), default='full')
+    payment_method = db.Column(db.String(20))
+    payment_status = db.Column(db.String(20), default='pending')
+    confirmation = db.Column(db.String(20), default='pending')
+    status = db.Column(db.String(20), default='upcoming')
     message_to_host = db.Column(db.Text)
+    
+    # ADD THESE MISSING FIELDS:
+    idempotency_key = db.Column(db.String(100), unique=True, nullable=True)
+    expires_at = db.Column(db.DateTime, nullable=True)
+    booking_metadata = db.Column(db.JSON, default={})  # or 'additional_data'
+    
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     payments = db.relationship('Payment', backref='booking', lazy=True)
     chat = db.relationship('Chat', backref='booking', uselist=False, lazy=True)
-
+    
 class Payment(db.Model):
     __tablename__ = 'payments'
     
@@ -149,6 +155,10 @@ class Payment(db.Model):
     checkout_request_id = db.Column(db.String(100))  # Checkout request ID from STK push
     mpesa_response_code = db.Column(db.String(10))  # Response code from M-PESA
     mpesa_response_description = db.Column(db.String(255))  # Response description
+    
+    # Error handling and idempotency
+    idempotency_key = db.Column(db.String(100), unique=True, nullable=True)  # Prevent duplicate payments
+    error_log = db.Column(db.Text, nullable=True)  # Log any payment errors
     
     payment_date = db.Column(db.DateTime, default=datetime.utcnow)
     completed_at = db.Column(db.DateTime)
