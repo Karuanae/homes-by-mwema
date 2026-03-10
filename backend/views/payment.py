@@ -363,6 +363,9 @@ def process_payment():
     if booking.payment_status == 'completed':
         return jsonify({'error': 'Payment already completed for this booking'}), 400
     
+    # Generate unique idempotency key
+    idempotency_key = f"PAYMENT_{booking.id}_{data['method']}_{datetime.utcnow().timestamp()}"
+    
     # Create payment record
     payment = Payment(
         booking_id=data['booking_id'],
@@ -371,7 +374,8 @@ def process_payment():
         amount=Decimal(str(data['amount'])),
         method=data['method'],
         mpesa_number=data.get('mpesa_number'),
-        status='completed'  # Assume success for non-M-PESA methods
+        status='completed',  # Assume success for non-M-PESA methods
+        idempotency_key=idempotency_key
     )
     
     # Update booking payment status
@@ -445,6 +449,9 @@ def create_paypal_order():
     else:
         amount_usd = float(amount)
     
+    # Generate unique idempotency key
+    paypal_idempotency_key = f"PAYPAL_{booking.id}_{datetime.utcnow().timestamp()}"
+    
     # Create pending payment record
     payment = Payment(
         booking_id=data['booking_id'],
@@ -452,7 +459,8 @@ def create_paypal_order():
         property_id=booking.property_id,
         amount=Decimal(str(data['amount'])),  # Store original KES amount
         method='paypal',
-        status='pending'
+        status='pending',
+        idempotency_key=paypal_idempotency_key
     )
     db.session.add(payment)
     db.session.commit()
