@@ -1,4 +1,4 @@
-# app.py - COMPLETE RAILWAY-READY VERSION WITH UPDATED DOMAINS AND ADMIN CONFIG
+# app.py 
 from flask import Flask, jsonify, send_from_directory, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
@@ -77,7 +77,7 @@ CORS(app, resources={
     r"/api/*": {
         "origins": all_domains,
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
+        "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "idempotency-key"],
         "expose_headers": ["Content-Type", "Authorization"],
         "supports_credentials": True,
         "max_age": 600
@@ -94,49 +94,79 @@ for origin in sorted(all_domains):
     print(f"  • {origin}")
 print("=" * 50)
 
-# Configuration
+# ===== JWT CONFIGURATION =====
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'akerywaeiyff\jk632423746')
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=24)
 app.config['JWT_VERIFY_SUB'] = False
 
-# M-PESA Daraja API Configuration
+# ===== BOOKING & PAYMENT CONFIGURATION =====
+# All values come from environment variables with sensible fallbacks
+app.config['CLEANING_FEE'] = int(os.environ.get('CLEANING_FEE', 1500))
+app.config['SERVICE_FEE_PERCENTAGE'] = int(os.environ.get('SERVICE_FEE_PERCENTAGE', 12))
+app.config['BOOKING_TIMEOUT_MINUTES'] = int(os.environ.get('BOOKING_TIMEOUT_MINUTES', 15))
+app.config['MAX_GUESTS_PER_BOOKING'] = int(os.environ.get('MAX_GUESTS_PER_BOOKING', 10))
+app.config['MIN_NIGHTS_BOOKING'] = int(os.environ.get('MIN_NIGHTS_BOOKING', 1))
+app.config['MAX_NIGHTS_BOOKING'] = int(os.environ.get('MAX_NIGHTS_BOOKING', 30))
+
+# ===== M-PESA DARAJA API CONFIGURATION =====
 app.config['MPESA_ENVIRONMENT'] = os.environ.get('MPESA_ENVIRONMENT', 'sandbox')
-app.config['MPESA_CONSUMER_KEY'] = os.environ.get('MPESA_CONSUMER_KEY', 'YOUR_CONSUMER_KEY_HERE')
-app.config['MPESA_CONSUMER_SECRET'] = os.environ.get('MPESA_CONSUMER_SECRET', 'YOUR_CONSUMER_SECRET_HERE')
+app.config['MPESA_CONSUMER_KEY'] = os.environ.get('MPESA_CONSUMER_KEY', '')
+app.config['MPESA_CONSUMER_SECRET'] = os.environ.get('MPESA_CONSUMER_SECRET', '')
 app.config['MPESA_BUSINESS_SHORT_CODE'] = os.environ.get('MPESA_BUSINESS_SHORT_CODE', '174379')
-app.config['MPESA_PASSKEY'] = os.environ.get('MPESA_PASSKEY', 'YOUR_PASSKEY_HERE')
-app.config['MPESA_CALLBACK_URL'] = os.environ.get('MPESA_CALLBACK_URL', 'https://homesbymwema.com/api/payments/mpesa/callback')
+app.config['MPESA_PASSKEY'] = os.environ.get('MPESA_PASSKEY', '')
+app.config['MPESA_CALLBACK_URL'] = os.environ.get('MPESA_CALLBACK_URL', '')
+app.config['MPESA_SECRET'] = os.environ.get('MPESA_SECRET', '')  # For webhook verification
 
 # M-PESA B2C Configuration (for refunds)
 app.config['MPESA_INITIATOR_NAME'] = os.environ.get('MPESA_INITIATOR_NAME', 'testapi')
-app.config['MPESA_SECURITY_CREDENTIAL'] = os.environ.get('MPESA_SECURITY_CREDENTIAL', 'YOUR_SECURITY_CREDENTIAL')
-app.config['MPESA_B2C_TIMEOUT_URL'] = os.environ.get('MPESA_B2C_TIMEOUT_URL', 'https://homesbymwema.com/api/payments/mpesa/b2c/timeout')
-app.config['MPESA_B2C_RESULT_URL'] = os.environ.get('MPESA_B2C_RESULT_URL', 'https://homesbymwema.com/api/payments/mpesa/b2c/result')
+app.config['MPESA_SECURITY_CREDENTIAL'] = os.environ.get('MPESA_SECURITY_CREDENTIAL', '')
+app.config['MPESA_B2C_TIMEOUT_URL'] = os.environ.get('MPESA_B2C_TIMEOUT_URL', '')
+app.config['MPESA_B2C_RESULT_URL'] = os.environ.get('MPESA_B2C_RESULT_URL', '')
 
-# PayPal REST API Configuration
+# ===== PAYPAL REST API CONFIGURATION =====
 app.config['PAYPAL_ENVIRONMENT'] = os.environ.get('PAYPAL_ENVIRONMENT', 'sandbox')
-app.config['PAYPAL_CLIENT_ID'] = os.environ.get('PAYPAL_CLIENT_ID', 'ARx2bRbdY3X1kfuT8P-QlfoAsDF0rWqv4VExGthJOl5QOqQWhHLo76HdxztMGcyJylPpbnMqTfa_jggd')
-app.config['PAYPAL_CLIENT_SECRET'] = os.environ.get('PAYPAL_CLIENT_SECRET', 'EIm6QhXUnU9QSuBJCr0-xdxrIacugPSQfjGeSzgzHyyoStbwL0rP5ONGbvDOGDIXekfSWs_RvRdliJBi')
-app.config['PAYPAL_RETURN_URL'] = os.environ.get('PAYPAL_RETURN_URL', 'https://homesbymwema.com/payment/success')
-app.config['PAYPAL_CANCEL_URL'] = os.environ.get('PAYPAL_CANCEL_URL', 'https://homesbymwema.com/payment/cancel')
+app.config['PAYPAL_CLIENT_ID'] = os.environ.get('PAYPAL_CLIENT_ID', '')
+app.config['PAYPAL_CLIENT_SECRET'] = os.environ.get('PAYPAL_CLIENT_SECRET', '')
+app.config['PAYPAL_RETURN_URL'] = os.environ.get('PAYPAL_RETURN_URL', '')
+app.config['PAYPAL_CANCEL_URL'] = os.environ.get('PAYPAL_CANCEL_URL', '')
 app.config['PAYPAL_WEBHOOK_ID'] = os.environ.get('PAYPAL_WEBHOOK_ID', '')
 
-# Currency conversion rate (KES to USD)
+# ===== CURRENCY CONVERSION =====
 app.config['KES_TO_USD_RATE'] = float(os.environ.get('KES_TO_USD_RATE', '129.0'))
 
-# Mail configuration
+# ===== MAIL CONFIGURATION =====
 app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
 app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
 app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'true').lower() == 'true'
 app.config['MAIL_USE_SSL'] = os.environ.get('MAIL_USE_SSL', 'false').lower() == 'true'
-app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
-app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', '')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', '')
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', 'noreply@homesbymwema.com')
 app.config['MAIL_FROM_NAME'] = os.environ.get('MAIL_FROM_NAME', 'Homes by Mwema')
 
+# Print configuration on startup
+print("=" * 50)
+print("💰 BOOKING CONFIGURATION:")
+print(f"  • Cleaning Fee: KSh {app.config['CLEANING_FEE']}")
+print(f"  • Service Fee: {app.config['SERVICE_FEE_PERCENTAGE']}%")
+print(f"  • Booking Timeout: {app.config['BOOKING_TIMEOUT_MINUTES']} minutes")
+print(f"  • Max Guests: {app.config['MAX_GUESTS_PER_BOOKING']}")
+print(f"  • Min Nights: {app.config['MIN_NIGHTS_BOOKING']}")
+print(f"  • Max Nights: {app.config['MAX_NIGHTS_BOOKING']}")
+print("=" * 50)
+print("📱 M-PESA CONFIGURATION:")
+print(f"  • Environment: {app.config['MPESA_ENVIRONMENT']}")
+print(f"  • Short Code: {app.config['MPESA_BUSINESS_SHORT_CODE']}")
+print(f"  • Callback URL: {app.config['MPESA_CALLBACK_URL'] or 'Not set'}")
+print("=" * 50)
+print("💳 PAYPAL CONFIGURATION:")
+print(f"  • Environment: {app.config['PAYPAL_ENVIRONMENT']}")
+print(f"  • Webhook ID: {app.config['PAYPAL_WEBHOOK_ID'] or 'Not set'}")
+print(f"  • KES to USD Rate: {app.config['KES_TO_USD_RATE']}")
+print("=" * 50)
+
 # Initialize Mail
 mail = Mail(app)
-
 app.mail = mail 
 
 # Initialize extensions
@@ -189,7 +219,7 @@ def index():
 
 # ── Register blueprints ────────────────────────────────────────────────────
 from views.auth import auth_bp
-from views.auth_google import google_auth_bp          # ← NEW
+from views.auth_google import google_auth_bp
 from views.properties import properties_bp
 from views.admin import admin_bp
 from views.booking import booking_bp
@@ -200,7 +230,7 @@ from views.main import bp as main_bp
 from views.consultation import consultation_bp
 
 app.register_blueprint(auth_bp,        url_prefix='/api/auth')
-app.register_blueprint(google_auth_bp, url_prefix='/api/auth')   # ← NEW  →  POST /api/auth/google
+app.register_blueprint(google_auth_bp, url_prefix='/api/auth')
 app.register_blueprint(properties_bp,  url_prefix='/api/properties')
 app.register_blueprint(admin_bp,       url_prefix='/api/admin')
 app.register_blueprint(booking_bp,     url_prefix='/api/bookings')

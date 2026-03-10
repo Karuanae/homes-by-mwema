@@ -1,30 +1,69 @@
 import { useState, useEffect } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FaMapMarkerAlt, FaStar, FaDownload, FaWhatsapp, 
   FaPhone, FaQuestionCircle, FaBed, FaSearch, 
-  FaFilter, FaChevronRight, FaCrown, FaCalendarAlt, FaHistory, FaMoneyBillWave, FaExclamationTriangle
+  FaFilter, FaChevronRight, FaCrown, FaCalendarAlt, FaHistory, FaMoneyBillWave, FaExclamationTriangle,
+  FaEye, FaTimes, FaCheck, FaClock
 } from "react-icons/fa";
 import api, { IMAGE_BASE_URL } from "../services/api";
 
 export default function MyBookings() {
+  const navigate = useNavigate();
   const location = useLocation();
   const [activeTab, setActiveTab] = useState("current");
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [sortBy, setSortBy] = useState("date-desc");
   const [showFilters, setShowFilters] = useState(false);
   const [filterStatus, setFilterStatus] = useState("all");
+  const [selectedBooking, setSelectedBooking] = useState(null);
+
+  // Timer state for pending bookings
+  const [timers, setTimers] = useState({});
 
   useEffect(() => {
     const fetchBookings = async () => {
       try {
         setLoading(true);
         const response = await api.bookings.getUserBookings();
-        setBookings(response.data);
+        console.log('Bookings data:', response.data);
+        
+        // Transform data to ensure consistent field names
+        const transformedBookings = (response.data || []).map(booking => ({
+          id: booking.id,
+          propertyName: booking.property_name || booking.propertyName || 'Unknown Property',
+          propertyLocation: booking.property_location || booking.propertyLocation || 'Nairobi',
+          propertyImage: booking.property_image || booking.propertyImage,
+          checkIn: booking.check_in || booking.checkIn,
+          checkOut: booking.check_out || booking.checkOut,
+          nights: booking.nights || 0,
+          guests: booking.guests || { adults: 1, children: 0 },
+          totalAmount: booking.total_amount || booking.totalAmount || 0,
+          baseAmount: booking.base_amount || booking.baseAmount || 0,
+          cleaningFee: booking.cleaning_fee || booking.cleaningFee || 0,
+          serviceFee: booking.service_fee || booking.serviceFee || 0,
+          pendingAmount: booking.pending_amount || booking.pendingAmount || 0,
+          paidAmount: booking.total_amount - (booking.pending_amount || 0),
+          status: booking.status || 'pending',
+          paymentStatus: booking.payment_status || booking.paymentStatus || 'pending',
+          createdAt: booking.created_at || booking.createdAt,
+          expiresAt: booking.expires_at || booking.expiresAt
+        }));
+        
+        setBookings(transformedBookings);
+        
+        // Initialize timers for pending bookings
+        const initialTimers = {};
+        transformedBookings.forEach(booking => {
+          if (booking.status === 'pending' && booking.expiresAt) {
+            initialTimers[booking.id] = calculateTimeLeft(booking.expiresAt);
+          }
+        });
+        setTimers(initialTimers);
+        
       } catch (error) {
         console.error('Error fetching bookings:', error);
       } finally {
@@ -37,31 +76,86 @@ export default function MyBookings() {
     fetchBookings();
   }, [location]);
 
-  /* --- LUXE HELPERS --- */
+  // Timer update effect
+  useEffect(() => {
+    const timerInterval = setInterval(() => {
+      const newTimers = {};
+      bookings.forEach(booking => {
+        if (booking.status === 'pending' && booking.expiresAt) {
+          newTimers[booking.id] = calculateTimeLeft(booking.expiresAt);
+        }
+      });
+      setTimers(newTimers);
+    }, 1000);
+
+    return () => clearInterval(timerInterval);
+  }, [bookings]);
+
+  const calculateTimeLeft = (expiresAt) => {
+    const now = new Date();
+    const expiry = new Date(expiresAt);
+    const diff = expiry - now;
+    
+    if (diff <= 0) return 'Expired';
+    
+    const mins = Math.floor(diff / 60000);
+    const secs = Math.floor((diff % 60000) / 1000);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  /* --- STATUS HELPERS --- */
   const getStatusStyle = (status) => {
     const styles = {
-      upcoming: "bg-stone-900 text-[#f5f2ee]",
-      active: "bg-stone-900 text-[#f5f2ee]",
-      completed: "bg-stone-100 text-stone-500",
-      cancelled: "bg-red-50 text-red-700"
+      pending: "bg-amber-100 text-amber-700 border-amber-200",
+      confirmed: "bg-green-100 text-green-700 border-green-200",
+      upcoming: "bg-blue-100 text-blue-700 border-blue-200",
+      active: "bg-purple-100 text-purple-700 border-purple-200",
+      completed: "bg-stone-100 text-stone-500 border-stone-200",
+      cancelled: "bg-red-50 text-red-700 border-red-200",
+      expired: "bg-stone-100 text-stone-400 border-stone-200",
+      failed: "bg-red-50 text-red-700 border-red-200"
     };
     return styles[status] || styles.upcoming;
   };
 
+  const getStatusText = (status) => {
+    const texts = {
+      pending: 'Pending Payment',
+      confirmed: 'Confirmed',
+      upcoming: 'Upcoming',
+      active: 'Active Stay',
+      completed: 'Completed',
+      cancelled: 'Cancelled',
+      expired: 'Expired',
+      failed: 'Payment Failed'
+    };
+    return texts[status] || status;
+  };
+
   const formatCurrency = (amount) => `KSh ${amount?.toLocaleString() || "0"}`;
 
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-GB', { 
+      day: 'numeric', 
+      month: 'long', 
+      year: 'numeric' 
+    });
+  };
+
   const filteredBookings = bookings.filter(booking => {
-    if (activeTab === "current" && !["upcoming", "active"].includes(booking.status)) return false;
-    if (activeTab === "history" && !["completed", "cancelled"].includes(booking.status)) return false;
+    if (activeTab === "current" && !["pending", "confirmed", "upcoming", "active"].includes(booking.status)) return false;
+    if (activeTab === "history" && !["completed", "cancelled", "expired", "failed"].includes(booking.status)) return false;
     if (searchTerm && !booking.propertyName.toLowerCase().includes(searchTerm.toLowerCase())) return false;
     if (filterStatus !== "all" && booking.status !== filterStatus) return false;
     return true;
   });
 
   const stats = {
-    upcoming: bookings.filter(b => b.status === "upcoming").length,
+    upcoming: bookings.filter(b => ["pending", "confirmed", "upcoming"].includes(b.status)).length,
     completed: bookings.filter(b => b.status === "completed").length,
-    spent: bookings.reduce((sum, b) => sum + (b.totalAmount || 0), 0),
+    spent: bookings.reduce((sum, b) => sum + (b.paidAmount || 0), 0),
     pending: bookings.reduce((sum, b) => sum + (b.pendingAmount || 0), 0),
   };
 
@@ -77,7 +171,7 @@ export default function MyBookings() {
   return (
     <div className="min-h-screen bg-[#f5f2ee] text-stone-900 pb-20 pt-8">
       
-      {/* 1. HERO SECTION - Minimal & Elegant */}
+      {/* 1. HERO SECTION */}
       <div className="max-w-7xl mx-auto px-6 mb-16">
         <div className="flex flex-col md:flex-row justify-between items-end border-b border-stone-200 pb-12 gap-8">
           <div className="max-w-2xl">
@@ -87,7 +181,7 @@ export default function MyBookings() {
             </div>
             <h1 className="text-5xl md:text-7xl font-serif italic mb-6">Your Journeys</h1>
             <p className="text-stone-500 font-light text-lg leading-relaxed">
-              Welcome back, {user?.name || "Guest"}. A collection of your past, present, and future stays with our elite properties.
+              Welcome back, {user?.name || "Guest"}. A collection of your past, present, and future stays.
             </p>
           </div>
 
@@ -102,7 +196,7 @@ export default function MyBookings() {
           </div>
         </div>
 
-        {/* Stats Grid - Subtle Cards */}
+        {/* Stats Grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8">
           {[
             { label: "Upcoming", value: stats.upcoming, icon: FaCalendarAlt },
@@ -176,15 +270,27 @@ export default function MyBookings() {
                 initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                className="grid grid-cols-12 gap-0 md:gap-12 group"
+                className="grid grid-cols-12 gap-0 md:gap-12 group cursor-pointer hover:opacity-90 transition-opacity"
+                onClick={() => setSelectedBooking(booking)}
               >
                 {/* Visual Side */}
                 <div className="col-span-12 md:col-span-5 mb-6 md:mb-0">
                   <div className="relative aspect-[4/5] overflow-hidden">
-                    <img src={booking.propertyImage && !booking.propertyImage.startsWith('http') ? `${IMAGE_BASE_URL}${booking.propertyImage}` : booking.propertyImage} className="w-full h-full object-cover grayscale-[0.3] group-hover:grayscale-0 transition-all duration-1000 group-hover:scale-105" alt="" />
+                    <img 
+                      src={booking.propertyImage && !booking.propertyImage.startsWith('http') ? `${IMAGE_BASE_URL}${booking.propertyImage}` : booking.propertyImage || 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=800'} 
+                      className="w-full h-full object-cover grayscale-[0.3] group-hover:grayscale-0 transition-all duration-1000 group-hover:scale-105" 
+                      alt={booking.propertyName}
+                    />
                     <div className={`absolute top-6 left-6 px-4 py-2 text-[9px] uppercase tracking-[0.2em] font-bold shadow-2xl ${getStatusStyle(booking.status)}`}>
-                      {booking.status}
+                      {getStatusText(booking.status)}
                     </div>
+                    
+                    {/* Timer for pending bookings */}
+                    {booking.status === 'pending' && timers[booking.id] && (
+                      <div className="absolute top-6 right-6 bg-amber-500 text-white px-3 py-1 rounded-full text-[9px] font-mono">
+                        <FaClock className="inline mr-1" /> {timers[booking.id]}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -192,7 +298,9 @@ export default function MyBookings() {
                 <div className="col-span-12 md:col-span-7 flex flex-col justify-center border-b border-stone-100 pb-12">
                   <div className="flex justify-between items-start mb-4">
                     <p className="text-[10px] uppercase tracking-[0.3em] text-stone-400 font-bold">Ref: #{String(booking.id).padStart(6, '0')}</p>
-                    <div className="flex text-amber-500 gap-1"><FaStar size={10} /><FaStar size={10} /><FaStar size={10} /></div>
+                    <div className="flex text-amber-500 gap-1">
+                      <FaStar size={10} /><FaStar size={10} /><FaStar size={10} />
+                    </div>
                   </div>
 
                   <h3 className="text-4xl md:text-5xl font-serif text-stone-900 mb-2 leading-tight">
@@ -207,7 +315,7 @@ export default function MyBookings() {
                   <div className="grid grid-cols-2 gap-y-8 gap-x-12 mb-10">
                     <div>
                       <p className="text-[9px] uppercase tracking-widest text-stone-400 font-bold mb-1">Check In</p>
-                      <p className="text-stone-800 font-medium">{new Date(booking.checkIn).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                      <p className="text-stone-800 font-medium">{formatDate(booking.checkIn)}</p>
                     </div>
                     <div>
                       <p className="text-[9px] uppercase tracking-widest text-stone-400 font-bold mb-1">Total Investment</p>
@@ -215,27 +323,45 @@ export default function MyBookings() {
                     </div>
                     <div>
                       <p className="text-[9px] uppercase tracking-widest text-stone-400 font-bold mb-1">Guests</p>
-                      <p className="text-stone-800 font-medium">{booking.guests.adults} Adults, {booking.guests.children || 0} Children</p>
+                      <p className="text-stone-800 font-medium">
+                        {booking.guests?.adults || 1} Adults
+                        {booking.guests?.children > 0 ? `, ${booking.guests.children} Children` : ''}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] uppercase tracking-widest text-stone-400 font-bold mb-1">Nights</p>
+                      <p className="text-stone-800 font-medium">{booking.nights}</p>
                     </div>
                     {booking.pendingAmount > 0 && (
-                      <div className="bg-amber-50 p-3 border-l-2 border-amber-500">
+                      <div className="col-span-2 bg-amber-50 p-3 border-l-2 border-amber-500">
                         <p className="text-[9px] uppercase tracking-widest text-amber-600 font-bold mb-1">Balance Due</p>
                         <p className="text-amber-800 font-serif">{formatCurrency(booking.pendingAmount)}</p>
                       </div>
                     )}
                   </div>
 
-                  {/* Actions - Luxury Styled */}
+                  {/* Actions */}
                   <div className="flex flex-wrap gap-4 mt-auto">
-                    <button className="bg-stone-900 text-[#f5f2ee] px-10 py-4 text-[10px] uppercase tracking-[0.2em] font-bold hover:bg-stone-800 transition-all flex items-center gap-3">
-                      Manage Booking <FaChevronRight size={10} />
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedBooking(booking);
+                      }}
+                      className="bg-stone-900 text-[#f5f2ee] px-10 py-4 text-[10px] uppercase tracking-[0.2em] font-bold hover:bg-stone-800 transition-all flex items-center gap-3"
+                    >
+                      View Details <FaChevronRight size={10} />
                     </button>
-                    <button className="border border-stone-200 px-8 py-4 text-[10px] uppercase tracking-[0.2em] font-bold hover:bg-white transition-all flex items-center gap-3">
-                      <FaDownload size={12} /> Invoice
-                    </button>
-                    <button className="px-4 py-4 text-stone-400 hover:text-stone-900 transition-all">
-                      <FaWhatsapp size={20} />
-                    </button>
+                    {booking.status === 'pending' && (
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/payment/${booking.id}`);
+                        }}
+                        className="bg-amber-500 text-white px-10 py-4 text-[10px] uppercase tracking-[0.2em] font-bold hover:bg-amber-600 transition-all"
+                      >
+                        Complete Payment
+                      </button>
+                    )}
                   </div>
                 </div>
               </motion.div>
@@ -244,7 +370,135 @@ export default function MyBookings() {
         </div>
       </div>
 
-      {/* 4. CONCIERGE FOOTER */}
+      {/* 4. DETAILS MODAL */}
+      <AnimatePresence>
+        {selectedBooking && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+            onClick={() => setSelectedBooking(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <div className="flex justify-between items-start mb-6">
+                  <div>
+                    <h3 className="font-serif text-2xl">Booking #{selectedBooking.id}</h3>
+                    <p className="text-sm text-stone-500">
+                      Created: {new Date(selectedBooking.createdAt).toLocaleString()}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setSelectedBooking(null)}
+                    className="p-2 hover:bg-stone-100 rounded-full"
+                  >
+                    <FaTimes />
+                  </button>
+                </div>
+
+                {/* Status Badges */}
+                <div className="flex gap-2 mb-6">
+                  <span className={`px-3 py-1 text-xs rounded-full ${getStatusStyle(selectedBooking.status)}`}>
+                    {getStatusText(selectedBooking.status)}
+                  </span>
+                  <span className="px-3 py-1 text-xs rounded-full bg-stone-100">
+                    Payment: {selectedBooking.paymentStatus}
+                  </span>
+                </div>
+
+                {/* Property Image */}
+                <div className="h-48 rounded-lg overflow-hidden mb-6">
+                  <img
+                    src={selectedBooking.propertyImage && !selectedBooking.propertyImage.startsWith('http') ? `${IMAGE_BASE_URL}${selectedBooking.propertyImage}` : selectedBooking.propertyImage || 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=800'}
+                    alt={selectedBooking.propertyName}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+
+                {/* Dates */}
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                  <div className="bg-stone-50 p-3 rounded">
+                    <p className="text-[10px] uppercase text-stone-400 mb-1">Check In</p>
+                    <p className="font-medium">{formatDate(selectedBooking.checkIn)}</p>
+                  </div>
+                  <div className="bg-stone-50 p-3 rounded">
+                    <p className="text-[10px] uppercase text-stone-400 mb-1">Check Out</p>
+                    <p className="font-medium">{formatDate(selectedBooking.checkOut)}</p>
+                  </div>
+                </div>
+
+                {/* Payment Breakdown */}
+                <div className="border-t border-stone-200 pt-4 mb-6">
+                  <h4 className="font-medium mb-3">Payment Details</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-stone-600">Base amount ({selectedBooking.nights} nights)</span>
+                      <span>{formatCurrency(selectedBooking.baseAmount)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-stone-600">Cleaning fee</span>
+                      <span>{formatCurrency(selectedBooking.cleaningFee)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-stone-600">Service fee</span>
+                      <span>{formatCurrency(selectedBooking.serviceFee)}</span>
+                    </div>
+                    <div className="flex justify-between pt-2 border-t font-bold">
+                      <span>Total</span>
+                      <span>{formatCurrency(selectedBooking.totalAmount)}</span>
+                    </div>
+                    {selectedBooking.paidAmount > 0 && (
+                      <div className="flex justify-between text-green-600">
+                        <span>Paid</span>
+                        <span>{formatCurrency(selectedBooking.paidAmount)}</span>
+                      </div>
+                    )}
+                    {selectedBooking.pendingAmount > 0 && (
+                      <div className="flex justify-between text-amber-600">
+                        <span>Balance due</span>
+                        <span>{formatCurrency(selectedBooking.pendingAmount)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-3">
+                  {selectedBooking.status === 'pending' && (
+                    <button
+                      onClick={() => {
+                        setSelectedBooking(null);
+                        navigate(`/payment/${selectedBooking.id}`);
+                      }}
+                      className="flex-1 bg-amber-500 text-white py-3 rounded-lg hover:bg-amber-600"
+                    >
+                      Complete Payment
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      setSelectedBooking(null);
+                      // Download invoice functionality
+                    }}
+                    className="flex-1 border border-stone-200 py-3 rounded-lg hover:bg-stone-50"
+                  >
+                    Download Invoice
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 5. CONCIERGE FOOTER */}
       <div className="max-w-7xl mx-auto px-6 mt-32">
         <div className="bg-stone-900 text-[#f5f2ee] p-12 md:p-20 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-1/2 h-full bg-white/5 skew-x-12 translate-x-32" />

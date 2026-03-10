@@ -6,7 +6,7 @@ import {
   FaPhone, FaEnvelope, FaMapMarkerAlt, FaCreditCard
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
-import api, { API_BASE_URL } from "../../services/api";
+import api, { API_BASE_URL } from "../services/api";
 
 const AdminBookingsTab = () => {
   const [bookings, setBookings] = useState([]);

@@ -46,10 +46,19 @@ def check_property_availability(property_id, check_in, check_out, exclude_bookin
 @jwt_required()
 def create_booking():
     """
-    Create a new booking with 15-minute hold
+    Create a new booking with configurable timeout
+    All settings come from environment variables
     """
     user_id = get_jwt_identity()
     data = request.json
+    
+    # Get all settings from app config (which comes from env vars)
+    cleaning_fee = Decimal(str(current_app.config['CLEANING_FEE']))
+    service_fee_percentage = Decimal(str(current_app.config['SERVICE_FEE_PERCENTAGE'])) / 100
+    timeout_minutes = current_app.config['BOOKING_TIMEOUT_MINUTES']
+    max_guests = current_app.config['MAX_GUESTS_PER_BOOKING']
+    min_nights = current_app.config['MIN_NIGHTS_BOOKING']
+    max_nights = current_app.config['MAX_NIGHTS_BOOKING']
     
     # Generate unique idempotency key (prevents duplicate bookings)
     idempotency_key = request.headers.get('Idempotency-Key')
@@ -98,6 +107,28 @@ def create_booking():
             'error': 'Check-in cannot be in the past'
         }), 400
     
+    # Validate nights
+    nights = (check_out - check_in).days
+    if nights < min_nights:
+        return jsonify({
+            'success': False,
+            'error': f'Minimum stay is {min_nights} night{"s" if min_nights > 1 else ""}'
+        }), 400
+    
+    if nights > max_nights:
+        return jsonify({
+            'success': False,
+            'error': f'Maximum stay is {max_nights} nights'
+        }), 400
+    
+    # Validate guests
+    total_guests = data['guests'].get('adults', 0) + data['guests'].get('children', 0)
+    if total_guests > max_guests:
+        return jsonify({
+            'success': False,
+            'error': f'Maximum {max_guests} guests allowed'
+        }), 400
+    
     # Get property
     property = Property.query.get(data['property_id'])
     if not property:
@@ -128,14 +159,11 @@ def create_booking():
             'message': 'These dates are already booked. Please try different dates.'
         }), 409
     
-    # Calculate nights and amounts
-    nights = (check_out - check_in).days
-    
-    # Use Decimal for precise currency
+    # Calculate amounts using env variables
     base_amount = Decimal(str(property.price)) * Decimal(nights)
-    cleaning_fee = Decimal('1500.00')
-    service_fee = base_amount * Decimal('0.12')  # 12% service fee
-    total_amount = base_amount + cleaning_fee + service_fee
+    cleaning_fee_amount = cleaning_fee
+    service_fee = base_amount * service_fee_percentage
+    total_amount = base_amount + cleaning_fee_amount + service_fee
     
     # Payment type (default to full)
     payment_type = data.get('payment_type', 'full')
@@ -145,7 +173,7 @@ def create_booking():
         # 50% deposit required
         pending_amount = total_amount * Decimal('0.5')
     
-    # Create booking with 15-minute expiry
+    # Create booking with configurable expiry
     booking = Booking(
         user_id=user_id,
         property_id=property.id,
@@ -154,7 +182,7 @@ def create_booking():
         guests=data['guests'],
         nights=nights,
         base_amount=base_amount,
-        cleaning_fee=cleaning_fee,
+        cleaning_fee=cleaning_fee_amount,
         service_fee=service_fee,
         total_amount=total_amount,
         pending_amount=pending_amount,
@@ -165,7 +193,7 @@ def create_booking():
         confirmation='pending',
         payment_status='pending',
         idempotency_key=idempotency_key,
-        expires_at=datetime.utcnow() + timedelta(minutes=15),  # 15-minute hold
+        expires_at=datetime.utcnow() + timedelta(minutes=timeout_minutes),
         created_at=datetime.utcnow()
     )
     
@@ -192,14 +220,14 @@ def create_booking():
                 'guests': data['guests'],
                 'price_per_night': float(property.price),
                 'base_amount': float(base_amount),
-                'cleaning_fee': float(cleaning_fee),
+                'cleaning_fee': float(cleaning_fee_amount),
                 'service_fee': float(service_fee),
                 'total_amount': float(total_amount),
                 'pending_amount': float(pending_amount) if pending_amount > 0 else 0,
                 'payment_type': payment_type,
                 'status': booking.status,
                 'expires_at': booking.expires_at.isoformat(),
-                'expires_in_minutes': 15
+                'expires_in_minutes': timeout_minutes
             }
         }), 201
         
@@ -336,6 +364,7 @@ def get_my_bookings():
             'payment_status': booking.payment_status,
             'status': display_status,
             'original_status': booking.status,
+            'expires_at': booking.expires_at.isoformat() if booking.expires_at else None,
             'created_at': booking.created_at.isoformat() if booking.created_at else None,
             'can_cancel': booking.status in ['pending', 'confirmed'] and booking.check_in > now
         })
@@ -377,11 +406,12 @@ def cancel_booking(booking_id):
 # Run this every minute via cron or scheduler
 def expire_old_pending_bookings():
     """
-    Find pending bookings older than 15 minutes and expire them
+    Find pending bookings older than configured minutes and expire them
     Call this function every minute from a background task
     """
     try:
-        fifteen_minutes_ago = datetime.utcnow() - timedelta(minutes=15)
+        # Get timeout from app config
+        timeout_minutes = current_app.config['BOOKING_TIMEOUT_MINUTES']
         
         # Find expired pending bookings
         expired = Booking.query.filter(
