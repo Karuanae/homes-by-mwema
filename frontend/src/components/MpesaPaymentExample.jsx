@@ -206,7 +206,7 @@ const MpesaPaymentExample = ({ bookingId, amount, onSuccess, onError }) => {
         </ol>
       </div>
 
-      <style jsx>{`
+      <style>{`
         .mpesa-payment-container {
           max-width: 500px;
           margin: 0 auto;
