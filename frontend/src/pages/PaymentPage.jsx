@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   ArrowLeft, Clock, Shield, CheckCircle, XCircle, 
   AlertCircle, Smartphone, CreditCard, ChevronRight,
-  Copy, Phone, Wallet, Loader, Lock, Eye, EyeOff
+  Copy, Phone, Wallet, Loader, Lock, Eye, EyeOff,
+  ExternalLink
 } from "lucide-react";
 import api, { API_BASE_URL, IMAGE_BASE_URL } from "../services/api";
 import { useAuth } from "../context/AuthContext";
@@ -30,9 +31,16 @@ export default function PaymentPage() {
   
   // Payment method state
   const [selectedMethod, setSelectedMethod] = useState('mpesa');
+  
+  // M-PESA state
   const [phoneNumber, setPhoneNumber] = useState('');
   const [phoneError, setPhoneError] = useState('');
   const [showPhoneHelp, setShowPhoneHelp] = useState(false);
+  
+  // PayPal state
+  const [paypalOrderId, setPaypalOrderId] = useState(null);
+  const [paypalApprovalUrl, setPaypalApprovalUrl] = useState(null);
+  const [paypalLoading, setPaypalLoading] = useState(false);
   
   // Payment status
   const [paymentStatus, setPaymentStatus] = useState('pending');
@@ -56,7 +64,21 @@ export default function PaymentPage() {
     initializePayment();
   }, []);
 
-  // Timer effect — uses parseUTCDate to avoid timezone mismatch
+  // Check if returning from PayPal redirect
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paypalReturn = params.get('paypal');
+    const orderId = params.get('token'); // PayPal sends token = order_id on return
+
+    if (paypalReturn === 'success' && orderId) {
+      handlePaypalReturn(orderId);
+    } else if (paypalReturn === 'cancel') {
+      setErrorMessage('PayPal payment was cancelled. You can try again.');
+      setPaymentStatus('pending');
+    }
+  }, []);
+
+  // Timer effect
   useEffect(() => {
     if (!booking?.expires_at) return;
 
@@ -85,46 +107,36 @@ export default function PaymentPage() {
     
     updateTimer();
     const timer = setInterval(updateTimer, 1000);
-    
     return () => clearInterval(timer);
   }, [booking]);
 
-  // Payment status checker
+  // M-PESA status poller
   useEffect(() => {
     let interval;
-    
     if (checkoutRequestId && paymentStatus === 'processing') {
-      interval = setInterval(checkPaymentStatus, 3000);
+      interval = setInterval(checkMpesaStatus, 3000);
     }
-    
-    return () => {
-      if (interval) clearInterval(interval);
-    };
+    return () => { if (interval) clearInterval(interval); };
   }, [checkoutRequestId, paymentStatus]);
 
-  // ========== API CALLS ==========
+  // ========== INIT ==========
   const initializePayment = async () => {
     setLoading(true);
-    
     try {
-      // Get booking from state or localStorage
       let bookingData = location.state?.bookingDetails;
       
       if (!bookingData && !isAuthenticated) {
         const pending = localStorage.getItem('pendingBooking');
-        if (pending) {
-          bookingData = JSON.parse(pending);
-        }
+        if (pending) bookingData = JSON.parse(pending);
       }
       
       if (!bookingData) {
-        console.error('No booking data found');
         setErrorMessage('Booking information not found. Please start over.');
         setLoading(false);
         return;
       }
 
-      // FIX: Check expiry using UTC-safe parsing BEFORE setting state
+      // UTC-safe expiry check
       if (bookingData.expires_at) {
         const expiresAt = parseUTCDate(bookingData.expires_at);
         if (expiresAt && expiresAt < new Date()) {
@@ -135,15 +147,10 @@ export default function PaymentPage() {
       }
       
       setBooking(bookingData);
-      
-      // Fetch property details
       const propertyRes = await api.properties.getById(bookingData.property_id || id);
       setProperty(propertyRes.data);
       
-      // Pre-fill phone if user has one
-      if (user?.phone) {
-        setPhoneNumber(user.phone);
-      }
+      if (user?.phone) setPhoneNumber(user.phone);
       
     } catch (error) {
       console.error('Initialization error:', error);
@@ -153,16 +160,13 @@ export default function PaymentPage() {
     }
   };
 
-  const checkPaymentStatus = async () => {
+  // ========== M-PESA ==========
+  const checkMpesaStatus = async () => {
     if (!checkoutRequestId) return;
-    
     try {
       const response = await fetch(`${API_BASE_URL}/payments/mpesa/status/${checkoutRequestId}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
-      
       const data = await response.json();
       
       if (data.success) {
@@ -170,7 +174,6 @@ export default function PaymentPage() {
           setPaymentStatus('success');
           setSuccessMessage('Payment completed successfully!');
           localStorage.removeItem('pendingBooking');
-          
           setTimeout(() => {
             navigate('/payment/success', {
               state: {
@@ -180,7 +183,6 @@ export default function PaymentPage() {
               }
             });
           }, 2000);
-          
         } else if (data.payment?.status === 'failed') {
           setPaymentStatus('failed');
           setErrorMessage('Payment failed. Please try again.');
@@ -191,34 +193,25 @@ export default function PaymentPage() {
     }
   };
 
-  // ========== PAYMENT INITIATION ==========
   const validatePhoneNumber = (phone) => {
     const cleaned = phone.replace(/\D/g, '');
-    
-    if (cleaned.length === 9 && cleaned.startsWith('7')) {
+    if (cleaned.length === 9 && cleaned.startsWith('7'))
       return { valid: true, formatted: '254' + cleaned };
-    } else if (cleaned.length === 10 && cleaned.startsWith('07')) {
+    if (cleaned.length === 10 && cleaned.startsWith('07'))
       return { valid: true, formatted: '254' + cleaned.substring(1) };
-    } else if (cleaned.length === 12 && cleaned.startsWith('254')) {
+    if (cleaned.length === 12 && cleaned.startsWith('254'))
       return { valid: true, formatted: cleaned };
-    } else if (cleaned.length === 13 && cleaned.startsWith('+254')) {
+    if (cleaned.length === 13 && cleaned.startsWith('+254'))
       return { valid: true, formatted: cleaned.substring(1) };
-    }
-    
     return { valid: false, formatted: phone };
   };
 
   const handlePhoneChange = (e) => {
     const value = e.target.value;
     setPhoneNumber(value);
-    
     if (value.length > 3) {
       const validation = validatePhoneNumber(value);
-      if (!validation.valid) {
-        setPhoneError('Enter a valid M-PESA number (e.g., 0712345678)');
-      } else {
-        setPhoneError('');
-      }
+      setPhoneError(validation.valid ? '' : 'Enter a valid M-PESA number (e.g., 0712345678)');
     } else {
       setPhoneError('');
     }
@@ -226,15 +219,8 @@ export default function PaymentPage() {
 
   const initiateMpesaPayment = async () => {
     const validation = validatePhoneNumber(phoneNumber);
-    if (!validation.valid) {
-      setPhoneError('Please enter a valid M-PESA number');
-      return;
-    }
-    
-    if (!booking) {
-      setErrorMessage('Booking information missing');
-      return;
-    }
+    if (!validation.valid) { setPhoneError('Please enter a valid M-PESA number'); return; }
+    if (!booking) { setErrorMessage('Booking information missing'); return; }
     
     setProcessing(true);
     setPaymentStatus('processing');
@@ -257,10 +243,7 @@ export default function PaymentPage() {
       const data = await response.json();
       
       if (!response.ok) {
-        if (data.expired) {
-          setIsExpired(true);
-          throw new Error('Your booking session has expired. Please start over.');
-        }
+        if (data.expired) { setIsExpired(true); throw new Error('Booking session expired.'); }
         throw new Error(data.error || 'Payment initiation failed');
       }
       
@@ -277,16 +260,113 @@ export default function PaymentPage() {
     }
   };
 
+  // ========== PAYPAL ==========
+  const initiatePaypalPayment = async () => {
+    if (!booking) { setErrorMessage('Booking information missing'); return; }
+    
+    setPaypalLoading(true);
+    setErrorMessage('');
+    
+    try {
+      // Build return/cancel URLs so PayPal redirects back here
+      const currentUrl = window.location.origin + window.location.pathname;
+      const returnUrl = `${currentUrl}?paypal=success`;
+      const cancelUrl = `${currentUrl}?paypal=cancel`;
+
+      const response = await fetch(`${API_BASE_URL}/payments/paypal/create-order`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          booking_id: booking.id,
+          amount: Math.round(booking.total_amount),
+          currency: 'KES',
+          return_url: returnUrl,
+          cancel_url: cancelUrl
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create PayPal order');
+      }
+      
+      if (data.success && data.approval_url) {
+        // Store booking in localStorage in case user returns from PayPal
+        localStorage.setItem('pendingBooking', JSON.stringify(booking));
+        localStorage.setItem('pendingPaypalOrderId', data.order_id);
+        
+        // Redirect to PayPal approval page
+        window.location.href = data.approval_url;
+      } else {
+        throw new Error('No PayPal approval URL received');
+      }
+      
+    } catch (error) {
+      console.error('PayPal initiation error:', error);
+      setErrorMessage(error.message || 'Failed to initiate PayPal payment. Please try again.');
+    } finally {
+      setPaypalLoading(false);
+    }
+  };
+
+  const handlePaypalReturn = async (orderId) => {
+    // User returned from PayPal — capture the payment
+    setPaymentStatus('processing');
+    setSuccessMessage('Completing your PayPal payment...');
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/payments/paypal/capture-order`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ order_id: orderId })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setPaymentStatus('success');
+        localStorage.removeItem('pendingBooking');
+        localStorage.removeItem('pendingPaypalOrderId');
+        
+        setTimeout(() => {
+          navigate('/payment/success', {
+            state: {
+              bookingId: booking?.id,
+              amount: booking?.total_amount,
+              receipt: data.transaction_id
+            }
+          });
+        }, 2000);
+      } else {
+        throw new Error(data.error || 'Failed to capture PayPal payment');
+      }
+    } catch (error) {
+      console.error('PayPal capture error:', error);
+      setPaymentStatus('failed');
+      setErrorMessage(error.message || 'Failed to complete PayPal payment. Please try again.');
+    }
+  };
+
+  // ========== SHARED HANDLERS ==========
   const handleRetry = () => {
     setPaymentStatus('pending');
     setErrorMessage('');
     setSuccessMessage('');
     setCheckoutRequestId(null);
+    setPaypalOrderId(null);
+    setPaypalApprovalUrl(null);
+    // Clear paypal params from URL
+    window.history.replaceState({}, '', window.location.pathname);
   };
 
-  const handleStartOver = () => {
-    navigate(`/booking/${id}`);
-  };
+  const handleStartOver = () => navigate(`/booking/${id}`);
 
   const copyPhoneExample = () => {
     navigator.clipboard.writeText('0712345678');
@@ -294,10 +374,7 @@ export default function PaymentPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // ========== FORMATTING ==========
-  const formatCurrency = (amount) => {
-    return `KSh ${amount?.toLocaleString() || '0'}`;
-  };
+  const formatCurrency = (amount) => `KSh ${amount?.toLocaleString() || '0'}`;
 
   const getImageSrc = (url) => {
     if (!url) return '';
@@ -328,10 +405,7 @@ export default function PaymentPage() {
           <p className="text-stone-600 text-sm mb-6">
             Your 15-minute booking hold has expired. Please start over to book this property.
           </p>
-          <button
-            onClick={handleStartOver}
-            className="w-full py-3 bg-stone-900 text-white rounded-lg text-sm font-medium hover:bg-stone-800 transition-colors"
-          >
+          <button onClick={handleStartOver} className="w-full py-3 bg-stone-900 text-white rounded-lg text-sm font-medium hover:bg-stone-800 transition-colors">
             Start New Booking
           </button>
         </div>
@@ -364,24 +438,18 @@ export default function PaymentPage() {
   return (
     <div className="min-h-screen bg-[#f5f2ee] pb-16 md:pb-24">
       
-      {/* ========== MOBILE HEADER ========== */}
+      {/* MOBILE HEADER */}
       <div className="md:hidden fixed top-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-b border-stone-200 z-40 px-4 py-3 flex items-center justify-between">
-        <button 
-          onClick={() => navigate(-1)}
-          className="p-2 hover:bg-stone-100 rounded-full transition-colors"
-        >
+        <button onClick={() => navigate(-1)} className="p-2 hover:bg-stone-100 rounded-full transition-colors">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <h1 className="font-serif text-lg">Complete Payment</h1>
-        <button 
-          onClick={() => setShowSummary(!showSummary)}
-          className="p-2 hover:bg-stone-100 rounded-full transition-colors"
-        >
+        <button onClick={() => setShowSummary(!showSummary)} className="p-2 hover:bg-stone-100 rounded-full transition-colors">
           <Eye className={`w-5 h-5 transition-transform ${showSummary ? 'rotate-180' : ''}`} />
         </button>
       </div>
 
-      {/* ========== MOBILE SUMMARY CARD ========== */}
+      {/* MOBILE SUMMARY DROPDOWN */}
       <AnimatePresence>
         {showSummary && (
           <motion.div
@@ -392,17 +460,12 @@ export default function PaymentPage() {
           >
             <div className="p-4">
               <div className="flex gap-3">
-                <img
-                  src={getImageSrc(property?.cover_image || property?.images?.[0])}
-                  alt={property?.name}
-                  className="w-16 h-16 object-cover rounded-lg"
-                />
+                <img src={getImageSrc(property?.cover_image || property?.images?.[0])} alt={property?.name} className="w-16 h-16 object-cover rounded-lg" />
                 <div className="flex-1">
                   <h3 className="font-medium text-sm">{property?.name || 'Property'}</h3>
                   <p className="text-xs text-stone-500 mt-1">{property?.location}</p>
                 </div>
               </div>
-              
               <div className="mt-4 space-y-2 text-sm border-t border-stone-100 pt-4">
                 <div className="flex justify-between">
                   <span className="text-stone-600">Total Amount</span>
@@ -422,15 +485,12 @@ export default function PaymentPage() {
         )}
       </AnimatePresence>
 
-      {/* ========== MAIN CONTENT ========== */}
+      {/* MAIN CONTENT */}
       <div className="max-w-6xl mx-auto px-4 pt-20 md:pt-12">
         
         {/* Desktop Header */}
         <div className="hidden md:flex items-center gap-4 mb-8">
-          <button
-            onClick={() => navigate(-1)}
-            className="p-2 hover:bg-stone-200 rounded-full transition-colors"
-          >
+          <button onClick={() => navigate(-1)} className="p-2 hover:bg-stone-200 rounded-full transition-colors">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <h1 className="font-serif text-2xl">Complete Your Payment</h1>
@@ -474,19 +534,14 @@ export default function PaymentPage() {
               <div className="flex-1">
                 <p className="text-red-700 text-xs md:text-sm">{errorMessage}</p>
                 {paymentStatus === 'failed' && (
-                  <button
-                    onClick={handleRetry}
-                    className="text-xs text-red-600 underline mt-1"
-                  >
-                    Try again
-                  </button>
+                  <button onClick={handleRetry} className="text-xs text-red-600 underline mt-1">Try again</button>
                 )}
               </div>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Success Message */}
+        {/* Success / Processing Message */}
         <AnimatePresence>
           {successMessage && paymentStatus === 'processing' && (
             <motion.div
@@ -504,7 +559,7 @@ export default function PaymentPage() {
         {/* Main Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
           
-          {/* ========== LEFT COLUMN - PAYMENT FORM ========== */}
+          {/* LEFT COLUMN - PAYMENT FORM */}
           <div className="md:col-span-2 order-2 md:order-1">
             <div className="bg-white rounded-xl shadow-lg border border-stone-200 overflow-hidden">
               
@@ -513,12 +568,11 @@ export default function PaymentPage() {
                 <h2 className="font-serif text-lg md:text-xl mb-4">Payment Method</h2>
                 
                 <div className="grid grid-cols-2 gap-2 md:gap-3">
+                  {/* M-PESA */}
                   <button
-                    onClick={() => setSelectedMethod('mpesa')}
+                    onClick={() => { setSelectedMethod('mpesa'); handleRetry(); }}
                     className={`p-3 md:p-4 rounded-lg border-2 transition-all flex items-center gap-2 md:gap-3 ${
-                      selectedMethod === 'mpesa'
-                        ? 'border-green-500 bg-green-50'
-                        : 'border-stone-200 hover:border-stone-300'
+                      selectedMethod === 'mpesa' ? 'border-green-500 bg-green-50' : 'border-stone-200 hover:border-stone-300'
                     }`}
                   >
                     <Smartphone className={`w-4 h-4 md:w-5 md:h-5 ${selectedMethod === 'mpesa' ? 'text-green-600' : 'text-stone-400'}`} />
@@ -527,26 +581,30 @@ export default function PaymentPage() {
                       <p className="text-[10px] md:text-xs text-stone-500">Mobile money</p>
                     </div>
                   </button>
-                  
+
+                  {/* PayPal */}
                   <button
-                    onClick={() => setSelectedMethod('card')}
-                    disabled
-                    className={`p-3 md:p-4 rounded-lg border-2 transition-all flex items-center gap-2 md:gap-3 opacity-50 cursor-not-allowed ${
-                      selectedMethod === 'card'
-                        ? 'border-stone-500 bg-stone-50'
-                        : 'border-stone-200'
+                    onClick={() => { setSelectedMethod('paypal'); handleRetry(); }}
+                    className={`p-3 md:p-4 rounded-lg border-2 transition-all flex items-center gap-2 md:gap-3 ${
+                      selectedMethod === 'paypal' ? 'border-blue-500 bg-blue-50' : 'border-stone-200 hover:border-stone-300'
                     }`}
                   >
-                    <CreditCard className="w-4 h-4 md:w-5 md:h-5 text-stone-400" />
+                    {/* PayPal logo mark */}
+                    <div className={`w-4 h-4 md:w-5 md:h-5 flex items-center justify-center flex-shrink-0`}>
+                      <svg viewBox="0 0 24 24" className={`w-4 h-4 md:w-5 md:h-5 ${selectedMethod === 'paypal' ? 'opacity-100' : 'opacity-40'}`} fill="none">
+                        <path d="M19.5 6.5C19.5 9.5 17.5 12 14 12H11.5L10.5 17.5H7.5L9.5 6.5H14C17 6.5 19.5 4 19.5 6.5Z" fill="#003087"/>
+                        <path d="M17 9.5C17 12.5 15 15 11.5 15H9L8 20.5H5L7 9.5H11.5C14.5 9.5 17 7 17 9.5Z" fill="#009cde"/>
+                      </svg>
+                    </div>
                     <div className="text-left">
-                      <p className="text-xs md:text-sm font-medium">Card</p>
-                      <p className="text-[10px] md:text-xs text-stone-500">Coming soon</p>
+                      <p className="text-xs md:text-sm font-medium">PayPal</p>
+                      <p className="text-[10px] md:text-xs text-stone-500">Pay online</p>
                     </div>
                   </button>
                 </div>
               </div>
 
-              {/* M-PESA Form */}
+              {/* ========== M-PESA FORM ========== */}
               {selectedMethod === 'mpesa' && (
                 <div className="p-4 md:p-6">
                   <h3 className="font-medium text-sm md:text-base mb-3">M-PESA Phone Number</h3>
@@ -566,10 +624,7 @@ export default function PaymentPage() {
                       />
                     </div>
                     
-                    <button
-                      onClick={() => setShowPhoneHelp(!showPhoneHelp)}
-                      className="text-xs text-stone-500 mt-2 flex items-center gap-1"
-                    >
+                    <button onClick={() => setShowPhoneHelp(!showPhoneHelp)} className="text-xs text-stone-500 mt-2 flex items-center gap-1">
                       <AlertCircle className="w-3 h-3" />
                       <span>What format should I use?</span>
                     </button>
@@ -586,10 +641,7 @@ export default function PaymentPage() {
                             <p>✅ <span className="font-mono">0712345678</span> (10 digits)</p>
                             <p>✅ <span className="font-mono">254712345678</span> (12 digits)</p>
                             <p>✅ <span className="font-mono">+254712345678</span> (13 digits)</p>
-                            <button
-                              onClick={copyPhoneExample}
-                              className="text-green-600 flex items-center gap-1 mt-1"
-                            >
+                            <button onClick={copyPhoneExample} className="text-green-600 flex items-center gap-1 mt-1">
                               <Copy className="w-3 h-3" />
                               <span>{copied ? 'Copied!' : 'Copy example'}</span>
                             </button>
@@ -598,28 +650,19 @@ export default function PaymentPage() {
                       )}
                     </AnimatePresence>
                     
-                    {phoneError && (
-                      <p className="text-red-500 text-xs mt-2">{phoneError}</p>
-                    )}
+                    {phoneError && <p className="text-red-500 text-xs mt-2">{phoneError}</p>}
                   </div>
 
-                  {/* Action Button */}
                   {paymentStatus === 'pending' && (
                     <button
                       onClick={initiateMpesaPayment}
-                      disabled={processing || !phoneNumber || phoneError}
+                      disabled={processing || !phoneNumber || !!phoneError}
                       className="w-full mt-6 py-3 md:py-4 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:bg-stone-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                       {processing ? (
-                        <>
-                          <Loader className="w-4 h-4 animate-spin" />
-                          Processing...
-                        </>
+                        <><Loader className="w-4 h-4 animate-spin" /> Processing...</>
                       ) : (
-                        <>
-                          <Wallet className="w-4 h-4" />
-                          Pay {formatCurrency(booking?.total_amount)}
-                        </>
+                        <><Wallet className="w-4 h-4" /> Pay {formatCurrency(booking?.total_amount)}</>
                       )}
                     </button>
                   )}
@@ -627,27 +670,83 @@ export default function PaymentPage() {
                   {paymentStatus === 'processing' && (
                     <div className="mt-6 text-center">
                       <div className="flex justify-center mb-3">
-                        <div className="w-12 h-12 border-3 border-stone-200 border-t-green-600 rounded-full animate-spin"></div>
+                        <div className="w-12 h-12 border-4 border-stone-200 border-t-green-600 rounded-full animate-spin"></div>
                       </div>
                       <p className="text-sm font-medium">Waiting for M-PESA confirmation</p>
                       <p className="text-xs text-stone-500 mt-1">Check your phone and enter PIN</p>
-                      <button
-                        onClick={checkPaymentStatus}
-                        className="mt-4 text-xs text-green-600 underline"
-                      >
+                      <button onClick={checkMpesaStatus} className="mt-4 text-xs text-green-600 underline">
                         Check status manually
                       </button>
                     </div>
                   )}
 
                   {paymentStatus === 'failed' && (
-                    <button
-                      onClick={handleRetry}
-                      className="w-full mt-6 py-3 bg-stone-900 text-white rounded-lg text-sm font-medium hover:bg-stone-800 transition-colors"
-                    >
+                    <button onClick={handleRetry} className="w-full mt-6 py-3 bg-stone-900 text-white rounded-lg text-sm font-medium hover:bg-stone-800 transition-colors">
                       Try Again
                     </button>
                   )}
+                </div>
+              )}
+
+              {/* ========== PAYPAL FORM ========== */}
+              {selectedMethod === 'paypal' && (
+                <div className="p-4 md:p-6">
+                  <h3 className="font-medium text-sm md:text-base mb-2">Pay with PayPal</h3>
+                  <p className="text-xs text-stone-500 mb-6">
+                    You'll be redirected to PayPal to complete your payment securely. Once approved, you'll return here automatically.
+                  </p>
+
+                  {/* Amount in USD estimate */}
+                  <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-6">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-stone-600">Amount</span>
+                      <span className="font-serif font-bold">{formatCurrency(booking?.total_amount)}</span>
+                    </div>
+                    <p className="text-[10px] text-stone-400 mt-1">
+                      Approximate USD equivalent charged at PayPal's current exchange rate
+                    </p>
+                  </div>
+
+                  {paymentStatus === 'pending' && (
+                    <button
+                      onClick={initiatePaypalPayment}
+                      disabled={paypalLoading}
+                      className="w-full py-3 md:py-4 bg-[#0070ba] hover:bg-[#005ea6] text-white rounded-lg text-sm font-medium transition-colors disabled:bg-stone-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {paypalLoading ? (
+                        <><Loader className="w-4 h-4 animate-spin" /> Connecting to PayPal...</>
+                      ) : (
+                        <>
+                          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="white">
+                            <path d="M19.5 6.5C19.5 9.5 17.5 12 14 12H11.5L10.5 17.5H7.5L9.5 6.5H14C17 6.5 19.5 4 19.5 6.5Z" fillOpacity="0.9"/>
+                            <path d="M17 9.5C17 12.5 15 15 11.5 15H9L8 20.5H5L7 9.5H11.5C14.5 9.5 17 7 17 9.5Z" fillOpacity="0.7"/>
+                          </svg>
+                          Pay with PayPal
+                          <ExternalLink className="w-3 h-3 opacity-70" />
+                        </>
+                      )}
+                    </button>
+                  )}
+
+                  {paymentStatus === 'processing' && (
+                    <div className="mt-2 text-center">
+                      <div className="flex justify-center mb-3">
+                        <div className="w-12 h-12 border-4 border-stone-200 border-t-blue-600 rounded-full animate-spin"></div>
+                      </div>
+                      <p className="text-sm font-medium">Completing PayPal payment...</p>
+                      <p className="text-xs text-stone-500 mt-1">Please wait</p>
+                    </div>
+                  )}
+
+                  {paymentStatus === 'failed' && (
+                    <button onClick={handleRetry} className="w-full mt-4 py-3 bg-stone-900 text-white rounded-lg text-sm font-medium hover:bg-stone-800 transition-colors">
+                      Try Again
+                    </button>
+                  )}
+
+                  <p className="text-[10px] text-stone-400 text-center mt-4">
+                    You will be redirected to PayPal's secure checkout
+                  </p>
                 </div>
               )}
 
@@ -658,7 +757,10 @@ export default function PaymentPage() {
                   <div>
                     <p className="text-xs font-medium">Secure Payment</p>
                     <p className="text-[10px] md:text-xs text-stone-500">
-                      Your payment information is encrypted. We never store your M-PESA PIN.
+                      {selectedMethod === 'mpesa' 
+                        ? "Your payment information is encrypted. We never store your M-PESA PIN."
+                        : "You'll be redirected to PayPal's encrypted checkout. We never see your PayPal credentials."
+                      }
                     </p>
                   </div>
                 </div>
@@ -666,7 +768,7 @@ export default function PaymentPage() {
             </div>
           </div>
 
-          {/* ========== RIGHT COLUMN - ORDER SUMMARY ========== */}
+          {/* RIGHT COLUMN - ORDER SUMMARY */}
           <div className="md:col-span-1 order-1 md:order-2">
             <div className="md:sticky md:top-24">
               <div className="bg-white rounded-xl shadow-lg border border-stone-200 overflow-hidden">
