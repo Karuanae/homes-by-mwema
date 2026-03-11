@@ -16,13 +16,12 @@ class User(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     phone = db.Column(db.String(20))
     password_hash = db.Column(db.String(256), nullable=False)
-    role = db.Column(db.String(20), default='user')  # 'user', 'host', 'admin'
+    role = db.Column(db.String(20), default='user')
     is_guest = db.Column(db.Boolean, default=False)
     avatar_url = db.Column(db.String(500))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Relationships
     bookings = db.relationship('Booking', backref='user', lazy=True)
     chats = db.relationship('Chat', backref='user', lazy=True)
     payments = db.relationship('Payment', backref='user', lazy=True)
@@ -41,18 +40,18 @@ class Property(db.Model):
     name = db.Column(db.String(200), nullable=False)
     title = db.Column(db.String(200))
     description = db.Column(db.Text)
-    type = db.Column(db.String(50))  # 'studio', '1_bedroom', '2_bedroom', etc.
+    type = db.Column(db.String(50))
     price = db.Column(db.Numeric(10, 2), nullable=False)
     location = db.Column(db.String(200), nullable=False)
     rooms = db.Column(db.Integer, default=1)
     bathrooms = db.Column(db.Integer, default=1)
-    area = db.Column(db.String(50))  # e.g., "1200 sq ft"
+    area = db.Column(db.String(50))
     max_guests = db.Column(db.Integer, default=2)
     host_id = db.Column(db.Integer, db.ForeignKey('users.id'))
-    specs = db.Column(db.JSON)  # {'guests': 2, 'bedrooms': 1, 'beds': 1, 'bathrooms': 1}
-    amenities = db.Column(db.JSON)  # List of amenities
-    tags = db.Column(db.JSON)  # List of tags
-    status = db.Column(db.String(20), default='active')  # 'active', 'inactive', 'maintenance'
+    specs = db.Column(db.JSON)
+    amenities = db.Column(db.JSON)
+    tags = db.Column(db.JSON)
+    status = db.Column(db.String(20), default='active')
     rating = db.Column(db.Numeric(3, 2), default=0)
     review_count = db.Column(db.Integer, default=0)
     bookings_count = db.Column(db.Integer, default=0)
@@ -60,20 +59,16 @@ class Property(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Relationships
     host = db.relationship('User', backref='properties', foreign_keys=[host_id])
     bookings = db.relationship('Booking', backref='property', lazy=True)
     payments = db.relationship('Payment', backref='property', lazy=True)
     chats = db.relationship('Chat', backref='property', lazy=True)
     images = db.relationship('PropertyImage', backref='property', lazy=True, cascade='all, delete-orphan')
     
-    # Helper method to get image URLs
     def get_image_urls(self):
-        """Get list of image API URLs"""
         return [f"/api/admin/property-image/{img.id}" for img in self.images]
     
     def get_cover_image_url(self):
-        """Get cover image URL"""
         cover_image = PropertyImage.query.filter_by(property_id=self.id, is_cover=True).first()
         if cover_image:
             return f"/api/admin/property-image/{cover_image.id}"
@@ -84,7 +79,7 @@ class PropertyImage(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     property_id = db.Column(db.Integer, db.ForeignKey('properties.id'), nullable=True)
-    image_data = db.Column(db.LargeBinary, nullable=False)  # Store actual image binary
+    image_data = db.Column(db.LargeBinary, nullable=False)
     filename = db.Column(db.String(255))
     mime_type = db.Column(db.String(50))
     is_cover = db.Column(db.Boolean, default=False)
@@ -122,16 +117,12 @@ class Booking(db.Model):
     confirmation = db.Column(db.String(20), default='pending')
     status = db.Column(db.String(20), default='upcoming')
     message_to_host = db.Column(db.Text)
-    
-    # ADD THESE MISSING FIELDS:
     idempotency_key = db.Column(db.String(100), unique=True, nullable=True)
     expires_at = db.Column(db.DateTime, nullable=True)
-    booking_metadata = db.Column(db.JSON, default={})  # or 'additional_data'
-    
+    booking_metadata = db.Column(db.JSON, default={})
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Relationships
     payments = db.relationship('Payment', backref='booking', lazy=True)
     chat = db.relationship('Chat', backref='booking', uselist=False, lazy=True)
     
@@ -143,18 +134,24 @@ class Payment(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     property_id = db.Column(db.Integer, db.ForeignKey('properties.id'))
     amount = db.Column(db.Numeric(10, 2), nullable=False)
-    method = db.Column(db.String(20), nullable=False)  # 'mpesa', 'card', 'bank', 'cash'
+    method = db.Column(db.String(20), nullable=False)
     transaction_id = db.Column(db.String(100))
     mpesa_number = db.Column(db.String(20))
     card_last_four = db.Column(db.String(4))
-    status = db.Column(db.String(20), default='pending')  # 'pending', 'completed', 'failed', 'refunded'
+    status = db.Column(db.String(20), default='pending')
     
     # M-PESA specific fields
-    mpesa_receipt_number = db.Column(db.String(100))  # M-PESA receipt number (e.g., QBR31H5YZX)
-    merchant_request_id = db.Column(db.String(100))  # Merchant request ID from STK push
-    checkout_request_id = db.Column(db.String(100))  # Checkout request ID from STK push
-    mpesa_response_code = db.Column(db.String(10))  # Response code from M-PESA
-    mpesa_response_description = db.Column(db.String(255))  # Response description
+    mpesa_receipt_number = db.Column(db.String(100))
+    merchant_request_id = db.Column(db.String(100))
+    checkout_request_id = db.Column(db.String(100))
+    mpesa_response_code = db.Column(db.String(10))
+    mpesa_response_description = db.Column(db.String(255))
+    
+    # Fields that exist in DB but were missing from model
+    idempotency_key = db.Column(db.String(100))
+    webhook_received_at = db.Column(db.DateTime)
+    retry_count = db.Column(db.Integer, default=0)
+    error_log = db.Column(db.Text)
     
     payment_date = db.Column(db.DateTime, default=datetime.utcnow)
     completed_at = db.Column(db.DateTime)
@@ -165,45 +162,31 @@ class Consultation(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    name = db.Column(db.String(100), nullable=True)  # Store name in case user updates profile later
-    email = db.Column(db.String(120), nullable=True) # Store email for notifications
+    name = db.Column(db.String(100), nullable=True)
+    email = db.Column(db.String(120), nullable=True)
     phone = db.Column(db.String(20), nullable=True)
-    
-    # Scheduling
     date = db.Column(db.DateTime, nullable=False)
     hour = db.Column(db.Integer)
     minute = db.Column(db.Integer)
-    
-    # Consultation details
     notes = db.Column(db.Text)
-    topic = db.Column(db.String(100), default='General Inquiry')  # Type of consultation
-    
-    # Status tracking
-    status = db.Column(db.String(20), default='pending')  # pending, confirmed, completed, cancelled, rejected
-    
-    # Admin fields
-    admin_notes = db.Column(db.Text)  # Private notes for admin
-    meeting_link = db.Column(db.String(255))  # Zoom/Google Meet link for confirmed consultations
-    meeting_time = db.Column(db.DateTime)  # Actual scheduled meeting time (if different from requested)
-    
-    # Email tracking
+    topic = db.Column(db.String(100), default='General Inquiry')
+    status = db.Column(db.String(20), default='pending')
+    admin_notes = db.Column(db.Text)
+    meeting_link = db.Column(db.String(255))
+    meeting_time = db.Column(db.DateTime)
     email_sent = db.Column(db.Boolean, default=False)
     email_sent_at = db.Column(db.DateTime)
-    email_content = db.Column(db.Text)  # Store the email that was sent
-    
-    # Timestamps
+    email_content = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     confirmed_at = db.Column(db.DateTime)
     completed_at = db.Column(db.DateTime)
     cancelled_at = db.Column(db.DateTime)
 
-    # Relationships
     user = db.relationship('User', backref=db.backref('consultations', lazy=True))
     chat = db.relationship('Chat', backref='consultation', uselist=False)
     
     def to_dict(self, include_user=False, detailed=False):
-        """Convert consultation to dictionary"""
         data = {
             'id': self.id,
             'user_id': self.user_id,
@@ -219,7 +202,6 @@ class Consultation(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
-        
         if detailed or include_user:
             data['user'] = {
                 'id': self.user.id,
@@ -228,7 +210,6 @@ class Consultation(db.Model):
                 'phone': self.user.phone,
                 'avatar_url': self.user.avatar_url
             } if self.user else None
-        
         if detailed:
             data.update({
                 'admin_notes': self.admin_notes,
@@ -240,7 +221,6 @@ class Consultation(db.Model):
                 'completed_at': self.completed_at.isoformat() if self.completed_at else None,
                 'cancelled_at': self.cancelled_at.isoformat() if self.cancelled_at else None,
             })
-        
         return data
     
     def __repr__(self):
@@ -254,8 +234,8 @@ class Chat(db.Model):
     property_id = db.Column(db.Integer, db.ForeignKey('properties.id'))
     booking_id = db.Column(db.Integer, db.ForeignKey('bookings.id'))
     consultation_id = db.Column(db.Integer, db.ForeignKey('consultations.id'))
-    chat_type = db.Column(db.String(20), default='general')  # 'general', 'booking', 'inquiry', 'lead', 'consultation'
-    status = db.Column(db.String(20), default='active')  # 'active', 'closed', 'archived'
+    chat_type = db.Column(db.String(20), default='general')
+    status = db.Column(db.String(20), default='active')
     unread_count = db.Column(db.Integer, default=0)
     last_message = db.Column(db.Text)
     last_message_time = db.Column(db.DateTime, default=datetime.utcnow)
@@ -263,7 +243,6 @@ class Chat(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Relationships
     messages = db.relationship('ChatMessage', backref='chat', lazy=True, order_by='ChatMessage.timestamp')
 
 class ChatMessage(db.Model):
@@ -274,7 +253,7 @@ class ChatMessage(db.Model):
     sender_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     sender_name = db.Column(db.String(100), nullable=False)
     content = db.Column(db.Text, nullable=False)
-    message_type = db.Column(db.String(20), default='text')  # 'text', 'image', 'file'
+    message_type = db.Column(db.String(20), default='text')
     is_read = db.Column(db.Boolean, default=False)
     is_host = db.Column(db.Boolean, default=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
@@ -287,9 +266,9 @@ class Lead(db.Model):
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120))
     phone = db.Column(db.String(20))
-    source = db.Column(db.String(50))  # 'website', 'whatsapp', 'call', 'referral'
-    status = db.Column(db.String(20), default='new')  # 'new', 'contacted', 'qualified', 'converted', 'lost'
-    priority = db.Column(db.String(20), default='medium')  # 'low', 'medium', 'high', 'urgent'
+    source = db.Column(db.String(50))
+    status = db.Column(db.String(20), default='new')
+    priority = db.Column(db.String(20), default='medium')
     assigned_to_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     property_interest = db.Column(db.String(200))
     message = db.Column(db.Text)
@@ -303,11 +282,11 @@ class HomepageContent(db.Model):
     __tablename__ = 'homepage_content'
     
     id = db.Column(db.Integer, primary_key=True)
-    hero_images = db.Column(db.JSON, default=list)  # List of hero image URLs
-    featured_properties = db.Column(db.JSON, default=list)  # List of property IDs
-    premium_badges = db.Column(db.JSON, default=list)  # List of badge objects
-    testimonials = db.Column(db.JSON, default=list)  # List of testimonial objects
-    faqs = db.Column(db.JSON, default=list)  # List of FAQ objects
+    hero_images = db.Column(db.JSON, default=list)
+    featured_properties = db.Column(db.JSON, default=list)
+    premium_badges = db.Column(db.JSON, default=list)
+    testimonials = db.Column(db.JSON, default=list)
+    faqs = db.Column(db.JSON, default=list)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

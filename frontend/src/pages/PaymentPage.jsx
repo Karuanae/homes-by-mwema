@@ -9,6 +9,13 @@ import {
 import api, { API_BASE_URL, IMAGE_BASE_URL } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 
+// Helper: safely parse UTC date strings from backend (which may lack 'Z')
+function parseUTCDate(dateStr) {
+  if (!dateStr) return null;
+  const str = dateStr.endsWith('Z') ? dateStr : dateStr + 'Z';
+  return new Date(str);
+}
+
 export default function PaymentPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -28,7 +35,7 @@ export default function PaymentPage() {
   const [showPhoneHelp, setShowPhoneHelp] = useState(false);
   
   // Payment status
-  const [paymentStatus, setPaymentStatus] = useState('pending'); // pending, processing, success, failed
+  const [paymentStatus, setPaymentStatus] = useState('pending');
   const [checkoutRequestId, setCheckoutRequestId] = useState(null);
   const [paymentId, setPaymentId] = useState(null);
   const [errorMessage, setErrorMessage] = useState('');
@@ -49,12 +56,13 @@ export default function PaymentPage() {
     initializePayment();
   }, []);
 
-  // Timer effect
+  // Timer effect — uses parseUTCDate to avoid timezone mismatch
   useEffect(() => {
     if (!booking?.expires_at) return;
 
-    const expiresAt = new Date(booking.expires_at);
-    
+    const expiresAt = parseUTCDate(booking.expires_at);
+    if (!expiresAt) return;
+
     const updateTimer = () => {
       const now = new Date();
       const diff = expiresAt - now;
@@ -86,7 +94,7 @@ export default function PaymentPage() {
     let interval;
     
     if (checkoutRequestId && paymentStatus === 'processing') {
-      interval = setInterval(checkPaymentStatus, 3000); // Check every 3 seconds
+      interval = setInterval(checkPaymentStatus, 3000);
     }
     
     return () => {
@@ -110,12 +118,20 @@ export default function PaymentPage() {
       }
       
       if (!bookingData) {
-        // Try to fetch from API
-        // This would need a backend endpoint to get booking by ID
         console.error('No booking data found');
         setErrorMessage('Booking information not found. Please start over.');
         setLoading(false);
         return;
+      }
+
+      // FIX: Check expiry using UTC-safe parsing BEFORE setting state
+      if (bookingData.expires_at) {
+        const expiresAt = parseUTCDate(bookingData.expires_at);
+        if (expiresAt && expiresAt < new Date()) {
+          setIsExpired(true);
+          setLoading(false);
+          return;
+        }
       }
       
       setBooking(bookingData);
@@ -151,14 +167,10 @@ export default function PaymentPage() {
       
       if (data.success) {
         if (data.payment?.status === 'completed') {
-          // Payment successful!
           setPaymentStatus('success');
           setSuccessMessage('Payment completed successfully!');
-          
-          // Clear any stored pending booking
           localStorage.removeItem('pendingBooking');
           
-          // Redirect to success page after 2 seconds
           setTimeout(() => {
             navigate('/payment/success', {
               state: {
@@ -181,10 +193,8 @@ export default function PaymentPage() {
 
   // ========== PAYMENT INITIATION ==========
   const validatePhoneNumber = (phone) => {
-    // Remove any non-digit characters
     const cleaned = phone.replace(/\D/g, '');
     
-    // Check Kenyan phone formats
     if (cleaned.length === 9 && cleaned.startsWith('7')) {
       return { valid: true, formatted: '254' + cleaned };
     } else if (cleaned.length === 10 && cleaned.startsWith('07')) {
@@ -215,7 +225,6 @@ export default function PaymentPage() {
   };
 
   const initiateMpesaPayment = async () => {
-    // Validate phone
     const validation = validatePhoneNumber(phoneNumber);
     if (!validation.valid) {
       setPhoneError('Please enter a valid M-PESA number');
@@ -255,7 +264,6 @@ export default function PaymentPage() {
         throw new Error(data.error || 'Payment initiation failed');
       }
       
-      // Success - STK Push sent
       setCheckoutRequestId(data.checkout_request_id);
       setPaymentId(data.payment_id);
       setSuccessMessage('STK Push sent! Check your phone and enter PIN.');
@@ -558,7 +566,6 @@ export default function PaymentPage() {
                       />
                     </div>
                     
-                    {/* Phone format helper */}
                     <button
                       onClick={() => setShowPhoneHelp(!showPhoneHelp)}
                       className="text-xs text-stone-500 mt-2 flex items-center gap-1"
@@ -712,7 +719,7 @@ export default function PaymentPage() {
                     </div>
                   </div>
 
-                  {/* Timer - Mobile/Desktop */}
+                  {/* Timer */}
                   {timeLeft && (
                     <div className={`p-3 rounded-lg ${showTimerWarning ? 'bg-red-50' : 'bg-stone-50'}`}>
                       <div className="flex items-center justify-between">
