@@ -880,6 +880,43 @@ def admin_get_bookings():
     
     return jsonify(result)
 
+# ========== BOOKING STATUS UPDATE ==========
+@admin_bp.route('/bookings/<int:booking_id>/status', methods=['PUT', 'PATCH'])
+@jwt_required()
+def admin_update_booking_status(booking_id):
+    """Admin: Confirm or cancel a booking"""
+    require_admin()
+
+    booking = Booking.query.get(booking_id)
+    if not booking:
+        return jsonify({'error': 'Booking not found'}), 404
+
+    data = request.json or {}
+    new_status = data.get('status')
+
+    allowed = ['confirmed', 'cancelled', 'pending', 'upcoming', 'completed']
+    if new_status not in allowed:
+        return jsonify({
+            'error': f'Invalid status. Must be one of: {", ".join(allowed)}'
+        }), 400
+
+    booking.status = new_status
+    booking.confirmation = new_status
+
+    # If confirming, clear expiry so it doesn't auto-expire
+    if new_status == 'confirmed':
+        booking.expires_at = None
+
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'booking_id': booking.id,
+        'status': booking.status,
+        'confirmation': booking.confirmation,
+        'message': f'Booking {new_status} successfully'
+    }), 200
+
 # ========== PAYMENT MANAGEMENT ==========
 @admin_bp.route('/payments', methods=['GET'])
 @jwt_required()

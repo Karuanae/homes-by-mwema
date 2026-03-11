@@ -268,6 +268,11 @@ def create_booking():
         db.session.commit()
         
         logger.info(f"✅ Booking created successfully with ID: {booking.id}")
+
+        # FIX: Build property image URL instead of passing the ORM object
+        property_image_url = None
+        if property.images and len(property.images) > 0:
+            property_image_url = f"/api/admin/property-image/{property.images[0].id}"
         
         return jsonify({
             'success': True,
@@ -276,7 +281,7 @@ def create_booking():
                 'property_id': property.id,
                 'property_name': property.name,
                 'property_location': property.location,
-                'property_image': property.images[0] if property.images else None,
+                'property_image': property_image_url,
                 'check_in': check_in.strftime('%Y-%m-%d'),
                 'check_out': check_out.strftime('%Y-%m-%d'),
                 'check_in_display': check_in.strftime('%b %d, %Y'),
@@ -440,10 +445,10 @@ def get_my_bookings():
                     logger.warning(f"Booking {booking.id} has no associated property")
                     continue
                 
-                # Get property image safely
+                # FIX: Build property image URL instead of passing the ORM object
                 property_image = None
                 if property_obj.images and len(property_obj.images) > 0:
-                    property_image = property_obj.images[0]
+                    property_image = f"/api/admin/property-image/{property_obj.images[0].id}"
                 
                 result.append({
                     'id': booking.id,

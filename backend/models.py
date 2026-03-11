@@ -156,10 +156,6 @@ class Payment(db.Model):
     mpesa_response_code = db.Column(db.String(10))  # Response code from M-PESA
     mpesa_response_description = db.Column(db.String(255))  # Response description
     
-    # Error handling and idempotency
-    idempotency_key = db.Column(db.String(100), unique=True, nullable=True)  # Prevent duplicate payments
-    error_log = db.Column(db.Text, nullable=True)  # Log any payment errors
-    
     payment_date = db.Column(db.DateTime, default=datetime.utcnow)
     completed_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
