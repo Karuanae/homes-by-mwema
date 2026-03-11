@@ -48,6 +48,25 @@ export default function BookingPage() {
   // Mobile view state
   const [showMobileSummary, setShowMobileSummary] = useState(false);
 
+  // Check if we're returning from login with saved form data
+  useEffect(() => {
+    const savedFormData = localStorage.getItem('bookingFormData');
+    if (savedFormData && isAuthenticated) {
+      try {
+        const formData = JSON.parse(savedFormData);
+        setCheckInDate(formData.checkInDate);
+        setCheckOutDate(formData.checkOutDate);
+        setGuests(formData.guests);
+        // Clear the saved data
+        localStorage.removeItem('bookingFormData');
+        // Auto-trigger booking creation
+        setTimeout(() => handleCreateBooking(true), 500);
+      } catch (e) {
+        console.error('Error restoring form data:', e);
+      }
+    }
+  }, [isAuthenticated]);
+
   // ========== EFFECTS ==========
   // Scroll to top on mount
   useEffect(() => {
@@ -100,15 +119,18 @@ export default function BookingPage() {
         
         setProperty(processedProperty);
 
-        // Default dates (tomorrow and +3 days)
-        const today = new Date();
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const checkOut = new Date(tomorrow);
-        checkOut.setDate(checkOut.getDate() + 3);
-        
-        setCheckInDate(tomorrow.toISOString().split('T')[0]);
-        setCheckOutDate(checkOut.toISOString().split('T')[0]);
+        // Only set default dates if no saved form data exists
+        const savedFormData = localStorage.getItem('bookingFormData');
+        if (!savedFormData) {
+          const today = new Date();
+          const tomorrow = new Date(today);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          const checkOut = new Date(tomorrow);
+          checkOut.setDate(checkOut.getDate() + 3);
+          
+          setCheckInDate(tomorrow.toISOString().split('T')[0]);
+          setCheckOutDate(checkOut.toISOString().split('T')[0]);
+        }
       } catch (error) {
         console.error('Error fetching property:', error);
         setError('Unable to load residence details. Please try again.');
@@ -235,7 +257,7 @@ export default function BookingPage() {
   const totals = calculateTotal();
 
   // ========== CREATE BOOKING ==========
-  const handleCreateBooking = async () => {
+  const handleCreateBooking = async (isAutoRetry = false) => {
     if (!property) return;
     
     // Validate dates
@@ -262,6 +284,27 @@ export default function BookingPage() {
     // Check availability one more time
     if (!isAvailable) {
       alert('These dates are no longer available. Please choose different dates.');
+      return;
+    }
+
+    // Check if user is authenticated
+    if (!isAuthenticated) {
+      // Save the form data to localStorage
+      const formData = {
+        checkInDate,
+        checkOutDate,
+        guests,
+        propertyId: id
+      };
+      localStorage.setItem('bookingFormData', JSON.stringify(formData));
+      
+      // Redirect to login with return URL
+      navigate('/login', { 
+        state: { 
+          from: `/booking/${id}`,
+          message: 'Please log in to complete your booking'
+        }
+      });
       return;
     }
     
@@ -297,6 +340,29 @@ export default function BookingPage() {
       const data = await response.json();
       
       if (!response.ok) {
+        if (response.status === 401) {
+          // Token expired or invalid - redirect to login
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          
+          // Save form data
+          const formData = {
+            checkInDate,
+            checkOutDate,
+            guests,
+            propertyId: id
+          };
+          localStorage.setItem('bookingFormData', JSON.stringify(formData));
+          
+          navigate('/login', { 
+            state: { 
+              from: `/booking/${id}`,
+              message: 'Your session expired. Please log in again.'
+            }
+          });
+          return;
+        }
+        
         if (response.status === 409) {
           // Conflict - property no longer available
           setIsAvailable(false);
@@ -310,6 +376,9 @@ export default function BookingPage() {
       // Success - booking created with 15-minute hold
       setCreatedBooking(data.booking);
       
+      // Clear any saved form data
+      localStorage.removeItem('bookingFormData');
+      
       // Scroll to payment section on mobile
       if (window.innerWidth < 768) {
         document.getElementById('payment-section')?.scrollIntoView({ behavior: 'smooth' });
@@ -317,7 +386,9 @@ export default function BookingPage() {
       
     } catch (error) {
       console.error('Booking creation error:', error);
-      alert(error.message || 'Failed to create booking. Please try again.');
+      if (!isAutoRetry) {
+        alert(error.message || 'Failed to create booking. Please try again.');
+      }
     } finally {
       setCreatingBooking(false);
     }
@@ -723,7 +794,7 @@ export default function BookingPage() {
                   {/* Action Buttons */}
                   {!createdBooking ? (
                     <button
-                      onClick={handleCreateBooking}
+                      onClick={() => handleCreateBooking()}
                       disabled={creatingBooking || !isAvailable || !checkInDate || !checkOutDate}
                       className="w-full mt-4 py-3 md:py-4 bg-stone-900 text-white text-xs md:text-sm font-bold uppercase tracking-widest rounded-lg hover:bg-stone-800 transition-all disabled:bg-stone-300 disabled:cursor-not-allowed"
                     >
@@ -744,6 +815,13 @@ export default function BookingPage() {
                       <CreditCard className="w-4 h-4" />
                       Proceed to Payment
                     </button>
+                  )}
+
+                  {/* Login Message for non-authenticated users */}
+                  {!isAuthenticated && !createdBooking && (
+                    <p className="text-[10px] text-amber-600 text-center mt-2">
+                      You'll need to log in after selecting your dates
+                    </p>
                   )}
 
                   {/* Security Badge */}

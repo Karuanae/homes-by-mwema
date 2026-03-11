@@ -8,7 +8,7 @@ import { socialAuth } from '../services/socialAuth';
 export default function Login() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { login: authLogin, user, loading, refreshUserFromStorage } = useAuth();
+  const { login, user, loading, refreshUserFromStorage } = useAuth(); // Fixed: login directly, not authLogin
 
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
@@ -37,6 +37,25 @@ export default function Login() {
 
   const redirectAfterLogin = (userData) => {
     console.log('🔄 Redirecting after login:', userData);
+    
+    // Check for saved intent
+    const intent = localStorage.getItem('redirectIntent');
+    
+    if (intent) {
+      try {
+        const { type, propertyId } = JSON.parse(intent);
+        localStorage.removeItem('redirectIntent'); // Clear it
+        
+        if (type === 'book' && propertyId) {
+          navigate(`/booking/${propertyId}`);
+          return;
+        }
+      } catch (e) {
+        console.error('Error parsing redirect intent:', e);
+      }
+    }
+    
+    // Default redirect
     if (userData?.role === 'admin') {
       window.location.href = '/admin';
     } else {
@@ -53,7 +72,7 @@ export default function Login() {
     setError('');
     setIsLoading(true);
     try {
-      const response = await authLogin({ email: formData.email, password: formData.password });
+      const response = await login({ email: formData.email, password: formData.password }); // Fixed: using login directly
       redirectAfterLogin(response.user);
     } catch (err) {
       console.error('❌ Login error:', err);
@@ -79,6 +98,24 @@ export default function Login() {
       
       if (refreshed) {
         console.log('✅ AuthContext refreshed, redirecting...');
+        
+        // Check for saved intent
+        const intent = localStorage.getItem('redirectIntent');
+        
+        if (intent) {
+          try {
+            const { type, propertyId } = JSON.parse(intent);
+            localStorage.removeItem('redirectIntent');
+            
+            if (type === 'book' && propertyId) {
+              setTimeout(() => navigate(`/booking/${propertyId}`), 50);
+              return;
+            }
+          } catch (e) {
+            console.error('Error parsing redirect intent:', e);
+          }
+        }
+        
         // Small delay to ensure state is updated
         setTimeout(() => {
           redirectAfterLogin(JSON.parse(savedUser));
