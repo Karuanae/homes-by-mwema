@@ -1,4 +1,4 @@
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { FaEye, FaEyeSlash, FaSpinner, FaGoogle } from 'react-icons/fa';
@@ -7,8 +7,9 @@ import { socialAuth } from '../services/socialAuth';
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
-  const { login, user, loading, refreshUserFromStorage } = useAuth(); // Fixed: login directly, not authLogin
+  const { login, user, loading, refreshUserFromStorage } = useAuth();
 
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
@@ -19,6 +20,19 @@ export default function Login() {
   useEffect(() => {
     if (!loading && user) {
       console.log('✅ User already logged in, redirecting:', user);
+      
+      // Check for pending booking data first
+      const pendingData = localStorage.getItem('pendingBookingData');
+      if (pendingData) {
+        try {
+          const { propertyId } = JSON.parse(pendingData);
+          navigate(`/payment/${propertyId}`);
+          return;
+        } catch (e) {
+          console.error('Error parsing pending data:', e);
+        }
+      }
+      
       navigate(user?.role === 'admin' ? '/admin' : '/');
     }
   }, [user, loading, navigate]);
@@ -37,16 +51,39 @@ export default function Login() {
 
   const redirectAfterLogin = (userData) => {
     console.log('🔄 Redirecting after login:', userData);
+    console.log('📍 Location state:', location.state);
     
-    // Check for saved intent
+    // First check for pending booking data (most important)
+    const pendingData = localStorage.getItem('pendingBookingData');
+    if (pendingData) {
+      try {
+        const { propertyId } = JSON.parse(pendingData);
+        console.log('✅ Found pending booking data, redirecting to payment for property:', propertyId);
+        // Don't clear pendingData here - let payment page handle it
+        navigate(`/payment/${propertyId}`);
+        return;
+      } catch (e) {
+        console.error('Error parsing pending data:', e);
+        localStorage.removeItem('pendingBookingData');
+      }
+    }
+    
+    // Then check for redirect from location.state (from BookingPage)
+    if (location.state?.from) {
+      console.log('📍 Redirecting to location.state.from:', location.state.from);
+      navigate(location.state.from);
+      return;
+    }
+    
+    // Check for saved intent (from property clicks)
     const intent = localStorage.getItem('redirectIntent');
-    
     if (intent) {
       try {
         const { type, propertyId } = JSON.parse(intent);
-        localStorage.removeItem('redirectIntent'); // Clear it
+        localStorage.removeItem('redirectIntent');
         
         if (type === 'book' && propertyId) {
+          console.log('📚 Found booking intent, redirecting to property:', propertyId);
           navigate(`/booking/${propertyId}`);
           return;
         }
@@ -72,7 +109,7 @@ export default function Login() {
     setError('');
     setIsLoading(true);
     try {
-      const response = await login({ email: formData.email, password: formData.password }); // Fixed: using login directly
+      const response = await login({ email: formData.email, password: formData.password });
       redirectAfterLogin(response.user);
     } catch (err) {
       console.error('❌ Login error:', err);
@@ -93,15 +130,33 @@ export default function Login() {
     if (savedUser) {
       console.log('✅ User saved to localStorage, refreshing AuthContext...');
       
-      // Force refresh the auth context
       const refreshed = refreshUserFromStorage();
       
       if (refreshed) {
         console.log('✅ AuthContext refreshed, redirecting...');
         
-        // Check for saved intent
-        const intent = localStorage.getItem('redirectIntent');
+        // Check for pending booking data first
+        const pendingData = localStorage.getItem('pendingBookingData');
+        if (pendingData) {
+          try {
+            const { propertyId } = JSON.parse(pendingData);
+            console.log('✅ Found pending booking data, redirecting to payment for property:', propertyId);
+            setTimeout(() => navigate(`/payment/${propertyId}`), 50);
+            return;
+          } catch (e) {
+            console.error('Error parsing pending data:', e);
+            localStorage.removeItem('pendingBookingData');
+          }
+        }
         
+        // Then check location state
+        if (location.state?.from) {
+          setTimeout(() => navigate(location.state.from), 50);
+          return;
+        }
+        
+        // Then check intent
+        const intent = localStorage.getItem('redirectIntent');
         if (intent) {
           try {
             const { type, propertyId } = JSON.parse(intent);
@@ -116,7 +171,7 @@ export default function Login() {
           }
         }
         
-        // Small delay to ensure state is updated
+        // Default redirect
         setTimeout(() => {
           redirectAfterLogin(JSON.parse(savedUser));
         }, 50);

@@ -269,7 +269,7 @@ def create_booking():
         
         logger.info(f"✅ Booking created successfully with ID: {booking.id}")
 
-        # FIX: Build property image URL instead of passing the ORM object
+        # Build property image URL instead of passing the ORM object
         property_image_url = None
         if property.images and len(property.images) > 0:
             property_image_url = f"/api/admin/property-image/{property.images[0].id}"
@@ -310,7 +310,179 @@ def create_booking():
         return jsonify({
             'success': False,
             'error': 'Failed to create booking. Please try again.',
-            'details': str(e)  # Remove in production
+            'details': str(e)
+        }), 500
+
+# ========== NEW ENDPOINT FOR SESSION BOOKING ==========
+@booking_bp.route('/create-from-session', methods=['POST'])
+@jwt_required()
+def create_booking_from_session():
+    """
+    Create a booking from session data saved during pre-login
+    This is called after user logs in, before showing payment page
+    """
+    try:
+        user_id = get_jwt_identity()
+        data = request.json
+        
+        logger.info(f"📝 Creating booking from session for user {user_id}")
+        logger.info(f"📦 Session data: {data}")
+        
+        # Validate required fields
+        required_fields = ['property_id', 'check_in', 'check_out', 'guests']
+        for field in required_fields:
+            if field not in data:
+                logger.error(f"❌ Missing required field: {field}")
+                return jsonify({
+                    'success': False,
+                    'error': f'Missing required field: {field}'
+                }), 400
+        
+        # Parse and validate dates
+        try:
+            check_in = datetime.strptime(data['check_in'], '%Y-%m-%d').date()
+            check_out = datetime.strptime(data['check_out'], '%Y-%m-%d').date()
+        except ValueError as e:
+            return jsonify({'error': 'Invalid date format'}), 400
+        
+        # Validate date logic
+        if check_in >= check_out:
+            return jsonify({'error': 'Check-out must be after check-in'}), 400
+        
+        if check_in < datetime.now().date():
+            return jsonify({'error': 'Check-in cannot be in the past'}), 400
+        
+        # Get property and verify it exists
+        property = Property.query.get(data['property_id'])
+        if not property:
+            logger.error(f"❌ Property not found: {data['property_id']}")
+            return jsonify({'error': 'Property not found'}), 404
+        
+        # Check availability AGAIN (in case dates were booked while user was logging in)
+        is_available, conflicts = check_property_availability(
+            property.id, check_in, check_out
+        )
+        
+        if not is_available:
+            logger.warning(f"⚠️ Property {property.id} no longer available for selected dates")
+            return jsonify({
+                'success': False,
+                'error': 'These dates are no longer available',
+                'available': False,
+                'message': 'Sorry, these dates were just booked by someone else. Please try different dates.'
+            }), 409
+        
+        # Calculate nights
+        nights = (check_out - check_in).days
+        
+        # Get config values
+        cleaning_fee = Decimal(str(current_app.config['CLEANING_FEE']))
+        service_fee_percentage = Decimal(str(current_app.config['SERVICE_FEE_PERCENTAGE'])) / 100
+        timeout_minutes = current_app.config['BOOKING_TIMEOUT_MINUTES']
+        
+        # Calculate amounts
+        base_amount = Decimal(str(property.price)) * Decimal(nights)
+        service_fee = base_amount * service_fee_percentage
+        total_amount = base_amount + cleaning_fee + service_fee
+        
+        # Generate idempotency key
+        idempotency_key = f"session_{user_id}_{property.id}_{check_in}_{check_out}_{datetime.utcnow().timestamp()}"
+        
+        # Check if already processed
+        existing = Booking.query.filter_by(idempotency_key=idempotency_key).first()
+        if existing:
+            logger.info(f"🔄 Booking already exists from session with id: {existing.id}")
+            property_image_url = None
+            if property.images and len(property.images) > 0:
+                property_image_url = f"/api/admin/property-image/{property.images[0].id}"
+            
+            return jsonify({
+                'success': True,
+                'booking': {
+                    'id': existing.id,
+                    'property_id': property.id,
+                    'property_name': property.name,
+                    'property_location': property.location,
+                    'property_image': property_image_url,
+                    'check_in': check_in.strftime('%Y-%m-%d'),
+                    'check_out': check_out.strftime('%Y-%m-%d'),
+                    'check_in_display': check_in.strftime('%b %d, %Y'),
+                    'check_out_display': check_out.strftime('%b %d, %Y'),
+                    'nights': nights,
+                    'guests': data['guests'],
+                    'price_per_night': float(property.price),
+                    'base_amount': float(base_amount),
+                    'cleaning_fee': float(cleaning_fee),
+                    'service_fee': float(service_fee),
+                    'total_amount': float(total_amount),
+                    'status': existing.status,
+                    'expires_at': existing.expires_at.isoformat(),
+                    'expires_in_minutes': timeout_minutes
+                }
+            }), 200
+        
+        # Create booking
+        booking = Booking(
+            user_id=user_id,
+            property_id=property.id,
+            check_in=check_in,
+            check_out=check_out,
+            guests=data['guests'],
+            nights=nights,
+            base_amount=base_amount,
+            cleaning_fee=cleaning_fee,
+            service_fee=service_fee,
+            total_amount=total_amount,
+            pending_amount=Decimal('0'),
+            payment_type=data.get('payment_type', 'full'),
+            status='pending',
+            confirmation='pending',
+            payment_status='pending',
+            idempotency_key=idempotency_key,
+            expires_at=datetime.utcnow() + timedelta(minutes=timeout_minutes)
+        )
+        
+        db.session.add(booking)
+        db.session.commit()
+        
+        logger.info(f"✅ Booking created successfully from session: ID {booking.id}")
+        
+        # Build property image URL
+        property_image_url = None
+        if property.images and len(property.images) > 0:
+            property_image_url = f"/api/admin/property-image/{property.images[0].id}"
+        
+        return jsonify({
+            'success': True,
+            'booking': {
+                'id': booking.id,
+                'property_id': property.id,
+                'property_name': property.name,
+                'property_location': property.location,
+                'property_image': property_image_url,
+                'check_in': check_in.strftime('%Y-%m-%d'),
+                'check_out': check_out.strftime('%Y-%m-%d'),
+                'check_in_display': check_in.strftime('%b %d, %Y'),
+                'check_out_display': check_out.strftime('%b %d, %Y'),
+                'nights': nights,
+                'guests': data['guests'],
+                'price_per_night': float(property.price),
+                'base_amount': float(base_amount),
+                'cleaning_fee': float(cleaning_fee),
+                'service_fee': float(service_fee),
+                'total_amount': float(total_amount),
+                'status': booking.status,
+                'expires_at': booking.expires_at.isoformat(),
+                'expires_in_minutes': timeout_minutes
+            }
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"❌ Error creating booking from session: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to create booking. Please try again.'
         }), 500
 
 @booking_bp.route('/<int:booking_id>/status', methods=['GET'])
@@ -445,7 +617,7 @@ def get_my_bookings():
                     logger.warning(f"Booking {booking.id} has no associated property")
                     continue
                 
-                # FIX: Build property image URL instead of passing the ORM object
+                # Build property image URL instead of passing the ORM object
                 property_image = None
                 if property_obj.images and len(property_obj.images) > 0:
                     property_image = f"/api/admin/property-image/{property_obj.images[0].id}"

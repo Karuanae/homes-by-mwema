@@ -78,7 +78,7 @@ export default function PaymentPage() {
     }
   }, []);
 
-  // Timer effect
+  // Timer effect - only runs after booking is set
   useEffect(() => {
     if (!booking?.expires_at) return;
 
@@ -120,45 +120,145 @@ export default function PaymentPage() {
   }, [checkoutRequestId, paymentStatus]);
 
   // ========== INIT ==========
-  const initializePayment = async () => {
-    setLoading(true);
-    try {
-      let bookingData = location.state?.bookingDetails;
-      
-      if (!bookingData && !isAuthenticated) {
-        const pending = localStorage.getItem('pendingBooking');
-        if (pending) bookingData = JSON.parse(pending);
-      }
-      
-      if (!bookingData) {
-        setErrorMessage('Booking information not found. Please start over.');
+const initializePayment = async () => {
+  setLoading(true);
+  console.log('🔍 PaymentPage initialized for property:', id);
+  console.log('🔍 isAuthenticated:', isAuthenticated);
+  console.log('🔍 user:', user);
+  
+  try {
+    // STEP 1: Check if we have pending booking data that needs to be created
+    const pendingData = localStorage.getItem('pendingBookingData');
+    console.log('🔍 pendingBookingData:', pendingData);
+    
+    if (pendingData && isAuthenticated) {
+      try {
+        const formData = JSON.parse(pendingData);
+        console.log('📝 Found pending data:', formData);
+        
+        // Only proceed if this is the same property
+        if (formData.propertyId === id && formData.action === 'create-booking') {
+          console.log('📝 Creating booking from pending data for property:', formData.propertyId);
+          
+          // Call the new backend endpoint to create booking
+          const response = await fetch(`${API_BASE_URL}/bookings/create-from-session`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            body: JSON.stringify({
+              property_id: formData.propertyId,
+              check_in: formData.checkInDate,
+              check_out: formData.checkOutDate,
+              guests: formData.guests,
+              payment_type: 'full'
+            })
+          });
+          
+          console.log('📝 Create booking response status:', response.status);
+          const data = await response.json();
+          console.log('📝 Create booking response data:', data);
+          
+          if (!response.ok) {
+            if (response.status === 409) {
+              // Dates no longer available
+              localStorage.removeItem('pendingBookingData');
+              setErrorMessage('These dates are no longer available. Please try different dates.');
+              setLoading(false);
+              return;
+            }
+            throw new Error(data.error || 'Failed to create booking');
+          }
+          
+          // Success - clear pending data and set booking
+          console.log('✅ Booking created successfully:', data.booking);
+          localStorage.removeItem('pendingBookingData');
+          setBooking(data.booking);
+          
+          // Fetch property data
+          const propertyRes = await api.properties.getById(data.booking.property_id);
+          setProperty(propertyRes.data);
+          
+          if (user?.phone) setPhoneNumber(user.phone);
+          setLoading(false);
+          return;
+        } else {
+          console.log('❌ Property mismatch or wrong action:', {
+            pendingPropertyId: formData.propertyId,
+            currentId: id,
+            action: formData.action
+          });
+          localStorage.removeItem('pendingBookingData');
+        }
+      } catch (e) {
+        console.error('Error creating booking from session:', e);
+        localStorage.removeItem('pendingBookingData');
+        if (e.message.includes('no longer available')) {
+          setErrorMessage(e.message);
+        } else {
+          setErrorMessage('Failed to create booking. Please try again.');
+        }
         setLoading(false);
         return;
       }
-
-      // UTC-safe expiry check
-      if (bookingData.expires_at) {
-        const expiresAt = parseUTCDate(bookingData.expires_at);
-        if (expiresAt && expiresAt < new Date()) {
-          setIsExpired(true);
-          setLoading(false);
-          return;
-        }
-      }
-      
-      setBooking(bookingData);
-      const propertyRes = await api.properties.getById(bookingData.property_id || id);
-      setProperty(propertyRes.data);
-      
-      if (user?.phone) setPhoneNumber(user.phone);
-      
-    } catch (error) {
-      console.error('Initialization error:', error);
-      setErrorMessage('Failed to load payment details. Please try again.');
-    } finally {
-      setLoading(false);
+    } else {
+      console.log('🔍 No pending data or not authenticated:', { 
+        hasPendingData: !!pendingData, 
+        isAuthenticated 
+      });
     }
-  };
+    
+    // STEP 2: If no pending data, check for booking in state or localStorage
+    console.log('🔍 Checking for booking in state or localStorage');
+    let bookingData = location.state?.bookingDetails;
+    console.log('🔍 location.state.bookingDetails:', bookingData);
+    
+    if (!bookingData) {
+      const pendingBooking = localStorage.getItem('pendingBooking');
+      console.log('🔍 pendingBooking:', pendingBooking);
+      if (pendingBooking) {
+        bookingData = JSON.parse(pendingBooking);
+        localStorage.removeItem('pendingBooking');
+      }
+    }
+    
+    // STEP 3: If still no booking data, show error
+    if (!bookingData) {
+      console.log('❌ No booking data found anywhere');
+      setErrorMessage('Booking information not found. Please start over.');
+      setLoading(false);
+      return;
+    }
+
+    // STEP 4: Only check expiry AFTER we have booking data
+    console.log('🔍 Checking expiry for booking:', bookingData);
+    if (bookingData.expires_at) {
+      const expiresAt = parseUTCDate(bookingData.expires_at);
+      console.log('🔍 expiresAt:', expiresAt);
+      if (expiresAt && expiresAt < new Date()) {
+        console.log('❌ Booking expired');
+        setIsExpired(true);
+        setLoading(false);
+        return;
+      }
+    }
+    
+    // STEP 5: Set booking and fetch property data
+    console.log('✅ Setting booking data:', bookingData);
+    setBooking(bookingData);
+    const propertyRes = await api.properties.getById(bookingData.property_id || id);
+    setProperty(propertyRes.data);
+    
+    if (user?.phone) setPhoneNumber(user.phone);
+    
+  } catch (error) {
+    console.error('Initialization error:', error);
+    setErrorMessage('Failed to load payment details. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+};
 
   // ========== M-PESA ==========
   const checkMpesaStatus = async () => {
@@ -377,7 +477,7 @@ export default function PaymentPage() {
   const formatCurrency = (amount) => `KSh ${amount?.toLocaleString() || '0'}`;
 
   const getImageSrc = (url) => {
-    if (!url) return '';
+    if (!url) return '/default-property.jpg'; // Add fallback image
     return url.startsWith('http') ? url : `${IMAGE_BASE_URL}${url}`;
   };
 
@@ -460,7 +560,12 @@ export default function PaymentPage() {
           >
             <div className="p-4">
               <div className="flex gap-3">
-                <img src={getImageSrc(property?.cover_image || property?.images?.[0])} alt={property?.name} className="w-16 h-16 object-cover rounded-lg" />
+                <img 
+                  src={getImageSrc(property?.cover_image || property?.images?.[0])} 
+                  alt={property?.name || 'Property'} 
+                  className="w-16 h-16 object-cover rounded-lg"
+                  onError={(e) => { e.target.src = '/default-property.jpg'; }}
+                />
                 <div className="flex-1">
                   <h3 className="font-medium text-sm">{property?.name || 'Property'}</h3>
                   <p className="text-xs text-stone-500 mt-1">{property?.location}</p>
@@ -778,8 +883,9 @@ export default function PaymentPage() {
                   <div className="flex gap-3">
                     <img
                       src={getImageSrc(property?.cover_image || property?.images?.[0])}
-                      alt={property?.name}
+                      alt={property?.name || 'Property'}
                       className="w-16 h-16 object-cover rounded-lg"
+                      onError={(e) => { e.target.src = '/default-property.jpg'; }}
                     />
                     <div>
                       <h3 className="font-medium text-sm">{property?.name || 'Property'}</h3>

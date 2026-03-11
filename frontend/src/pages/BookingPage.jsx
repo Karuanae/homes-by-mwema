@@ -39,33 +39,9 @@ export default function BookingPage() {
   
   // Booking Creation State
   const [creatingBooking, setCreatingBooking] = useState(false);
-  const [createdBooking, setCreatedBooking] = useState(null);
-  
-  // Timer State (15-minute countdown)
-  const [timeLeft, setTimeLeft] = useState(null);
-  const [showTimerWarning, setShowTimerWarning] = useState(false);
   
   // Mobile view state
   const [showMobileSummary, setShowMobileSummary] = useState(false);
-
-  // Check if we're returning from login with saved form data
-  useEffect(() => {
-    const savedFormData = localStorage.getItem('bookingFormData');
-    if (savedFormData && isAuthenticated) {
-      try {
-        const formData = JSON.parse(savedFormData);
-        setCheckInDate(formData.checkInDate);
-        setCheckOutDate(formData.checkOutDate);
-        setGuests(formData.guests);
-        // Clear the saved data
-        localStorage.removeItem('bookingFormData');
-        // Auto-trigger booking creation
-        setTimeout(() => handleCreateBooking(true), 500);
-      } catch (e) {
-        console.error('Error restoring form data:', e);
-      }
-    }
-  }, [isAuthenticated]);
 
   // ========== EFFECTS ==========
   // Scroll to top on mount
@@ -119,18 +95,15 @@ export default function BookingPage() {
         
         setProperty(processedProperty);
 
-        // Only set default dates if no saved form data exists
-        const savedFormData = localStorage.getItem('bookingFormData');
-        if (!savedFormData) {
-          const today = new Date();
-          const tomorrow = new Date(today);
-          tomorrow.setDate(tomorrow.getDate() + 1);
-          const checkOut = new Date(tomorrow);
-          checkOut.setDate(checkOut.getDate() + 3);
-          
-          setCheckInDate(tomorrow.toISOString().split('T')[0]);
-          setCheckOutDate(checkOut.toISOString().split('T')[0]);
-        }
+        // Default dates (tomorrow and +3 days)
+        const today = new Date();
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const checkOut = new Date(tomorrow);
+        checkOut.setDate(checkOut.getDate() + 3);
+        
+        setCheckInDate(tomorrow.toISOString().split('T')[0]);
+        setCheckOutDate(checkOut.toISOString().split('T')[0]);
       } catch (error) {
         console.error('Error fetching property:', error);
         setError('Unable to load residence details. Please try again.');
@@ -141,40 +114,35 @@ export default function BookingPage() {
     if (id) fetchProperty();
   }, [id]);
 
-  // Timer effect for created booking
+  // Check for pending booking data when returning from login
   useEffect(() => {
-    if (!createdBooking?.expires_at) return;
-
-    const expiresAt = new Date(createdBooking.expires_at);
+    const pendingData = localStorage.getItem('pendingBookingData');
     
-    const updateTimer = () => {
-      const now = new Date();
-      const diff = expiresAt - now;
-      
-      if (diff <= 0) {
-        // Booking expired
-        setTimeLeft(null);
-        setShowTimerWarning(true);
-        // Refresh booking status
-        checkBookingStatus();
-        return;
+    if (pendingData && isAuthenticated) {
+      try {
+        const formData = JSON.parse(pendingData);
+        
+        // Only restore if we're on the same property
+        if (formData.propertyId === id) {
+          setCheckInDate(formData.checkInDate);
+          setCheckOutDate(formData.checkOutDate);
+          setGuests(formData.guests);
+          
+          // Clear the pending data
+          localStorage.removeItem('pendingBookingData');
+          
+          // Automatically create booking and go to payment
+          setTimeout(() => createBookingAndGoToPayment(), 500);
+        } else {
+          // Wrong property - clear it
+          localStorage.removeItem('pendingBookingData');
+        }
+      } catch (e) {
+        console.error('Error restoring pending booking:', e);
+        localStorage.removeItem('pendingBookingData');
       }
-      
-      const minutes = Math.floor(diff / 60000);
-      const seconds = Math.floor((diff % 60000) / 1000);
-      setTimeLeft({ minutes, seconds, total: diff });
-      
-      // Show warning at 5 minutes
-      if (diff <= 300000 && !showTimerWarning) {
-        setShowTimerWarning(true);
-      }
-    };
-    
-    updateTimer();
-    const timer = setInterval(updateTimer, 1000);
-    
-    return () => clearInterval(timer);
-  }, [createdBooking]);
+    }
+  }, [isAuthenticated, id]);
 
   // ========== HELPER FUNCTIONS ==========
   const getImageSrc = (url) => {
@@ -226,7 +194,7 @@ export default function BookingPage() {
     
     const timer = setTimeout(() => {
       checkAvailability();
-    }, 500); // Wait 500ms after user stops typing
+    }, 500);
     
     return () => clearTimeout(timer);
   }, [checkInDate, checkOutDate]);
@@ -256,62 +224,12 @@ export default function BookingPage() {
 
   const totals = calculateTotal();
 
-  // ========== CREATE BOOKING ==========
-  const handleCreateBooking = async (isAutoRetry = false) => {
-    if (!property) return;
-    
-    // Validate dates
-    if (!checkInDate || !checkOutDate) {
-      alert('Please select check-in and check-out dates');
-      return;
-    }
-    
-    const checkIn = new Date(checkInDate);
-    const checkOut = new Date(checkOutDate);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    if (checkIn >= checkOut) {
-      alert('Check-out must be after check-in');
-      return;
-    }
-    
-    if (checkIn < today) {
-      alert('Check-in cannot be in the past');
-      return;
-    }
-    
-    // Check availability one more time
-    if (!isAvailable) {
-      alert('These dates are no longer available. Please choose different dates.');
-      return;
-    }
-
-    // Check if user is authenticated
-    if (!isAuthenticated) {
-      // Save the form data to localStorage
-      const formData = {
-        checkInDate,
-        checkOutDate,
-        guests,
-        propertyId: id
-      };
-      localStorage.setItem('bookingFormData', JSON.stringify(formData));
-      
-      // Redirect to login with return URL
-      navigate('/login', { 
-        state: { 
-          from: `/booking/${id}`,
-          message: 'Please log in to complete your booking'
-        }
-      });
-      return;
-    }
-    
+  // ========== CREATE BOOKING AND GO TO PAYMENT ==========
+  const createBookingAndGoToPayment = async () => {
     setCreatingBooking(true);
     
     try {
-      // Generate idempotency key (prevents duplicate bookings)
+      // Generate idempotency key
       const idempotencyKey = `${id}_${checkInDate}_${checkOutDate}_${Date.now()}`;
       
       const bookingData = {
@@ -341,22 +259,21 @@ export default function BookingPage() {
       
       if (!response.ok) {
         if (response.status === 401) {
-          // Token expired or invalid - redirect to login
+          // Token expired - redirect to login
           localStorage.removeItem('token');
           localStorage.removeItem('user');
           
-          // Save form data
           const formData = {
             checkInDate,
             checkOutDate,
             guests,
             propertyId: id
           };
-          localStorage.setItem('bookingFormData', JSON.stringify(formData));
+          localStorage.setItem('pendingBookingData', JSON.stringify(formData));
           
           navigate('/login', { 
             state: { 
-              from: `/booking/${id}`,
+              from: `/payment/${id}`,
               message: 'Your session expired. Please log in again.'
             }
           });
@@ -364,7 +281,6 @@ export default function BookingPage() {
         }
         
         if (response.status === 409) {
-          // Conflict - property no longer available
           setIsAvailable(false);
           setAvailabilityMessage(data.message || 'These dates were just booked by someone else');
           setShowAvailabilityWarning(true);
@@ -373,68 +289,79 @@ export default function BookingPage() {
         throw new Error(data.error || 'Failed to create booking');
       }
       
-      // Success - booking created with 15-minute hold
-      setCreatedBooking(data.booking);
-      
-      // Clear any saved form data
-      localStorage.removeItem('bookingFormData');
-      
-      // Scroll to payment section on mobile
-      if (window.innerWidth < 768) {
-        document.getElementById('payment-section')?.scrollIntoView({ behavior: 'smooth' });
-      }
+      // Success - go directly to payment page with booking data
+      navigate(`/payment/${id}`, { 
+        state: { 
+          bookingDetails: data.booking,
+          expiresAt: data.booking.expires_at
+        } 
+      });
       
     } catch (error) {
       console.error('Booking creation error:', error);
-      if (!isAutoRetry) {
-        alert(error.message || 'Failed to create booking. Please try again.');
-      }
+      alert(error.message || 'Failed to create booking. Please try again.');
     } finally {
       setCreatingBooking(false);
     }
   };
 
-  // ========== CHECK BOOKING STATUS ==========
-  const checkBookingStatus = async () => {
-    if (!createdBooking?.id) return;
-    
-    try {
-      const response = await fetch(`${API_BASE_URL}/bookings/${createdBooking.id}/status`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      
-      const data = await response.json();
-      
-      if (data.is_expired) {
-        setCreatedBooking(null);
-        setTimeLeft(null);
-        alert('Your booking session has expired. Please start over.');
-      }
-    } catch (error) {
-      console.error('Status check error:', error);
-    }
-  };
+ // ========== HANDLE BOOK NOW ==========
+const handleCreateBooking = async () => {
+  if (!property) return;
+  
+  // Validate dates
+  if (!checkInDate || !checkOutDate) {
+    alert('Please select check-in and check-out dates');
+    return;
+  }
+  
+  const checkIn = new Date(checkInDate);
+  const checkOut = new Date(checkOutDate);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  if (checkIn >= checkOut) {
+    alert('Check-out must be after check-in');
+    return;
+  }
+  
+  if (checkIn < today) {
+    alert('Check-in cannot be in the past');
+    return;
+  }
+  
+  // Check availability one more time
+  if (!isAvailable) {
+    alert('These dates are no longer available. Please choose different dates.');
+    return;
+  }
 
-  // ========== PROCEED TO PAYMENT ==========
-  const handleProceedToPayment = () => {
-    if (!createdBooking) return;
+  // Check if user is authenticated
+  if (!isAuthenticated) {
+    // Save the form data to localStorage with action flag
+    const formData = {
+      propertyId: id,
+      checkInDate,
+      checkOutDate,
+      guests,
+      action: 'create-booking'  // ← ADD THIS LINE
+    };
+    localStorage.setItem('pendingBookingData', JSON.stringify(formData));
+    console.log('💾 Saved pending booking data:', formData); // Add this for debugging
     
-    if (!isAuthenticated) {
-      // Store booking and redirect to login
-      localStorage.setItem('pendingBooking', JSON.stringify(createdBooking));
-      navigate(`/login?redirect=/payment/${id}`);
-    } else {
-      // Go to payment page with booking data
-      navigate(`/payment/${id}`, { 
-        state: { 
-          bookingDetails: createdBooking,
-          expiresAt: createdBooking.expires_at
-        } 
-      });
-    }
-  };
+    // Redirect to login - after login they'll go to payment page
+    navigate('/login', { 
+      state: { 
+        from: `/payment/${id}`,
+        message: 'Please log in to complete your booking'
+      }
+    });
+    return;
+  }
+  
+  // User is authenticated - create booking and go to payment
+  await createBookingAndGoToPayment();
+};
 
   // ========== LOADING / ERROR STATES ==========
   if (loading) {
@@ -504,23 +431,6 @@ export default function BookingPage() {
                 <span className="text-xs text-stone-500">Total for {totals.nights} nights</span>
                 <span className="font-serif font-bold">Ksh {totals.total.toLocaleString()}</span>
               </div>
-              {createdBooking && (
-                <div className="bg-amber-50 p-3 rounded-lg border border-amber-200">
-                  <div className="flex items-center gap-2 text-amber-700 mb-1">
-                    <Clock className="w-4 h-4" />
-                    <span className="text-xs font-bold">COMPLETE PAYMENT IN:</span>
-                  </div>
-                  {timeLeft ? (
-                    <div className="text-center">
-                      <span className="text-2xl font-mono font-bold">
-                        {timeLeft.minutes}:{timeLeft.seconds.toString().padStart(2, '0')}
-                      </span>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-center">Processing...</p>
-                  )}
-                </div>
-              )}
             </div>
           </motion.div>
         )}
@@ -558,7 +468,7 @@ export default function BookingPage() {
           {/* ========== LEFT COLUMN - Property Details ========== */}
           <div className="lg:col-span-2 space-y-6 md:space-y-8 order-2 lg:order-1">
             
-            {/* Image Gallery - Mobile optimized */}
+            {/* Image Gallery */}
             <div className="relative h-[250px] sm:h-[350px] md:h-[450px] rounded-lg overflow-hidden">
               <img
                 src={getImageSrc(property.images[selectedImage])}
@@ -583,7 +493,7 @@ export default function BookingPage() {
               </div>
             </div>
             
-            {/* Thumbnail strip - scrollable on mobile */}
+            {/* Thumbnail strip */}
             <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
               {property.images.map((img, index) => (
                 <button
@@ -611,7 +521,7 @@ export default function BookingPage() {
               </p>
             </div>
 
-            {/* Amenities - Grid responsive */}
+            {/* Amenities */}
             <div className="border-b border-stone-200 pb-6">
               <h3 className="text-xl md:text-2xl font-serif mb-4">Amenities</h3>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 md:gap-4">
@@ -674,26 +584,7 @@ export default function BookingPage() {
                     )}
                   </AnimatePresence>
 
-                  {/* Timer Warning */}
-                  <AnimatePresence>
-                    {showTimerWarning && timeLeft && (
-                      <motion.div
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0 }}
-                        className="bg-amber-50 border border-amber-200 rounded-lg p-3"
-                      >
-                        <div className="flex items-center gap-2">
-                          <Clock className="w-4 h-4 text-amber-600" />
-                          <p className="text-amber-700 text-xs font-medium">
-                            Complete payment in {timeLeft.minutes}:{timeLeft.seconds.toString().padStart(2, '0')}
-                          </p>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-
-                  {/* Date Inputs - Mobile friendly */}
+                  {/* Date Inputs */}
                   <div className="grid grid-cols-2 gap-2 md:gap-3">
                     <div>
                       <label className="text-[10px] uppercase font-bold text-stone-500 block mb-1">Check-in</label>
@@ -702,7 +593,6 @@ export default function BookingPage() {
                         value={checkInDate}
                         min={new Date().toISOString().split('T')[0]}
                         onChange={(e) => setCheckInDate(e.target.value)}
-                        disabled={!!createdBooking}
                         className="w-full p-2 md:p-3 bg-stone-50 rounded-lg text-xs md:text-sm border border-stone-200 focus:border-stone-900 outline-none transition-colors"
                       />
                     </div>
@@ -713,7 +603,6 @@ export default function BookingPage() {
                         value={checkOutDate}
                         min={checkInDate}
                         onChange={(e) => setCheckOutDate(e.target.value)}
-                        disabled={!!createdBooking}
                         className="w-full p-2 md:p-3 bg-stone-50 rounded-lg text-xs md:text-sm border border-stone-200 focus:border-stone-900 outline-none transition-colors"
                       />
                     </div>
@@ -723,8 +612,7 @@ export default function BookingPage() {
                   <div className="relative">
                     <label className="text-[10px] uppercase font-bold text-stone-500 block mb-1">Guests</label>
                     <button
-                      onClick={() => !createdBooking && setShowGuestSelector(!showGuestSelector)}
-                      disabled={!!createdBooking}
+                      onClick={() => setShowGuestSelector(!showGuestSelector)}
                       className="w-full p-2 md:p-3 bg-stone-50 rounded-lg text-xs md:text-sm border border-stone-200 flex justify-between items-center"
                     >
                       <span>{guests.adults + guests.children} Guest{guests.adults + guests.children !== 1 ? 's' : ''}</span>
@@ -791,36 +679,26 @@ export default function BookingPage() {
                     </div>
                   )}
 
-                  {/* Action Buttons */}
-                  {!createdBooking ? (
-                    <button
-                      onClick={() => handleCreateBooking()}
-                      disabled={creatingBooking || !isAvailable || !checkInDate || !checkOutDate}
-                      className="w-full mt-4 py-3 md:py-4 bg-stone-900 text-white text-xs md:text-sm font-bold uppercase tracking-widest rounded-lg hover:bg-stone-800 transition-all disabled:bg-stone-300 disabled:cursor-not-allowed"
-                    >
-                      {creatingBooking ? (
-                        <span className="flex items-center justify-center gap-2">
-                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          Creating...
-                        </span>
-                      ) : (
-                        'Book Now'
-                      )}
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleProceedToPayment}
-                      className="w-full mt-4 py-3 md:py-4 bg-green-600 text-white text-xs md:text-sm font-bold uppercase tracking-widest rounded-lg hover:bg-green-700 transition-all flex items-center justify-center gap-2"
-                    >
-                      <CreditCard className="w-4 h-4" />
-                      Proceed to Payment
-                    </button>
-                  )}
+                  {/* Book Now Button */}
+                  <button
+                    onClick={handleCreateBooking}
+                    disabled={creatingBooking || !isAvailable || !checkInDate || !checkOutDate}
+                    className="w-full mt-4 py-3 md:py-4 bg-stone-900 text-white text-xs md:text-sm font-bold uppercase tracking-widest rounded-lg hover:bg-stone-800 transition-all disabled:bg-stone-300 disabled:cursor-not-allowed"
+                  >
+                    {creatingBooking ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Processing...
+                      </span>
+                    ) : (
+                      'Book Now'
+                    )}
+                  </button>
 
-                  {/* Login Message for non-authenticated users */}
-                  {!isAuthenticated && !createdBooking && (
+                  {/* Login Message */}
+                  {!isAuthenticated && (
                     <p className="text-[10px] text-amber-600 text-center mt-2">
-                      You'll need to log in after selecting your dates
+                      You'll be redirected to login to complete your booking
                     </p>
                   )}
 
