@@ -1,12 +1,13 @@
 // App.jsx - Main application component with Properties route
 import React, { useEffect } from "react";
-import { Routes, Route, useNavigate } from "react-router-dom";
+import { Routes, Route, useNavigate, Link } from "react-router-dom"; // Added Link here
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminRoute from "./components/AdminRoute";
 import PublicRoute from "./components/PublicRoute";
 import Header from "./components/Navbar";
 import UserLayout from "./components/UserLayout";
+import ScrollToTop from "./components/ScrollToTop"; // Import ScrollToTop component
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -23,8 +24,17 @@ import ListingOptimization from "./pages/ListingOptimization";
 import PhotographyVideography from "./pages/PhotographyVideography";
 import AdminConsultations from "./pages/AdminConsultations";
 import Properties from "./pages/Properties";
-import MyConsultations from "./pages/MyConsultations"; // NEW - User consultations page
-import NewConsultation from "./pages/NewConsultation"; // NEW - Create consultation page
+import MyConsultations from "./pages/MyConsultations";
+import NewConsultation from "./pages/NewConsultation";
+
+// NEW SERVICE PAGE IMPORTS
+import TermsAndPolicy from "./pages/TermsAndPolicy";
+import SocialMediaMarketing from "./pages/SocialMediaMarketing";
+import CarHireServices from "./pages/CarHireServices";
+import FullyFurnishedUnitsOnSale from "./pages/FullyFurnishedUnitsOnSale";
+import SafariTours from "./pages/SafariTours";
+import AirportSGRTransfers from "./pages/AirportSGRTransfers";
+import ChefServices from "./pages/ChefServices";
 
 // AuthSync component to handle auth state synchronization
 const AuthSync = () => {
@@ -55,13 +65,14 @@ const AuthSync = () => {
     };
   }, [refreshUserFromStorage, navigate]);
 
-  return null; // This component doesn't render anything
+  return null;
 };
 
 // Wrapper component to use hooks that need Auth context
 function AppContent() {
   return (
     <>
+      <ScrollToTop /> {/* Add ScrollToTop here - will run on every route change */}
       <AuthSync />
       <Routes>
         <Route path="/" element={
@@ -163,7 +174,7 @@ function AppContent() {
           </ProtectedRoute>
         } />
 
-        {/* NEW Consultation Routes */}
+        {/* Consultation Routes */}
         <Route path="/consultation/new" element={
           <ProtectedRoute>
             <UserLayout>
@@ -219,6 +230,124 @@ function AppContent() {
             <>
               <Header />
               <ListingOptimization />
+              <Footer />
+            </>
+          </PublicRoute>
+        } />
+
+        {/* NEW SERVICE ROUTES */}
+        
+        {/* Social Media Marketing */}
+        <Route path="/social-media-marketing" element={
+          <PublicRoute>
+            <>
+              <Header />
+              <SocialMediaMarketing />
+              <Footer />
+            </>
+          </PublicRoute>
+        } />
+
+        {/* Car Hire Services */}
+        <Route path="/car-hire" element={
+          <PublicRoute>
+            <>
+              <Header />
+              <CarHireServices />
+              <Footer />
+            </>
+          </PublicRoute>
+        } />
+
+        {/* Fully Furnished Units On Sale */}
+        <Route path="/fully-furnished-units" element={
+          <PublicRoute>
+            <>
+              <Header />
+              <FullyFurnishedUnitsOnSale />
+              <Footer />
+            </>
+          </PublicRoute>
+        } />
+
+        {/* Safari Tours */}
+        <Route path="/safari-tours" element={
+          <PublicRoute>
+            <>
+              <Header />
+              <SafariTours />
+              <Footer />
+            </>
+          </PublicRoute>
+        } />
+
+        {/* Airport & SGR Transfers */}
+        <Route path="/airport-transfers" element={
+          <PublicRoute>
+            <>
+              <Header />
+              <AirportSGRTransfers />
+              <Footer />
+            </>
+          </PublicRoute>
+        } />
+
+        {/* Chef Services */}
+        <Route path="/chef-services" element={
+          <PublicRoute>
+            <>
+              <Header />
+              <ChefServices />
+              <Footer />
+            </>
+          </PublicRoute>
+        } />
+
+        {/* Legal Pages */}
+        <Route path="/terms" element={
+          <PublicRoute>
+            <>
+              <Header />
+              <TermsAndPolicy />
+              <Footer />
+            </>
+          </PublicRoute>
+        } />
+
+        <Route path="/privacy" element={
+          <PublicRoute>
+            <>
+              <Header />
+              <TermsAndPolicy />
+              <Footer />
+            </>
+          </PublicRoute>
+        } />
+
+        <Route path="/cookie-policy" element={
+          <PublicRoute>
+            <>
+              <Header />
+              <TermsAndPolicy />
+              <Footer />
+            </>
+          </PublicRoute>
+        } />
+
+        {/* Catch-all for 404 - Optional */}
+        <Route path="*" element={
+          <PublicRoute>
+            <>
+              <Header />
+              <div className="min-h-screen flex items-center justify-center bg-[#f5f2ee] px-6">
+                <div className="text-center">
+                  <h1 className="text-6xl font-serif text-[#093A3E] mb-4">404</h1>
+                  <p className="text-stone-600 mb-8">Page not found</p>
+                  <Link to="/" className="inline-block px-6 py-3 bg-[#ED9B40] text-[#093A3E] font-bold uppercase tracking-widest text-xs hover:bg-white transition-colors">
+                    Return Home
+                  </Link>
+                </div>
+              </div>
               <Footer />
             </>
           </PublicRoute>

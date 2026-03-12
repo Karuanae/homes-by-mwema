@@ -1,4 +1,4 @@
-// Navbar.jsx - Updated with Reserve a Unit linking to Properties page
+// Navbar.jsx - Updated with consistent navbar across all pages
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavbarState } from '../hooks/useNavbarState';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -16,22 +16,27 @@ const COLORS = {
   charcoal: '#1C1917',
   gold: '#ED9B40',
   white: '#FFFFFF',
-  teal: '#093A3E', // Added teal color
+  teal: '#093A3E',
 };
 
 // Pages where the navbar shows ONLY the logo + back button (minimal mode)
 const MINIMAL_NAVBAR_ROUTES = [
-  '/login',
-  '/register',
   '/booking',
   '/payment',
   '/checkout',
 ];
 
-// "Other Services" submenu items
+// "Other Services" submenu items - EXPANDED WITH ALL SERVICE PAGES
 const OTHER_SERVICES = [
   { label: 'Photography & Videography', to: '/photography-videography' },
   { label: 'Listing Optimization', to: '/listing-optimization' },
+  { label: 'Social Media Marketing', to: '/social-media-marketing' },
+  { label: 'Car Hire Services', to: '/car-hire' },
+  { label: 'Fully Furnished Units', to: '/fully-furnished-units' },
+  { label: 'Safari Tours', to: '/safari-tours' },
+  { label: 'Airport & SGR Transfers', to: '/airport-transfers' },
+  { label: 'Chef Services', to: '/chef-services' },
+  { label: 'Terms & Policy', to: '/terms' },
 ];
 
 // Scroll spy component
@@ -208,7 +213,7 @@ const Navbar = () => {
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
-  // ─── MINIMAL NAVBAR (login, register, booking, payment) ───────────────────
+  // ─── MINIMAL NAVBAR (booking, payment, checkout) ───────────────────
   if (isMinimalRoute) {
     return (
       <>
@@ -307,7 +312,7 @@ const Navbar = () => {
           backgroundColor: isHomePage 
             ? (isAtTop ? 'rgba(9, 58, 62, 0)' : '#093A3E')
             : '#093A3E',
-          boxShadow: isHomePage && isAtTop 
+          boxShadow: (isHomePage && isAtTop) || (!isHomePage) 
             ? 'none' 
             : '0 2px 10px rgba(0, 0, 0, 0.1)',
         }}
@@ -342,7 +347,7 @@ const Navbar = () => {
                   to="/properties"
                   className="inline-flex items-center justify-center transition-all duration-300 px-4 py-1.5"
                   style={{
-                    backgroundColor: (isHomePage && isAtTop) ? 'rgba(237, 155, 64, 0.9)' : '#ED9B40',
+                    backgroundColor: !isHomePage ? '#ED9B40' : (isHomePage && isAtTop) ? 'rgba(237, 155, 64, 0.9)' : '#ED9B40',
                     backdropFilter: (isHomePage && isAtTop) ? 'blur(8px)' : 'none',
                   }}
                 >
@@ -359,7 +364,7 @@ const Navbar = () => {
                   <span 
                     className="font-sans text-[10px] uppercase tracking-[0.18em] font-medium transition-colors duration-300 whitespace-nowrap"
                     style={{
-                      color: (isHomePage && isAtTop) ? 'white' : '#ED9B40',
+                      color: !isHomePage ? '#ED9B40' : (isHomePage && isAtTop) ? 'white' : '#ED9B40',
                       textShadow: (isHomePage && isAtTop) ? '0 1px 3px rgba(0,0,0,0.3)' : 'none'
                     }}
                   >
@@ -368,7 +373,7 @@ const Navbar = () => {
                   <span 
                     className="absolute bottom-0 left-0 w-0 h-[1px] transition-all duration-500 group-hover:w-full"
                     style={{
-                      backgroundColor: (isHomePage && isAtTop) ? 'white' : '#ED9B40'
+                      backgroundColor: !isHomePage ? '#ED9B40' : (isHomePage && isAtTop) ? 'white' : '#ED9B40'
                     }}
                   />
                 </Link>
@@ -382,7 +387,7 @@ const Navbar = () => {
                     <span 
                       className="font-sans text-[10px] uppercase tracking-[0.18em] font-medium transition-colors duration-300 whitespace-nowrap"
                       style={{
-                        color: (isHomePage && isAtTop) ? 'white' : '#ED9B40',
+                        color: !isHomePage ? '#ED9B40' : (isHomePage && isAtTop) ? 'white' : '#ED9B40',
                         textShadow: (isHomePage && isAtTop) ? '0 1px 3px rgba(0,0,0,0.3)' : 'none'
                       }}
                     >
@@ -392,14 +397,14 @@ const Navbar = () => {
                       size={10}
                       strokeWidth={2}
                       style={{
-                        color: (isHomePage && isAtTop) ? 'white' : '#ED9B40'
+                        color: !isHomePage ? '#ED9B40' : (isHomePage && isAtTop) ? 'white' : '#ED9B40'
                       }}
                       className={`transition-transform duration-300 ${otherServicesOpen ? 'rotate-180' : ''}`}
                     />
                     <span 
                       className="absolute bottom-0 left-0 w-0 h-[1px] transition-all duration-500 group-hover:w-full"
                       style={{
-                        backgroundColor: (isHomePage && isAtTop) ? 'white' : '#ED9B40'
+                        backgroundColor: !isHomePage ? '#ED9B40' : (isHomePage && isAtTop) ? 'white' : '#ED9B40'
                       }}
                     />
                   </button>
@@ -411,19 +416,21 @@ const Navbar = () => {
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 8 }}
                         transition={{ duration: 0.25, ease: 'easeOut' }}
-                        className="absolute left-0 top-full mt-2 w-56 bg-[#F5F2EE] shadow-[0_12px_40px_rgba(0,0,0,0.12)] border border-[#EBE5DE] z-50"
+                        className="absolute left-0 top-full mt-2 w-64 bg-[#F5F2EE] shadow-[0_12px_40px_rgba(0,0,0,0.12)] border border-[#EBE5DE] z-50"
                       >
-                        {OTHER_SERVICES.map((item) => (
-                          <Link
-                            key={item.to}
-                            to={item.to}
-                            onClick={() => setOtherServicesOpen(false)}
-                            className="flex items-center justify-between px-4 py-3 text-[9px] uppercase tracking-[0.18em] font-medium text-[#093A3E] hover:bg-white hover:text-[#ED9B40] transition-colors duration-200 group border-b border-[#EBE5DE] last:border-0"
-                          >
-                            {item.label}
-                            <ChevronRight size={10} className="opacity-0 group-hover:opacity-100 text-[#ED9B40] transition-opacity" />
-                          </Link>
-                        ))}
+                        <div className="max-h-96 overflow-y-auto">
+                          {OTHER_SERVICES.map((item) => (
+                            <Link
+                              key={item.to}
+                              to={item.to}
+                              onClick={() => setOtherServicesOpen(false)}
+                              className="flex items-center justify-between px-4 py-3 text-[9px] uppercase tracking-[0.18em] font-medium text-[#093A3E] hover:bg-white hover:text-[#ED9B40] transition-colors duration-200 group border-b border-[#EBE5DE] last:border-0"
+                            >
+                              {item.label}
+                              <ChevronRight size={10} className="opacity-0 group-hover:opacity-100 text-[#ED9B40] transition-opacity" />
+                            </Link>
+                          ))}
+                        </div>
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -437,7 +444,7 @@ const Navbar = () => {
                   <span 
                     className="font-sans text-[10px] uppercase tracking-[0.18em] font-medium whitespace-nowrap"
                     style={{
-                      color: (isHomePage && isAtTop) ? 'white' : '#ED9B40',
+                      color: !isHomePage ? '#ED9B40' : (isHomePage && isAtTop) ? 'white' : '#ED9B40',
                       textShadow: (isHomePage && isAtTop) ? '0 1px 3px rgba(0,0,0,0.3)' : 'none'
                     }}
                   >
@@ -446,7 +453,7 @@ const Navbar = () => {
                   <span 
                     className="absolute -bottom-0.5 left-0 w-0 h-[1px] transition-all duration-500 group-hover:w-full"
                     style={{
-                      backgroundColor: (isHomePage && isAtTop) ? 'white' : '#ED9B40'
+                      backgroundColor: !isHomePage ? '#ED9B40' : (isHomePage && isAtTop) ? 'white' : '#ED9B40'
                     }}
                   />
                 </button>
@@ -459,7 +466,7 @@ const Navbar = () => {
                     onClick={() => setNotifPanelOpen(prev => !prev)}
                     className="relative p-1.5 transition-opacity hover:opacity-60"
                     style={{
-                      color: (isHomePage && isAtTop) ? 'white' : '#ED9B40'
+                      color: !isHomePage ? '#ED9B40' : (isHomePage && isAtTop) ? 'white' : '#ED9B40'
                     }}
                     title={notifications.length > 0 ? `${notifications.length} notification${notifications.length > 1 ? 's' : ''}` : 'No new notifications'}
                   >
@@ -471,7 +478,7 @@ const Navbar = () => {
                     )}
                   </button>
 
-                  {/* Notification Popup Panel */}
+                  {/* Notification Popup Panel - same as before */}
                   <AnimatePresence>
                     {notifPanelOpen && (
                       <motion.div
@@ -561,19 +568,21 @@ const Navbar = () => {
                   onClick={() => setIsMenuOpen(!isMenuOpen)}
                   className="flex items-center transition-colors duration-300"
                   style={{
-                    color: (isHomePage && isAtTop) ? 'white' : '#ED9B40'
+                    color: !isHomePage ? '#ED9B40' : (isHomePage && isAtTop) ? 'white' : '#ED9B40'
                   }}
                 >
                   <div className={`p-1.5 border rounded-full transition-all duration-300 ${
                     isMenuOpen 
-                      ? (isHomePage && isAtTop) ? 'border-white rotate-90' : 'border-[#ED9B40] rotate-90' 
+                      ? !isHomePage 
+                        ? 'border-[#ED9B40] rotate-90' 
+                        : (isHomePage && isAtTop) ? 'border-white rotate-90' : 'border-[#ED9B40] rotate-90'
                       : 'border-transparent hover:border-white/50'
                   }`}>
                     {isMenuOpen ? <X size={16} strokeWidth={1} /> : <Menu size={16} strokeWidth={1} />}
                   </div>
                 </button>
 
-                {/* --- DROPDOWN MENU --- */}
+                {/* --- DROPDOWN MENU - same as before --- */}
                 <AnimatePresence>
                   {isMenuOpen && (
                     <motion.div

@@ -516,24 +516,24 @@ export default function Home() {
       </section>
 
       {/* ═══════════════════════════════════════════════════════
-          EDITORIAL FEATURES - UPDATED WITH ALL CONTENT TEXT IN BLACK
+          EDITORIAL FEATURES - ENHANCED TITLE INTENSITY WITH LIGHTER TEAL
       ═══════════════════════════════════════════════════════ */}
       <section className="py-24 px-6 bg-[#EBE5DE] relative z-10">
         <div className="max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
           <div>
-            <h2 className="text-4xl md:text-5xl text-[#093A3E] mb-6 leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>
-              The Standard of <br /><i>Exceptional</i> Living.
+            <h2 className="text-5xl md:text-6xl text-[#0F4C55] mb-6 leading-tight font-bold" style={{ fontFamily: "'Playfair Display', serif" }}>
+              The Standard of <br /><i className="font-bold italic">Exceptional</i> Living.
             </h2>
-            <p className="text-black mb-8 max-w-md font-light leading-relaxed">
+            <p className="text-[#2C2C2C] mb-8 max-w-md font-medium leading-relaxed text-base">
               We don't just offer beds; we curate environments. Each home is selected for its architectural merit, location, and ability to provide a serene escape from the mundane.
             </p>
             <div className="space-y-8">
               {premiumFeatures.map((f) => (
                 <div key={f.id} className="flex gap-6 items-start group">
-                  <span className="text-[#093A3E] font-serif text-2xl group-hover:text-black transition-colors">{f.number}</span>
+                  <span className="text-[#0F4C55] font-serif text-3xl font-bold group-hover:text-black transition-colors">{f.number}</span>
                   <div>
-                    <h4 className="text-[#093A3E] font-medium uppercase text-xs tracking-widest mb-2">{f.title}</h4>
-                    <p className="text-black text-sm font-light leading-relaxed max-w-sm">
+                    <h4 className="text-[#0F4C55] font-bold uppercase text-sm tracking-widest mb-2">{f.title}</h4>
+                    <p className="text-[#2C2C2C] font-medium text-base leading-relaxed max-w-sm">
                       {f.description}
                     </p>
                   </div>
