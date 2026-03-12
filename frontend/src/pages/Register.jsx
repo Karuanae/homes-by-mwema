@@ -148,8 +148,9 @@ export default function Register() {
         <div className="absolute top-0 left-0 right-0 h-1 bg-stone-900" />
 
         <div className="text-center mb-10">
-          <h2 className="text-3xl font-serif italic text-stone-900 mb-3">Create Account</h2>
-          <p className="text-xs uppercase tracking-widest text-stone-400">Join the Collective</p>
+          <p className="text-xs uppercase tracking-widest text-stone-400">Homes By Mwema</p>
+          <h2 className="text-3xl font-serif italic text-stone-900 mb-3">Register</h2>
+          
         </div>
 
         {error && (
@@ -177,7 +178,6 @@ export default function Register() {
               onChange={handleChange}
               required
               className="w-full px-4 py-3 border border-stone-200 rounded bg-stone-50 focus:outline-none focus:border-stone-400 text-sm"
-              placeholder="John Doe"
             />
           </div>
 
@@ -194,7 +194,6 @@ export default function Register() {
               required
               autoComplete="email"
               className="w-full px-4 py-3 border border-stone-200 rounded bg-stone-50 focus:outline-none focus:border-stone-400 text-sm"
-              placeholder="you@email.com"
             />
           </div>
 
@@ -209,51 +208,52 @@ export default function Register() {
               value={formData.phone}
               onChange={handleChange}
               className="w-full px-4 py-3 border border-stone-200 rounded bg-stone-50 focus:outline-none focus:border-stone-400 text-sm"
-              placeholder="0712345678"
             />
           </div>
 
-          <div className="relative">
+          <div>
             <label htmlFor="password" className="block text-xs uppercase tracking-widest text-stone-500 mb-2">
               Password
             </label>
-            <input
-              type={showPassword ? 'text' : 'password'}
-              id="password"
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              required
-              autoComplete="new-password"
-              className="w-full px-4 py-3 border border-stone-200 rounded bg-stone-50 focus:outline-none focus:border-stone-400 text-sm pr-10"
-              placeholder="Password"
-            />
-            <button
-              type="button"
-              tabIndex={-1}
-              className="absolute right-3 top-9 -translate-y-1/2 text-stone-400 hover:text-stone-900"
-              onClick={() => setShowPassword((v) => !v)}
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
-            >
-              {showPassword ? <FaEyeSlash /> : <FaEye />}
-            </button>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                id="password"
+                name="password"
+                value={formData.password}
+                onChange={handleChange}
+                required
+                autoComplete="new-password"
+                className="w-full px-4 py-3 border border-stone-200 rounded bg-stone-50 focus:outline-none focus:border-stone-400 text-sm pr-10"
+              />
+              <button
+                type="button"
+                tabIndex={-1}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-900"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <FaEyeSlash /> : <FaEye />}
+              </button>
+            </div>
           </div>
 
-          <div className="relative">
+          <div>
             <label htmlFor="confirmPassword" className="block text-xs uppercase tracking-widest text-stone-500 mb-2">
               Confirm Password
             </label>
-            <input
-              type={showPassword ? 'text' : 'password'}
-              id="confirmPassword"
-              name="confirmPassword"
-              value={formData.confirmPassword}
-              onChange={handleChange}
-              required
-              autoComplete="new-password"
-              className="w-full px-4 py-3 border border-stone-200 rounded bg-stone-50 focus:outline-none focus:border-stone-400 text-sm pr-10"
-              placeholder="Confirm Password"
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                id="confirmPassword"
+                name="confirmPassword"
+                value={formData.confirmPassword}
+                onChange={handleChange}
+                required
+                autoComplete="new-password"
+                className="w-full px-4 py-3 border border-stone-200 rounded bg-stone-50 focus:outline-none focus:border-stone-400 text-sm pr-10"
+              />
+            </div>
           </div>
 
           <button
