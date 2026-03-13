@@ -1,4 +1,4 @@
-// admindashboard.jsx - WITH FIXED CONSULTATIONS TAB and Mobile Sidebar
+// pages/AdminDashboard.jsx
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -6,18 +6,16 @@ import {
   FaSignOutAlt, FaPlus, FaTrash, FaEdit, FaSync, FaEye,
   FaSearch, FaBed, FaBath, FaRulerCombined, FaMapMarkerAlt,
   FaUpload, FaCamera, FaComments, FaUser, FaClock,
-  FaBell, FaTimes, FaPhone, FaEnvelopeOpen, FaCalendarCheck,
-  FaClipboardList, FaCheckCircle, FaHourglassHalf, FaTimesCircle,
-  FaBars, FaChevronDown,
+  FaBell, FaTimes, FaPhone, FaEnvelopeOpen,
+  FaClipboardList, FaBars,
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 import api, { API_BASE_URL, IMAGE_BASE_URL } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import ChatWindow from "../components/Chat/ChatWindow";
 import socketService from "../services/socketService";
-import ConsultationsManager from '../components/admin/ConsultationsManager';
-import AdminBookingsTab from '../pages/AdminBookingsTab'; 
-
+import AdminConsultations from '../pages/AdminConsultations';
+import AdminBookingsTab from '../pages/AdminBookingsTab';
 
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -27,401 +25,6 @@ function fmtDate(raw) {
   if (!raw) return "—";
   const d = new Date(raw);
   return isNaN(d) ? raw : `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
-}
-
-function fmtTime(hour, minute) {
-  if (hour == null) return "TBD";
-  const h = Number(hour);
-  const m = String(minute || 0).padStart(2, "0");
-  return `${String(h).padStart(2, "0")}:${m}`;
-}
-
-// ─── Status badge ─────────────────────────────────────────────────────────────
-const STATUS_MAP = {
-  pending:   { cls: "text-amber-600 bg-amber-50 border-amber-200",   icon: <FaHourglassHalf className="text-[10px]"/>, label: "Pending"   },
-  confirmed: { cls: "text-green-700 bg-green-50 border-green-200",   icon: <FaCheckCircle   className="text-[10px]"/>, label: "Confirmed" },
-  cancelled: { cls: "text-red-600   bg-red-50   border-red-200",     icon: <FaTimesCircle   className="text-[10px]"/>, label: "Cancelled" },
-  completed: { cls: "text-stone-600 bg-stone-50 border-stone-200",   icon: <FaCheckCircle   className="text-[10px]"/>, label: "Completed" },
-};
-
-const ConsultStatusBadge = ({ status }) => {
-  const s = STATUS_MAP[status] || STATUS_MAP.pending;
-  return (
-    <span className={`inline-flex items-center gap-1 text-[10px] uppercase tracking-widest px-2 py-1 border rounded-full font-medium ${s.cls}`}>
-      {s.icon} {s.label}
-    </span>
-  );
-};
-
-// ─── Consultation Detail Modal ────────────────────────────────────────────────
-function ConsultDetailModal({ consult, onClose, onStatusChange, updating }) {
-  if (!consult) return null;
-
-  const ACTIONS = [
-    { label: "Confirm",  nextStatus: "confirmed", show: !["confirmed","completed","cancelled"].includes(consult.status), color: "bg-green-700 hover:bg-green-800 text-white" },
-    { label: "Complete", nextStatus: "completed", show: consult.status === "confirmed",                                   color: "bg-stone-700 hover:bg-stone-900 text-white" },
-    { label: "Cancel",   nextStatus: "cancelled", show: !["cancelled","completed"].includes(consult.status),              color: "border border-red-200 text-red-600 hover:bg-red-50" },
-  ].filter(a => a.show);
-
-  return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-        onClick={onClose}
-      >
-        <motion.div
-          initial={{ scale: 0.96, y: 16 }}
-          animate={{ scale: 1, y: 0 }}
-          exit={{ scale: 0.96, y: 16 }}
-          className="bg-white w-full max-w-lg shadow-2xl relative"
-          onClick={e => e.stopPropagation()}
-        >
-          <div className="h-1 bg-[#1C2321] w-full" />
-
-          <div className="p-8">
-            {/* Header */}
-            <div className="flex justify-between items-start mb-6">
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5">
-                  Consultation #{consult.id}
-                </p>
-                <ConsultStatusBadge status={consult.status} />
-              </div>
-              <button onClick={onClose} className="text-stone-400 hover:text-stone-700 transition-colors p-1">
-                <FaTimes />
-              </button>
-            </div>
-
-            {/* Client section */}
-            <div className="bg-stone-50 border border-stone-100 p-5 mb-6 space-y-3">
-              <p className="text-[10px] uppercase tracking-widest text-stone-400 mb-3">Client Information</p>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-[#1C2321] text-white flex items-center justify-center font-serif text-sm flex-shrink-0">
-                  {(consult.user_name || consult.user_email || "?").charAt(0).toUpperCase()}
-                </div>
-                <div>
-                  <p className="font-serif text-[#1C2321] text-base">
-                    {consult.user_name || <span className="italic text-stone-400">Name not provided</span>}
-                  </p>
-                  {consult.user_email && (
-                    <p className="text-xs text-stone-500 flex items-center gap-1 mt-0.5">
-                      <FaEnvelopeOpen className="text-[10px]" /> {consult.user_email}
-                    </p>
-                  )}
-                  {consult.user_phone && (
-                    <p className="text-xs text-stone-500 flex items-center gap-1 mt-0.5">
-                      <FaPhone className="text-[10px]" /> {consult.user_phone}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Schedule details */}
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <div className="bg-stone-50 border border-stone-100 p-4">
-                <p className="text-[10px] uppercase tracking-widest text-stone-400 mb-1">Date</p>
-                <p className="font-serif text-[#1C2321]">{fmtDate(consult.date)}</p>
-              </div>
-              <div className="bg-stone-50 border border-stone-100 p-4">
-                <p className="text-[10px] uppercase tracking-widest text-stone-400 mb-1">Time</p>
-                <p className="font-serif text-[#1C2321]">{fmtTime(consult.hour, consult.minute)}</p>
-              </div>
-            </div>
-
-            {consult.notes && (
-              <div className="mb-6">
-                <p className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Client Notes</p>
-                <p className="text-stone-700 text-sm font-light leading-relaxed border-l-2 border-stone-200 pl-4">
-                  {consult.notes}
-                </p>
-              </div>
-            )}
-
-            {/* Action buttons */}
-            {ACTIONS.length > 0 && (
-              <div className="pt-5 border-t border-stone-100 flex flex-wrap gap-3">
-                {ACTIONS.map(a => (
-                  <button
-                    key={a.nextStatus}
-                    onClick={() => onStatusChange(consult.id, a.nextStatus)}
-                    disabled={updating}
-                    className={`flex-1 py-2.5 text-[10px] uppercase tracking-widest transition-colors disabled:opacity-50 ${a.color}`}
-                  >
-                    {updating ? "Updating…" : a.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
-  );
-}
-
-// ─── Consultations Tab ────────────────────────────────────────────────────────
-function ConsultationsTab({ consultations, loading, error, onRefresh, onStatusChange, updatingId }) {
-  const [filter, setFilter] = useState("all");
-  const [selected, setSelected] = useState(null);
-  const [search, setSearch] = useState("");
-
-  // Keep modal in sync if status changes while it's open
-  useEffect(() => {
-    if (selected) {
-      const updated = consultations.find(c => c.id === selected.id);
-      if (updated) setSelected(updated);
-    }
-  }, [consultations]);
-
-  const counts = consultations.reduce((acc, c) => {
-    acc[c.status] = (acc[c.status] || 0) + 1;
-    return acc;
-  }, {});
-
-  const FILTERS = [
-    { key: "all",       label: "All",       count: consultations.length },
-    { key: "pending",   label: "Pending",   count: counts.pending   || 0 },
-    { key: "confirmed", label: "Confirmed", count: counts.confirmed || 0 },
-    { key: "completed", label: "Completed", count: counts.completed || 0 },
-    { key: "cancelled", label: "Cancelled", count: counts.cancelled || 0 },
-  ];
-
-  const visible = consultations
-    .filter(c => filter === "all" || c.status === filter)
-    .filter(c => {
-      if (!search.trim()) return true;
-      const q = search.toLowerCase();
-      return (
-        (c.user_name  || "").toLowerCase().includes(q) ||
-        (c.user_email || "").toLowerCase().includes(q) ||
-        String(c.id).includes(q)
-      );
-    });
-
-  const handleStatusChange = async (id, status) => {
-    await onStatusChange(id, status);
-    // Refresh selected modal to reflect new status
-    const updated = consultations.find(c => c.id === id);
-    if (updated && selected?.id === id) setSelected({ ...updated, status });
-  };
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4 }}
-      className="space-y-6"
-    >
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: "Total",     value: consultations.length,    accent: "border-l-stone-400"  },
-          { label: "Pending",   value: counts.pending   || 0,   accent: "border-l-amber-400"  },
-          { label: "Confirmed", value: counts.confirmed || 0,   accent: "border-l-green-500"  },
-          { label: "Completed", value: counts.completed || 0,   accent: "border-l-stone-300"  },
-        ].map((s, i) => (
-          <div key={i} className={`bg-white p-5 border border-stone-100 border-l-4 ${s.accent} shadow-sm`}>
-            <p className="text-[10px] uppercase tracking-widest text-stone-500 mb-2">{s.label}</p>
-            <p className="text-3xl font-serif text-[#1C2321]">{s.value}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Toolbar */}
-      <div className="bg-white border border-stone-100 shadow-sm">
-        <div className="bg-[#1C2321] text-white px-6 md:px-8 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <FaClipboardList className="text-[#D4AF37] text-lg" />
-            <div>
-              <h3 className="font-serif text-lg md:text-xl">Consultation Requests</h3>
-              <p className="text-stone-400 text-[10px] uppercase tracking-widest">
-                {visible.length} of {consultations.length} shown
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onRefresh}
-            className="text-stone-400 hover:text-white transition-colors p-2"
-            title="Refresh"
-          >
-            <FaSync className={loading ? "animate-spin" : ""} />
-          </button>
-        </div>
-
-        {/* Search + filter bar */}
-        <div className="px-6 py-4 border-b border-stone-100 flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-          <div className="relative flex-1 max-w-xs">
-            <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-300 text-xs" />
-            <input
-              type="text"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search by name or email…"
-              className="w-full pl-8 pr-4 py-2 text-sm border border-stone-200 focus:border-[#1C2321] focus:outline-none bg-stone-50"
-            />
-          </div>
-          <div className="flex gap-1 flex-wrap">
-            {FILTERS.map(f => (
-              <button
-                key={f.key}
-                onClick={() => setFilter(f.key)}
-                className={`px-3 py-1.5 text-[10px] uppercase tracking-widest border transition-colors ${
-                  filter === f.key
-                    ? "bg-[#1C2321] text-white border-[#1C2321]"
-                    : "bg-white text-stone-500 border-stone-200 hover:border-[#1C2321]"
-                }`}
-              >
-                {f.label} {f.count > 0 ? `(${f.count})` : ""}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Table body */}
-        {loading ? (
-          <div className="p-20 text-center">
-            <div className="w-8 h-8 border-2 border-stone-200 border-t-stone-600 rounded-full animate-spin mx-auto mb-4" />
-            <p className="font-serif text-stone-400 italic">Loading consultations…</p>
-          </div>
-        ) : error ? (
-          <div className="p-20 text-center">
-            <p className="text-red-500 mb-4">{error}</p>
-            <button onClick={onRefresh} className="text-xs uppercase tracking-widest border-b border-stone-900 pb-1 hover:text-stone-600">
-              Retry
-            </button>
-          </div>
-        ) : visible.length === 0 ? (
-          <div className="p-20 text-center">
-            <FaCalendarCheck className="text-4xl text-stone-200 mx-auto mb-4" />
-            <p className="font-serif text-stone-400 italic">
-              {search ? "No results match your search." : "No consultation requests yet."}
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[700px]">
-              <thead>
-                <tr className="border-b border-stone-200 bg-stone-50">
-                  {["#", "Client", "Date & Time", "Notes", "Status", "Actions"].map(h => (
-                    <th key={h} className="py-4 px-4 md:px-6 text-[10px] uppercase tracking-widest text-stone-500 font-medium">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-stone-100">
-                {visible.map(c => (
-                  <tr
-                    key={c.id}
-                    className="hover:bg-[#F9F8F6] transition-colors group cursor-pointer"
-                    onClick={() => setSelected(c)}
-                  >
-                    {/* ID */}
-                    <td className="py-4 md:py-5 px-4 md:px-6 text-stone-400 text-sm font-light">
-                      #{c.id}
-                    </td>
-
-                    {/* Client — now shows name + email */}
-                    <td className="py-4 md:py-5 px-4 md:px-6">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-full bg-[#1C2321] text-white flex items-center justify-center text-xs font-serif flex-shrink-0">
-                          {(c.user_name || c.user_email || "?").charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <p className="font-serif text-[#1C2321] text-sm leading-tight">
-                            {c.user_name || <span className="italic text-stone-400">Unknown</span>}
-                          </p>
-                          {c.user_email && (
-                            <p className="text-xs text-stone-400 mt-0.5">{c.user_email}</p>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-
-                    {/* Date & Time */}
-                    <td className="py-4 md:py-5 px-4 md:px-6">
-                      <p className="text-sm text-stone-700">{fmtDate(c.date)}</p>
-                      <p className="text-xs text-stone-400 mt-0.5">{fmtTime(c.hour, c.minute)}</p>
-                    </td>
-
-                    {/* Notes */}
-                    <td className="py-4 md:py-5 px-4 md:px-6 max-w-[180px]">
-                      <p className="text-sm text-stone-600 font-light truncate">
-                        {c.notes || <span className="text-stone-300 italic">No notes</span>}
-                      </p>
-                    </td>
-
-                    {/* Status */}
-                    <td className="py-4 md:py-5 px-4 md:px-6">
-                      <ConsultStatusBadge status={c.status} />
-                    </td>
-
-                    {/* Quick-action buttons — stop propagation so row click doesn't fire */}
-                    <td
-                      className="py-4 md:py-5 px-4 md:px-6"
-                      onClick={e => e.stopPropagation()}
-                    >
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {!["confirmed","completed","cancelled"].includes(c.status) && (
-                          <button
-                            onClick={() => onStatusChange(c.id, "confirmed")}
-                            disabled={updatingId === c.id}
-                            className="text-[10px] uppercase tracking-widest px-2 py-1 bg-green-700 text-white hover:bg-green-800 transition-colors disabled:opacity-50 rounded"
-                          >
-                            {updatingId === c.id ? "…" : "Confirm"}
-                          </button>
-                        )}
-                        {c.status === "confirmed" && (
-                          <button
-                            onClick={() => onStatusChange(c.id, "completed")}
-                            disabled={updatingId === c.id}
-                            className="text-[10px] uppercase tracking-widest px-2 py-1 bg-stone-700 text-white hover:bg-stone-900 transition-colors disabled:opacity-50 rounded"
-                          >
-                            {updatingId === c.id ? "…" : "Complete"}
-                          </button>
-                        )}
-                        {!["cancelled","completed"].includes(c.status) && (
-                          <button
-                            onClick={() => onStatusChange(c.id, "cancelled")}
-                            disabled={updatingId === c.id}
-                            className="text-[10px] uppercase tracking-widest px-2 py-1 border border-red-200 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 rounded"
-                          >
-                            {updatingId === c.id ? "…" : "Cancel"}
-                          </button>
-                        )}
-                        {/* Detail button */}
-                        <button
-                          onClick={() => setSelected(c)}
-                          className="text-[10px] uppercase tracking-widest px-2 py-1 border border-stone-200 text-stone-500 hover:bg-stone-50 rounded"
-                          title="View full details"
-                        >
-                          <FaEye className="text-[10px]" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Detail modal */}
-      {selected && (
-        <ConsultDetailModal
-          consult={selected}
-          onClose={() => setSelected(null)}
-          onStatusChange={handleStatusChange}
-          updating={updatingId === selected.id}
-        />
-      )}
-    </motion.div>
-  );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -442,12 +45,13 @@ export default function AdminDashboard() {
   const [bookings,      setBookings]      = useState([]);
   const [customers,     setCustomers]     = useState([]);
   const [messages,      setMessages]      = useState([]);
-  const [consultations, setConsultations] = useState([]);
+
+  // Consultation counts for the dashboard summary widget only
+  const [consultSummary, setConsultSummary] = useState({
+    total: 0, pending: 0, confirmed: 0, completed: 0,
+  });
 
   const [loadingMessages, setLoadingMessages] = useState(false);
-  const [loadingConsults, setLoadingConsults] = useState(false);
-  const [consultsError,   setConsultsError]   = useState("");
-  const [updatingConsult, setUpdatingConsult] = useState(null);
 
   const [selectedChat,    setSelectedChat]    = useState(null);
   const [unreadCount,     setUnreadCount]     = useState(0);
@@ -496,6 +100,7 @@ export default function AdminDashboard() {
   // ── Init ─────────────────────────────────────────────────────────────────────
   useEffect(() => {
     fetchStats(); fetchProperties(); fetchBookings(); fetchCustomers();
+    fetchConsultSummary();
     if (user?.role === "admin") initializeSocket();
     return () => {
       socketService.off("socket_connected");
@@ -505,8 +110,7 @@ export default function AdminDashboard() {
   }, [user]);
 
   useEffect(() => {
-    if (activeTab === "messages")      fetchMessages();
-    if (activeTab === "consultations") fetchConsultations();
+    if (activeTab === "messages") fetchMessages();
   }, [activeTab]);
 
   useEffect(() => () => cleanupBlobUrls(), [cleanupBlobUrls]);
@@ -557,39 +161,18 @@ export default function AdminDashboard() {
     } catch(e){} finally { setLoadingMessages(false); }
   };
 
-  // ── Consultations fetcher ─────────────────────────────────────────────────────
-  const fetchConsultations = async () => {
-    setLoadingConsults(true);
-    setConsultsError("");
+  // Lightweight summary for the dashboard widget only — doesn't need full list
+  const fetchConsultSummary = async () => {
     try {
-      const res = await api.consultations.list();
-      setConsultations(res.data || []);
-    } catch (e) {
-      console.error("Consultations fetch error:", e);
-      setConsultsError("Failed to load consultations. Please try again.");
-    } finally {
-      setLoadingConsults(false);
-    }
-  };
-
-  // ── Status update — optimistic + rollback ─────────────────────────────────────
-  const updateConsultStatus = async (id, newStatus) => {
-    // Optimistic update
-    const prev = consultations;
-    setConsultations(c => c.map(x => x.id === id ? { ...x, status: newStatus } : x));
-    setUpdatingConsult(id);
-    try {
-      await api.consultations.updateStatus(id, newStatus);
-      // Re-fetch to get any server-side enrichment
-      await fetchConsultations();
-    } catch (e) {
-      console.error("Status update error:", e);
-      // Rollback
-      setConsultations(prev);
-      alert(e.response?.data?.error || "Could not update status. Please try again.");
-    } finally {
-      setUpdatingConsult(null);
-    }
+      const res = await api.consultations.adminList();
+      const list = res.data || [];
+      setConsultSummary({
+        total:     list.length,
+        pending:   list.filter(c => c.status === "pending").length,
+        confirmed: list.filter(c => c.status === "confirmed").length,
+        completed: list.filter(c => c.status === "completed").length,
+      });
+    } catch(e){}
   };
 
   // ── Logout ────────────────────────────────────────────────────────────────────
@@ -660,12 +243,12 @@ export default function AdminDashboard() {
       amenities: [], rooms: 1, bathrooms: 1, maxGuests: 2, area: "" });
   };
 
-  const handleCoverImageUpload  = (e) => {
+  const handleCoverImageUpload = (e) => {
     const file = e.target.files[0]; if (!file) return;
     if (newProperty.coverPreview?.startsWith("blob:")) URL.revokeObjectURL(newProperty.coverPreview);
     setNewProperty({ ...newProperty, coverImage: file, coverPreview: URL.createObjectURL(file) });
   };
-  const handleGalleryUpload     = (e) => {
+  const handleGalleryUpload = (e) => {
     const files = Array.from(e.target.files); if (!files.length) return;
     setNewProperty({ ...newProperty, galleryImages: [...newProperty.galleryImages, ...files],
       galleryPreviews: [...newProperty.galleryPreviews, ...files.map(f => URL.createObjectURL(f))] });
@@ -681,16 +264,16 @@ export default function AdminDashboard() {
     if (newProperty.coverPreview?.startsWith("blob:")) URL.revokeObjectURL(newProperty.coverPreview);
     setNewProperty({ ...newProperty, coverImage: null, coverPreview: "" });
   };
-  const toggleAmenity     = (v) => setNewProperty({ ...newProperty,
+  const toggleAmenity    = (v) => setNewProperty({ ...newProperty,
     amenities: newProperty.amenities.includes(v) ? newProperty.amenities.filter(a=>a!==v) : [...newProperty.amenities, v] });
-  const addCustomAmenity  = () => {
+  const addCustomAmenity = () => {
     const inp = document.getElementById("custom-amenity-input");
     if (inp?.value.trim() && !newProperty.amenities.includes(inp.value.trim())) {
       setNewProperty({ ...newProperty, amenities: [...newProperty.amenities, inp.value.trim()] });
       inp.value = "";
     }
   };
-  const removeAmenity     = (i) => { const a = [...newProperty.amenities]; a.splice(i,1); setNewProperty({ ...newProperty, amenities: a }); };
+  const removeAmenity    = (i) => { const a = [...newProperty.amenities]; a.splice(i,1); setNewProperty({ ...newProperty, amenities: a }); };
 
   // ── Client handlers ───────────────────────────────────────────────────────────
   const handleViewClient = async (client) => {
@@ -740,13 +323,6 @@ export default function AdminDashboard() {
     if (p.cover_image) return p.cover_image.startsWith("http") ? p.cover_image : `${IMAGE_BASE_URL}${p.cover_image}`;
     if (p.images?.length) { const u=p.images[0]; return u.startsWith("http") ? u : `${IMAGE_BASE_URL}${u}`; }
     return "/default-property.jpg";
-  };
-
-  const consultCounts = {
-    total:     consultations.length,
-    pending:   consultations.filter(c => c.status === "pending").length,
-    confirmed: consultations.filter(c => c.status === "confirmed").length,
-    completed: consultations.filter(c => c.status === "completed").length,
   };
 
   // ── Mobile menu ───────────────────────────────────────────────────────────────
@@ -919,14 +495,15 @@ export default function AdminDashboard() {
                   Chart integration requires visualization library
                 </div>
               </div>
+              {/* Consultation summary widget */}
               <div className="bg-white p-6 md:p-8 border border-stone-100 shadow-sm">
                 <h3 className="font-serif text-xl text-[#1C2321] mb-6 border-b border-stone-100 pb-4">Consultations</h3>
                 <div className="space-y-4">
                   {[
-                    { label:"Total Requests", value: consultCounts.total,     color:"text-stone-800" },
-                    { label:"Pending",        value: consultCounts.pending,   color:"text-amber-600"  },
-                    { label:"Confirmed",      value: consultCounts.confirmed, color:"text-green-700"  },
-                    { label:"Completed",      value: consultCounts.completed, color:"text-stone-500"  },
+                    { label:"Total Requests", value: consultSummary.total,     color:"text-stone-800" },
+                    { label:"Pending",        value: consultSummary.pending,   color:"text-amber-600" },
+                    { label:"Confirmed",      value: consultSummary.confirmed, color:"text-green-700" },
+                    { label:"Completed",      value: consultSummary.completed, color:"text-stone-500" },
                   ].map((item,i) => (
                     <div key={i} className="flex items-center justify-between pb-3 border-b border-stone-50 last:border-0">
                       <p className="text-sm text-stone-600">{item.label}</p>
@@ -988,16 +565,12 @@ export default function AdminDashboard() {
           </div>
         )}
 
-       {/* ══ BOOKINGS ══ */}
-{activeTab === "bookings" && (
-  <motion.div
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.4 }}
-  >
-    <AdminBookingsTab />
-  </motion.div>
-)}
+        {/* ══ BOOKINGS ══ */}
+        {activeTab === "bookings" && (
+          <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} transition={{duration:0.4}}>
+            <AdminBookingsTab />
+          </motion.div>
+        )}
 
         {/* ══ CLIENTS ══ */}
         {activeTab === "customers" && (
@@ -1095,9 +668,8 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {activeTab === "consultations" && (
-  <ConsultationsManager />
-)}
+        {/* ══ CONSULTATIONS — delegated entirely to AdminConsultations ══ */}
+        {activeTab === "consultations" && <AdminConsultations />}
 
         {/* ══ MESSAGES ══ */}
         {activeTab === "messages" && (

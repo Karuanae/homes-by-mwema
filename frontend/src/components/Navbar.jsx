@@ -6,7 +6,6 @@ import { Menu, X, User, LogOut, MessageSquare, Bell, ChevronRight, Calendar, Che
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../services/api';
-import ConsultationModal from './ConsultationModal';
 import MenuLink from './MenuLink';
 
 // --- STYLING CONSTANTS ---
@@ -54,7 +53,7 @@ const ScrollSpy = ({ onScroll }) => {
 };
 
 const Navbar = () => {
-  const { isMenuOpen, setIsMenuOpen, showConsultModal, setShowConsultModal, menuRef } = useNavbarState();
+  const { isMenuOpen, setIsMenuOpen, menuRef } = useNavbarState();
   const { isAuthenticated, logout, user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -83,13 +82,7 @@ const Navbar = () => {
     setIsMenuOpen(false);
     setOtherServicesOpen(false);
     setNotifPanelOpen(false);
-
-    const params = new URLSearchParams(location.search);
-    if (params.get('consult') === '1' && isAuthenticated) {
-      setShowConsultModal(true);
-      navigate(location.pathname, { replace: true });
-    }
-  }, [location, isAuthenticated, navigate, setIsMenuOpen, setShowConsultModal]);
+  }, [location, setIsMenuOpen]);
 
   useEffect(() => {
     if (!isAuthenticated || !user) return;
@@ -186,10 +179,11 @@ const Navbar = () => {
 
   const handleConsultClick = () => {
     if (!isAuthenticated) {
-      const dest = `${location.pathname}${location.search ? location.search + '&' : '?'}consult=1`;
-      navigate(`/login?redirect=${encodeURIComponent(dest)}`);
+      // Save consultation intent
+      localStorage.setItem('consultationIntent', 'true');
+      navigate('/login?redirect=/my-consultations');
     } else {
-      navigate('/consultation/new');
+      navigate('/my-consultations');
     }
   };
 
@@ -217,7 +211,6 @@ const Navbar = () => {
   if (isMinimalRoute) {
     return (
       <>
-        <ConsultationModal isOpen={showConsultModal} onClose={() => setShowConsultModal(false)} />
         <motion.header
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -261,8 +254,6 @@ const Navbar = () => {
   // ─── FULL NAVBAR ──────────────────────────────────────────────────────────
   return (
     <>
-      <ConsultationModal isOpen={showConsultModal} onClose={() => setShowConsultModal(false)} />
-
       {/* --- TOAST NOTIFICATIONS --- */}
       <AnimatePresence>
         {showToast && isAuthenticated && user && user.role !== 'admin' && notifications.length > 0 && (
@@ -478,7 +469,7 @@ const Navbar = () => {
                     )}
                   </button>
 
-                  {/* Notification Popup Panel - same as before */}
+                  {/* Notification Popup Panel */}
                   <AnimatePresence>
                     {notifPanelOpen && (
                       <motion.div
@@ -582,7 +573,7 @@ const Navbar = () => {
                   </div>
                 </button>
 
-                {/* --- DROPDOWN MENU - same as before --- */}
+                {/* --- DROPDOWN MENU --- */}
                 <AnimatePresence>
                   {isMenuOpen && (
                     <motion.div

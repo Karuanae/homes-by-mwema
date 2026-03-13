@@ -659,6 +659,12 @@ export const consultationsAPI = {
     const response = await api.put(`/consultations/${id}/cancel`);
     return response;
   },
+ 
+  // ── NEW: User deletes their own cancelled/completed consultation ──
+  deleteOwn: async (id) => {
+    const response = await api.delete(`/consultations/${id}`);
+    return response;
+  },
   
   // Admin endpoints
   adminList: async (params = '') => {
@@ -678,6 +684,12 @@ export const consultationsAPI = {
   
   confirmWithEmail: async (id, data) => {
     const response = await api.post(`/consultations/admin/${id}/confirm-with-email`, data);
+    return response;
+  },
+ 
+  // ── NEW: Admin reject with optional notification ──
+  reject: async (id, data = {}) => {
+    const response = await api.post(`/consultations/admin/${id}/reject`, data);
     return response;
   },
   

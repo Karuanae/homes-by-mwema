@@ -8,7 +8,7 @@ import { socialAuth } from '../services/socialAuth';
 export default function Register() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { signup, user, loading, refreshUserFromStorage } = useAuth(); // Add refreshUserFromStorage
+  const { signup, user, loading, refreshUserFromStorage } = useAuth();
 
   const [formData, setFormData] = useState({
     name: '', email: '', password: '', confirmPassword: '', phone: '',
@@ -22,6 +22,15 @@ export default function Register() {
   useEffect(() => {
     if (!loading && user) {
       console.log('✅ User already logged in, redirecting:', user);
+      
+      // Check for consultation intent
+      const consultIntent = localStorage.getItem('consultationIntent');
+      if (consultIntent) {
+        localStorage.removeItem('consultationIntent');
+        navigate('/my-consultations');
+        return;
+      }
+      
       navigate(user?.role === 'admin' ? '/admin' : '/');
     }
   }, [user, loading, navigate]);
@@ -36,6 +45,15 @@ export default function Register() {
 
   const redirectAfterAuth = (userData) => {
     console.log('🔄 Redirecting after auth:', userData);
+    
+    // Check for consultation intent
+    const consultIntent = localStorage.getItem('consultationIntent');
+    if (consultIntent) {
+      localStorage.removeItem('consultationIntent');
+      setTimeout(() => navigate('/my-consultations'), 1200);
+      return;
+    }
+    
     if (userData?.role === 'admin') {
       window.location.href = '/admin';
     } else {
@@ -101,12 +119,19 @@ export default function Register() {
     if (savedUser) {
       console.log('✅ User saved to localStorage, refreshing AuthContext...');
       
-      // Force refresh the auth context
       const refreshed = refreshUserFromStorage();
       
       if (refreshed) {
         console.log('✅ AuthContext refreshed, redirecting...');
-        // Small delay to ensure state is updated
+        
+        // Check for consultation intent
+        const consultIntent = localStorage.getItem('consultationIntent');
+        if (consultIntent) {
+          localStorage.removeItem('consultationIntent');
+          setTimeout(() => navigate('/my-consultations'), 50);
+          return;
+        }
+        
         setTimeout(() => {
           redirectAfterAuth(JSON.parse(savedUser));
         }, 50);
@@ -150,7 +175,6 @@ export default function Register() {
         <div className="text-center mb-10">
           <p className="text-xs uppercase tracking-widest text-stone-400">Homes By Mwema</p>
           <h2 className="text-3xl font-serif italic text-stone-900 mb-3">Register</h2>
-          
         </div>
 
         {error && (

@@ -33,6 +33,14 @@ export default function Login() {
         }
       }
       
+      // Check for consultation intent
+      const consultIntent = localStorage.getItem('consultationIntent');
+      if (consultIntent) {
+        localStorage.removeItem('consultationIntent');
+        navigate('/my-consultations');
+        return;
+      }
+      
       navigate(user?.role === 'admin' ? '/admin' : '/');
     }
   }, [user, loading, navigate]);
@@ -66,6 +74,15 @@ export default function Login() {
         console.error('Error parsing pending data:', e);
         localStorage.removeItem('pendingBookingData');
       }
+    }
+    
+    // Check for consultation intent
+    const consultIntent = localStorage.getItem('consultationIntent');
+    if (consultIntent) {
+      localStorage.removeItem('consultationIntent');
+      console.log('📅 Found consultation intent, redirecting to my-consultations');
+      navigate('/my-consultations');
+      return;
     }
     
     // Then check for redirect from location.state (from BookingPage)
@@ -149,6 +166,15 @@ export default function Login() {
           }
         }
         
+        // Check for consultation intent
+        const consultIntent = localStorage.getItem('consultationIntent');
+        if (consultIntent) {
+          localStorage.removeItem('consultationIntent');
+          console.log('📅 Found consultation intent, redirecting to my-consultations');
+          setTimeout(() => navigate('/my-consultations'), 50);
+          return;
+        }
+        
         // Then check location state
         if (location.state?.from) {
           setTimeout(() => navigate(location.state.from), 50);
@@ -213,7 +239,7 @@ export default function Login() {
         <div className="absolute top-0 left-0 right-0 h-1 bg-stone-900" />
 
         <div className="text-center mb-12">
-                    <p className="text-xs uppercase tracking-widest text-stone-400">Homes By Mwema</p>
+          <p className="text-xs uppercase tracking-widest text-stone-400">Homes By Mwema</p>
           <h2 className="text-3xl font-serif italic text-stone-900 mb-3">Login</h2>
         </div>
 
@@ -237,36 +263,35 @@ export default function Login() {
               required
               autoComplete="email"
               className="w-full px-4 py-3 border border-stone-200 rounded bg-stone-50 focus:outline-none focus:border-stone-400 text-sm"
-
             />
           </div>
 
-            <div>
-              <label htmlFor="password" className="block text-xs uppercase tracking-widest text-stone-500 mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  id="password"
-                  name="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  required
-                  autoComplete="current-password"
-                  className="w-full px-4 py-3 border border-stone-200 rounded bg-stone-50 focus:outline-none focus:border-stone-400 text-sm pr-10"
-                />
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-900"
-                  onClick={() => setShowPassword((v) => !v)}
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                >
-                  {showPassword ? <FaEyeSlash /> : <FaEye />}
-                </button>
-              </div>
+          <div>
+            <label htmlFor="password" className="block text-xs uppercase tracking-widest text-stone-500 mb-2">
+              Password
+            </label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                id="password"
+                name="password"
+                value={formData.password}
+                onChange={handleChange}
+                required
+                autoComplete="current-password"
+                className="w-full px-4 py-3 border border-stone-200 rounded bg-stone-50 focus:outline-none focus:border-stone-400 text-sm pr-10"
+              />
+              <button
+                type="button"
+                tabIndex={-1}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-900"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <FaEyeSlash /> : <FaEye />}
+              </button>
             </div>
+          </div>
 
           <button
             type="submit"
@@ -293,7 +318,7 @@ export default function Login() {
               to="/register"
               className="text-stone-900 italic border-b border-stone-300 hover:border-stone-900 transition-all"
             >
-             Register
+              Register
             </Link>
           </p>
         </div>

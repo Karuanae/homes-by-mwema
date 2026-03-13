@@ -1,7 +1,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { FaSearch, FaMapMarkerAlt } from "react-icons/fa";
 import { useState, useRef, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import api, { IMAGE_BASE_URL } from "../services/api";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -32,6 +32,8 @@ const ROOM_OPTIONS = [
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 export default function Home() {
+  const navigate = useNavigate();
+  
   // Search state
   const [showRooms,    setShowRooms]    = useState(false);
   const [showGuests,   setShowGuests]   = useState(false);
@@ -45,7 +47,8 @@ export default function Home() {
 
   // Data state
   const [properties,       setProperties]       = useState([]);
-  const [filteredProps,    setFilteredProps]    = useState([]);
+  const [featuredProperties, setFeaturedProperties] = useState([]);
+  const [searchResults,    setSearchResults]    = useState([]);
   const [locations,        setLocations]        = useState([]);
   const [visibleCount,     setVisibleCount]     = useState(8);
   const [loading,          setLoading]          = useState(true);
@@ -57,6 +60,7 @@ export default function Home() {
   const guestsRef      = useRef(null);
   const locationsRef   = useRef(null);
   const propertiesRef  = useRef(null);
+  const searchResultsRef = useRef(null);
 
   // ── Static Data ──
   const premiumFeatures = [
@@ -87,7 +91,13 @@ export default function Home() {
         const res = await api.properties.getAll();
         const data = res.data || [];
         setProperties(data);
-        setFilteredProps(data);
+        
+        // Set featured properties (latest 8 properties)
+        // Sort by created_at if available, otherwise by id (assuming higher id = newer)
+        const sorted = [...data].sort((a, b) => {
+          return (b.created_at || b.id) - (a.created_at || a.id);
+        });
+        setFeaturedProperties(sorted.slice(0, 8));
         
         // Extract unique locations from properties
         const uniqueLocations = ["All Locations", ...new Set(data.map(p => p.location).filter(Boolean))];
@@ -140,18 +150,18 @@ export default function Home() {
       return locationMatch && roomMatch && guestMatch;
     });
 
-    setFilteredProps(results);
+    setSearchResults(results);
     setVisibleCount(8);
     setHasSearched(true);
 
-    // Smooth scroll to properties grid
+    // Smooth scroll to search results
     setTimeout(() => {
-      propertiesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      searchResultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 100);
   };
 
   const clearSearch = () => {
-    setFilteredProps(properties);
+    setSearchResults([]);
     setSelectedRoom(ROOM_OPTIONS[0]);
     setSelectedLocation("All Locations");
     setGuests({ adults: 1, children: 0, infants: 0 });
@@ -159,7 +169,8 @@ export default function Home() {
     setVisibleCount(8);
   };
 
-  const displayedProperties = filteredProps.slice(0, visibleCount);
+  const displayedSearchResults = searchResults.slice(0, visibleCount);
+  const hasMoreSearchResults = visibleCount < searchResults.length;
   const totalGuests = guests.adults + guests.children + guests.infants;
 
   return (
@@ -383,37 +394,134 @@ export default function Home() {
       </div>
 
       {/* ═══════════════════════════════════════════════════════
-          PROPERTIES COLLECTION
+          SEARCH RESULTS SECTION - Appears on top when search is active
       ═══════════════════════════════════════════════════════ */}
-      <section ref={propertiesRef} className="py-16 px-6 relative z-10 bg-white scroll-mt-24">
-        <div className="max-w-[1400px] mx-auto">
+      {hasSearched && (
+        <section ref={searchResultsRef} className="py-16 px-6 relative z-10 bg-stone-50 scroll-mt-24">
+          <div className="max-w-[1400px] mx-auto">
 
-          {/* Section header */}
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12">
-            <div>
-              <h2 className="text-3xl md:text-4xl text-black" style={{ fontFamily: "'Playfair Display', serif" }}>
-                {hasSearched ? "Search " : "Featured "}
-                <span className="italic font-light text-stone-500">
-                  {hasSearched ? "Results" : "Properties"}
-                </span>
-              </h2>
-              {hasSearched && (
+            {/* Section header with clear search button */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12">
+              <div>
+                <h2 className="text-3xl md:text-4xl text-black" style={{ fontFamily: "'Playfair Display', serif" }}>
+                  Search <span className="italic font-light text-stone-500">Results</span>
+                </h2>
                 <p className="text-stone-500 text-sm mt-1">
-                  {filteredProps.length} {filteredProps.length === 1 ? "residence" : "residences"} match your criteria
-                  {selectedLocation !== "All Locations" && ` · ${selectedLocation}`}
+                  {searchResults.length} {searchResults.length === 1 ? "residence" : "residences"} match your criteria
+                  {selectedLocation !== "All Locations" && ` in ${selectedLocation}`}
                   {selectedRoom.label !== "Any" && ` · ${selectedRoom.label}`}
                   {totalGuests > 1 && ` · ${totalGuests} guests`}
                 </p>
-              )}
-            </div>
-            {hasSearched && (
+              </div>
+              
+              {/* Clear Search Button */}
               <button
                 onClick={clearSearch}
-                className="mt-4 md:mt-0 text-xs uppercase tracking-widest text-stone-400 hover:text-stone-700 border-b border-stone-300 hover:border-stone-700 pb-0.5 transition-colors"
+                className="mt-4 md:mt-0 px-6 py-2 border border-stone-300 text-stone-700 text-xs uppercase tracking-widest font-bold rounded-lg hover:bg-stone-100 transition-colors flex items-center gap-2"
               >
-                Clear filters
+                Clear Search
+                <span className="text-lg">×</span>
               </button>
+            </div>
+
+            {/* No results message */}
+            {searchResults.length === 0 && (
+              <div className="text-center py-20 bg-white rounded-xl border border-stone-100">
+                <div className="max-w-md mx-auto">
+                  <FaSearch className="text-4xl text-stone-300 mx-auto mb-4" />
+                  <h3 className="text-xl font-serif text-stone-900 mb-2">No properties found</h3>
+                  <p className="text-stone-500 mb-6">Try adjusting your location, room type or guest count.</p>
+                  <button
+                    onClick={clearSearch}
+                    className="px-6 py-2 bg-[#ED9B40] text-white rounded-lg hover:bg-[#d4882d] transition-colors"
+                  >
+                    Clear filters
+                  </button>
+                </div>
+              </div>
             )}
+
+            {/* Search Results Grid */}
+            {searchResults.length > 0 && (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-12">
+                  {displayedSearchResults.map((property, idx) => (
+                    <Link
+                      to={`/booking/${property.id}`}
+                      key={property.id || idx}
+                      className="block group relative overflow-hidden rounded-sm transition-all duration-300"
+                    >
+                      <div className="relative aspect-[3/4] overflow-hidden bg-stone-100 mb-4">
+                        <motion.img
+                          whileHover={{ scale: 1.05 }}
+                          transition={{ duration: 0.7, ease: "easeOut" }}
+                          src={getImageSrc(property.cover_image || property.images?.[0])}
+                          alt={property.name}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-300 flex items-center justify-center">
+                          <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 backdrop-blur-sm px-4 py-2 text-xs font-bold uppercase tracking-widest text-black">
+                            View Details
+                          </span>
+                        </div>
+                        {property.tag && (
+                          <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm px-2 py-1 text-[10px] uppercase tracking-widest font-bold text-black">
+                            {property.tag}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="p-3">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h3 className="text-black text-lg font-serif leading-tight group-hover:text-stone-700 transition-colors">
+                              {property.name}
+                            </h3>
+                            <p className="text-stone-500 text-xs mt-1 uppercase tracking-wide flex items-center gap-1">
+                              <FaMapMarkerAlt className="text-[10px]" /> {property.location}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-black text-sm font-medium">Ksh {property.price?.toLocaleString()}</p>
+                            <p className="text-stone-400 text-[10px] mt-1 uppercase">per night</p>
+                          </div>
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+
+                {/* Load more button for search results */}
+                {hasMoreSearchResults && (
+                  <div className="mt-16 text-center">
+                    <button
+                      onClick={() => setVisibleCount(c => c + 4)}
+                      className="text-xs uppercase tracking-widest border-b border-black pb-1 hover:text-stone-600 hover:border-stone-600 transition-colors"
+                    >
+                      Load More Results
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════
+          FEATURED PROPERTIES SECTION - Always visible below search results
+      ═══════════════════════════════════════════════════════ */}
+      <section ref={propertiesRef} className={`py-16 px-6 relative z-10 bg-white scroll-mt-24 ${hasSearched ? 'border-t border-stone-200' : ''}`}>
+        <div className="max-w-[1400px] mx-auto">
+
+          {/* Section header */}
+          <div className="text-center mb-12">
+            <h2 className="text-3xl md:text-4xl text-black" style={{ fontFamily: "'Playfair Display', serif" }}>
+              Featured <span className="italic font-light text-stone-500">Properties</span>
+            </h2>
+            <p className="text-stone-500 text-sm mt-1">
+              Our newest and most sought-after residences
+            </p>
           </div>
 
           {/* Loading */}
@@ -433,90 +541,80 @@ export default function Home() {
             </div>
           )}
 
-          {/* No results after search */}
-          {!loading && !error && hasSearched && filteredProps.length === 0 && (
-            <div className="text-center py-20">
-              <p className="text-stone-500 font-light text-lg mb-2">No residences match your search.</p>
-              <p className="text-stone-400 text-sm mb-6">Try adjusting your location, room type or guest count.</p>
-              <button onClick={clearSearch} className="text-xs uppercase tracking-widest border-b border-black pb-1 hover:text-stone-600">
-                Show all properties
-              </button>
-            </div>
-          )}
-
-          {/* Empty initial state */}
-          {!loading && !error && properties.length === 0 && (
+          {/* Empty state */}
+          {!loading && !error && featuredProperties.length === 0 && (
             <div className="text-center py-20">
               <p className="text-stone-500 font-light">No residences available at the moment.</p>
             </div>
           )}
 
-          {/* Grid */}
-          {!loading && !error && displayedProperties.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-12">
-              {displayedProperties.map((property, idx) => (
-                <Link
-                  to={`/booking/${property.id}`}
-                  key={property.id || idx}
-                  className="block group relative overflow-hidden rounded-sm transition-all duration-300"
+          {/* Featured Properties Grid */}
+          {!loading && !error && featuredProperties.length > 0 && (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-12">
+                {featuredProperties.map((property, idx) => (
+                  <Link
+                    to={`/booking/${property.id}`}
+                    key={property.id || idx}
+                    className="block group relative overflow-hidden rounded-sm transition-all duration-300"
+                  >
+                    <div className="relative aspect-[3/4] overflow-hidden bg-stone-100 mb-4">
+                      <motion.img
+                        whileHover={{ scale: 1.05 }}
+                        transition={{ duration: 0.7, ease: "easeOut" }}
+                        src={getImageSrc(property.cover_image || property.images?.[0])}
+                        alt={property.name}
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-300 flex items-center justify-center">
+                        <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 backdrop-blur-sm px-4 py-2 text-xs font-bold uppercase tracking-widest text-black">
+                          View Details
+                        </span>
+                      </div>
+                      {property.tag && (
+                        <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm px-2 py-1 text-[10px] uppercase tracking-widest font-bold text-black">
+                          {property.tag}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="p-3">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="text-black text-lg font-serif leading-tight group-hover:text-stone-700 transition-colors">
+                            {property.name}
+                          </h3>
+                          <p className="text-stone-500 text-xs mt-1 uppercase tracking-wide flex items-center gap-1">
+                            <FaMapMarkerAlt className="text-[10px]" /> {property.location}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-black text-sm font-medium">Ksh {property.price?.toLocaleString()}</p>
+                          <p className="text-stone-400 text-[10px] mt-1 uppercase">per night</p>
+                        </div>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+
+              {/* View All Properties Button - Centered at bottom */}
+              <div className="mt-16 text-center">
+                <button
+                  onClick={() => navigate('/properties')}
+                  className="px-8 py-3 bg-[#ED9B40] text-white text-xs uppercase tracking-widest font-bold rounded-lg hover:bg-[#d4882d] transition-colors inline-flex items-center gap-2"
                 >
-                  <div className="relative aspect-[3/4] overflow-hidden bg-stone-100 mb-4">
-                    <motion.img
-                      whileHover={{ scale: 1.05 }}
-                      transition={{ duration: 0.7, ease: "easeOut" }}
-                      src={getImageSrc(property.cover_image || property.images?.[0])}
-                      alt={property.name}
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-300 flex items-center justify-center">
-                      <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 backdrop-blur-sm px-4 py-2 text-xs font-bold uppercase tracking-widest text-black">
-                        View Details
-                      </span>
-                    </div>
-                    {property.tag && (
-                      <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm px-2 py-1 text-[10px] uppercase tracking-widest font-bold text-black">
-                        {property.tag}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="p-3">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="text-black text-lg font-serif leading-tight group-hover:text-stone-700 transition-colors">
-                          {property.name}
-                        </h3>
-                        <p className="text-stone-500 text-xs mt-1 uppercase tracking-wide flex items-center gap-1">
-                          <FaMapMarkerAlt className="text-[10px]" /> {property.location}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-black text-sm font-medium">Ksh {property.price?.toLocaleString()}</p>
-                        <p className="text-stone-400 text-[10px] mt-1 uppercase">per night</p>
-                      </div>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
-
-          {/* Load more */}
-          {!loading && !error && visibleCount < filteredProps.length && (
-            <div className="mt-16 text-center">
-              <button
-                onClick={() => setVisibleCount(c => c + 4)}
-                className="text-xs uppercase tracking-widest border-b border-black pb-1 hover:text-stone-600 hover:border-stone-600 transition-colors"
-              >
-                Load More
-              </button>
-            </div>
+                  View All Properties
+                  <span className="text-lg">→</span>
+                </button>
+              </div>
+            </>
           )}
         </div>
       </section>
 
       {/* ═══════════════════════════════════════════════════════
-          EDITORIAL FEATURES - ENHANCED TITLE INTENSITY WITH LIGHTER TEAL
+          EDITORIAL FEATURES 
       ═══════════════════════════════════════════════════════ */}
       <section className="py-24 px-6 bg-[#EBE5DE] relative z-10">
         <div className="max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
@@ -573,7 +671,7 @@ export default function Home() {
       </section>
 
       {/* ═══════════════════════════════════════════════════════
-          FAQ - UPDATED WITH BLACK TEXT
+          FAQ
       ═══════════════════════════════════════════════════════ */}
       <section className="py-24 px-6 bg-[#f7f5f2] border-t border-stone-200">
         <div className="max-w-2xl mx-auto">
@@ -611,7 +709,7 @@ export default function Home() {
       </section>
 
       {/* ═══════════════════════════════════════════════════════
-          CTA FOOTER - Updated to match navbar color
+          CTA FOOTER
       ═══════════════════════════════════════════════════════ */}
       <section className="py-20 bg-[#093A3E] text-[#f5f2ee] text-center px-6 relative z-10">
         <h2 className="text-4xl md:text-6xl font-serif mb-6">Ready to Book?</h2>
