@@ -95,7 +95,7 @@ def _notify_admin_new_consultation(consultation, user=None):
         """
 
         params = {
-            "from": "Homes by Mwema <onboarding@resend.dev>",  # Free test domain
+            "from": "Homes by Mwema <noreply@homesbymwema.com>",  # Updated to verified domain
             "to": [admin_email],
             "subject": f"New Consultation Request – {date_str} at {time_str}",
             "html": html_body,
@@ -163,7 +163,7 @@ def _send_user_booking_received(consultation):
         """
 
         params = {
-            "from": "Homes by Mwema <onboarding@resend.dev>",  # Free test domain
+            "from": "Homes by Mwema <noreply@homesbymwema.com>",  # Updated to verified domain
             "to": [recipient],
             "subject": f"Consultation Request Received – {date_str}",
             "html": html_body,
@@ -224,7 +224,7 @@ def _send_rejection_email(consultation, reason=''):
         """
 
         params = {
-            "from": "Homes by Mwema <onboarding@resend.dev>",
+            "from": "Homes by Mwema <noreply@homesbymwema.com>",  # Updated to verified domain
             "to": [recipient],
             "subject": "Update on Your Consultation Request",
             "html": html_body,
@@ -287,7 +287,7 @@ def admin_confirm_with_email(consultation_id):
             """
 
             params = {
-                "from": "Homes by Mwema <onboarding@resend.dev>",
+                "from": "Homes by Mwema <noreply@homesbymwema.com>",  # Updated to verified domain
                 "to": [recipient_email],
                 "subject": subject,
                 "html": body_html,
