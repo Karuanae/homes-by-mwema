@@ -291,7 +291,17 @@ export default function Login() {
                 {showPassword ? <FaEyeSlash /> : <FaEye />}
               </button>
             </div>
+             <div className="flex justify-end mt-2">
+    <Link
+      to="/forgot-password"
+      className="text-xs text-stone-500 hover:text-stone-900 transition-colors"
+    >
+      Forgot password?
+    </Link>
+  </div>
           </div>
+
+
 
           <button
             type="submit"

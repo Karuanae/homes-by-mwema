@@ -1,10 +1,12 @@
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
-from models import db, User
+from models import db, User, PasswordResetToken
 from werkzeug.exceptions import BadRequest
-from datetime import timedelta
+from datetime import datetime, timedelta
 import re
 import logging
+import secrets
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -258,3 +260,179 @@ def get_current_user():
     except Exception as e:
         logger.error(f"Get current user error: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
+
+# ==================== FORGOT PASSWORD ENDPOINTS ====================
+
+def send_password_reset_email(user, token):
+    """Send password reset email using Resend"""
+    try:
+        import resend
+        resend.api_key = os.environ.get('RESEND_API_KEY')
+        
+        reset_link = f"https://homesbymwema.com/reset-password?token={token}"
+        
+        html_body = f"""
+        <div style="font-family: Georgia, serif; max-width: 560px; margin: 0 auto; background: #f9f8f6; padding: 24px;">
+          <div style="background: #093A3E; color: white; padding: 24px;">
+            <p style="color: #ED9B40; font-size: 11px; text-transform: uppercase; letter-spacing: 0.2em; margin: 0 0 8px;">Homes by Mwema</p>
+            <h1 style="font-size: 20px; margin: 0; font-weight: normal;">Password Reset Request</h1>
+          </div>
+          <div style="background: white; border: 1px solid #ebe5de; padding: 24px;">
+            <p style="color: #555; font-size: 14px; line-height: 1.6;">Dear {user.name or 'Valued Client'},</p>
+            <p style="color: #555; font-size: 14px; line-height: 1.6;">
+              We received a request to reset your password for your Homes by Mwema account.
+            </p>
+            <div style="text-align: center; margin: 24px 0;">
+              <a href="{reset_link}" 
+                 style="background: #093A3E; color: white; padding: 12px 28px; text-decoration: none; font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; display: inline-block;">
+                Reset Password
+              </a>
+            </div>
+            <p style="color: #555; font-size: 13px; line-height: 1.6;">
+              This link will expire in <strong>1 hour</strong>. If you didn't request this, please ignore this email.
+            </p>
+            <p style="color: #888; font-size: 13px; margin-top: 24px; padding-top: 16px; border-top: 1px solid #eee;">
+              Warm regards,<br/>
+              <strong style="color: #1C1917;">The Homes by Mwema Team</strong>
+            </p>
+          </div>
+          <p style="color: #aaa; font-size: 11px; text-align: center; margin-top: 16px;">
+            <a href="https://homesbymwema.com" style="color: #aaa;">homesbymwema.com</a>
+          </p>
+        </div>
+        """
+        
+        params = {
+            "from": "Homes by Mwema <noreply@homesbymwema.com>",
+            "to": [user.email],
+            "subject": "Reset Your Homes by Mwema Password",
+            "html": html_body,
+        }
+        
+        email = resend.Emails.send(params)
+        logger.info(f"✅ Password reset email sent to {user.email}")
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to send password reset email: {e}")
+        raise
+
+
+@auth_bp.route('/forgot-password', methods=['POST'])
+def forgot_password():
+    """Request a password reset email"""
+    try:
+        data = request.get_json()
+        email = data.get('email') if data else None
+        
+        if not email:
+            return jsonify({'error': 'Email is required'}), 400
+        
+        # Find user
+        user = User.query.filter_by(email=email.lower().strip()).first()
+        
+        # Always return success even if email not found (security best practice)
+        if not user:
+            logger.info(f"Password reset requested for non-existent email: {email}")
+            return jsonify({
+                'message': 'If your email is registered, you will receive a password reset link.'
+            }), 200
+        
+        # Invalidate any existing unused tokens
+        PasswordResetToken.query.filter_by(
+            user_id=user.id, 
+            used=False
+        ).update({'used': True})
+        
+        # Generate secure token
+        token = secrets.token_urlsafe(32)
+        
+        # Create new token (expires in 1 hour)
+        reset_token = PasswordResetToken(
+            user_id=user.id,
+            token=token,
+            expires_at=datetime.utcnow() + timedelta(hours=1),
+            used=False
+        )
+        
+        db.session.add(reset_token)
+        db.session.commit()
+        
+        # Send email with reset link
+        try:
+            send_password_reset_email(user, token)
+        except Exception as e:
+            logger.error(f"Failed to send password reset email: {e}")
+            # Still return success to prevent email enumeration
+            pass
+        
+        logger.info(f"Password reset token generated for user: {user.email}")
+        
+        return jsonify({
+            'message': 'If your email is registered, you will receive a password reset link.'
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Forgot password error: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': 'Failed to process request'}), 500
+
+
+@auth_bp.route('/verify-reset-token/<token>', methods=['GET'])
+def verify_reset_token(token):
+    """Verify if a reset token is valid"""
+    try:
+        reset_token = PasswordResetToken.query.filter_by(token=token).first()
+        
+        if not reset_token or not reset_token.is_valid():
+            return jsonify({'valid': False, 'error': 'Invalid or expired token'}), 400
+        
+        return jsonify({
+            'valid': True,
+            'email': reset_token.user.email
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Verify token error: {str(e)}")
+        return jsonify({'error': 'Failed to verify token'}), 500
+
+
+@auth_bp.route('/reset-password', methods=['POST'])
+def reset_password():
+    """Reset password using token"""
+    try:
+        data = request.get_json()
+        token = data.get('token')
+        new_password = data.get('password')
+        
+        if not token or not new_password:
+            return jsonify({'error': 'Token and password are required'}), 400
+        
+        # Validate password strength
+        if len(new_password) < 6:
+            return jsonify({'error': 'Password must be at least 6 characters'}), 400
+        
+        # Find token
+        reset_token = PasswordResetToken.query.filter_by(token=token).first()
+        
+        if not reset_token or not reset_token.is_valid():
+            return jsonify({'error': 'Invalid or expired token'}), 400
+        
+        # Update password
+        user = reset_token.user
+        user.set_password(new_password)
+        
+        # Mark token as used
+        reset_token.used = True
+        
+        db.session.commit()
+        
+        logger.info(f"Password reset successful for user: {user.email}")
+        
+        return jsonify({
+            'message': 'Password reset successful. You can now login with your new password.'
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Reset password error: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': 'Failed to reset password'}), 500

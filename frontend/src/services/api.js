@@ -93,6 +93,16 @@ export const authAPI = {
     const response = await api.get('/auth/me');
     return response;
   },
+
+  // NEW: Forgot password methods
+  forgotPassword: (email) => 
+    api.post('/auth/forgot-password', { email }),
+    
+  verifyResetToken: (token) => 
+    api.get(`/auth/verify-reset-token/${token}`),
+    
+  resetPassword: (token, password) => 
+    api.post('/auth/reset-password', { token, password }),
 };
 
 // ==================== PROPERTIES API ====================
@@ -562,6 +572,36 @@ export const adminAPI = {
 
 // ==================== USER PROFILE API ====================
 export const userAPI = {
+  getProfile: async () => {
+    const response = await api.get('/user/profile');
+    return response;
+  },
+
+  updateProfile: async (profileData) => {
+    const response = await api.put('/user/profile', profileData);
+    // Update localStorage if needed
+    if (response.data.user) {
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+    }
+    return response;
+  },
+
+  changePassword: async (passwordData) => {
+    const response = await api.post('/user/change-password', passwordData);
+    return response;
+  },
+
+  deleteAccount: async (data) => {
+    const response = await api.delete('/user/delete-account', { data });
+    return response;
+  },
+
+  getStats: async () => {
+    const response = await api.get('/user/stats');
+    return response;
+  },
+
+  // Existing methods...
   getProfile: async (userId) => {
     const response = await api.get(`/users/${userId}`);
     return response;

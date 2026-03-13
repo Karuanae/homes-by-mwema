@@ -1,16 +1,18 @@
 // App.jsx - Main application component with Properties route
 import React, { useEffect } from "react";
-import { Routes, Route, useNavigate, Link } from "react-router-dom"; // Added Link here
+import { Routes, Route, useNavigate, Link } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminRoute from "./components/AdminRoute";
 import PublicRoute from "./components/PublicRoute";
 import Header from "./components/Navbar";
 import UserLayout from "./components/UserLayout";
-import ScrollToTop from "./components/ScrollToTop"; // Import ScrollToTop component
+import ScrollToTop from "./components/ScrollToTop";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import BookingPage from "./pages/BookingPage";
 import PaymentPage from "./pages/PaymentPage";
 import PaymentSuccess from "./pages/PaymentSuccess";
@@ -26,6 +28,7 @@ import AdminConsultations from "./pages/AdminConsultations";
 import Properties from "./pages/Properties";
 import MyConsultations from "./pages/MyConsultations";
 import NewConsultation from "./pages/NewConsultation";
+import ProfileSettings from "./pages/ProfileSettings";
 
 // NEW SERVICE PAGE IMPORTS
 import TermsAndPolicy from "./pages/TermsAndPolicy";
@@ -72,7 +75,7 @@ const AuthSync = () => {
 function AppContent() {
   return (
     <>
-      <ScrollToTop /> {/* Add ScrollToTop here - will run on every route change */}
+      <ScrollToTop />
       <AuthSync />
       <Routes>
         <Route path="/" element={
@@ -109,6 +112,23 @@ function AppContent() {
           <>
             <Header />
             <Register />
+            <Footer />
+          </>
+        } />
+
+        {/* Forgot Password Routes */}
+        <Route path="/forgot-password" element={
+          <>
+            <Header />
+            <ForgotPassword />
+            <Footer />
+          </>
+        } />
+
+        <Route path="/reset-password" element={
+          <>
+            <Header />
+            <ResetPassword />
             <Footer />
           </>
         } />
@@ -163,17 +183,6 @@ function AppContent() {
           </ProtectedRoute>
         } />
 
-        <Route path="/profile" element={
-          <ProtectedRoute>
-            <UserLayout>
-              <div className="p-8">
-                <h1 className="text-2xl font-serif mb-4">Profile Settings</h1>
-                <p className="text-stone-500">Profile page coming soon...</p>
-              </div>
-            </UserLayout>
-          </ProtectedRoute>
-        } />
-
         {/* Consultation Routes */}
         <Route path="/consultation/new" element={
           <ProtectedRoute>
@@ -187,6 +196,15 @@ function AppContent() {
           <ProtectedRoute>
             <UserLayout>
               <MyConsultations />
+            </UserLayout>
+          </ProtectedRoute>
+        } />
+
+        {/* Profile Settings Route - UPDATED */}
+        <Route path="/profile" element={
+          <ProtectedRoute>
+            <UserLayout>
+              <ProfileSettings />
             </UserLayout>
           </ProtectedRoute>
         } />
@@ -235,8 +253,6 @@ function AppContent() {
           </PublicRoute>
         } />
 
-        {/* NEW SERVICE ROUTES */}
-        
         {/* Social Media Marketing */}
         <Route path="/social-media-marketing" element={
           <PublicRoute>
@@ -334,7 +350,7 @@ function AppContent() {
           </PublicRoute>
         } />
 
-        {/* Catch-all for 404 - Optional */}
+        {/* Catch-all for 404 */}
         <Route path="*" element={
           <PublicRoute>
             <>
