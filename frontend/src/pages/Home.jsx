@@ -2,6 +2,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { FaSearch, FaMapMarkerAlt } from "react-icons/fa";
 import { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import api, { IMAGE_BASE_URL } from "../services/api";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -33,6 +34,7 @@ const ROOM_OPTIONS = [
 // ─── Main Component ──────────────────────────────────────────────────────────
 export default function Home() {
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
   
   // Search state
   const [showRooms,    setShowRooms]    = useState(false);
@@ -42,6 +44,8 @@ export default function Home() {
   // Filter state
   const [selectedRoom, setSelectedRoom] = useState(ROOM_OPTIONS[0]);
   const [selectedLocation, setSelectedLocation] = useState("All Locations");
+  const [locationSearch, setLocationSearch] = useState("");
+  const [filteredLocations, setFilteredLocations] = useState([]);
   const [guests,       setGuests]       = useState({ adults: 1, children: 0, infants: 0 });
   const [hasSearched,  setHasSearched]  = useState(false);
 
@@ -61,6 +65,7 @@ export default function Home() {
   const locationsRef   = useRef(null);
   const propertiesRef  = useRef(null);
   const searchResultsRef = useRef(null);
+  const locationInputRef = useRef(null);
 
   // ── Static Data ──
   const premiumFeatures = [
@@ -93,7 +98,6 @@ export default function Home() {
         setProperties(data);
         
         // Set featured properties (latest 8 properties)
-        // Sort by created_at if available, otherwise by id (assuming higher id = newer)
         const sorted = [...data].sort((a, b) => {
           return (b.created_at || b.id) - (a.created_at || a.id);
         });
@@ -102,6 +106,7 @@ export default function Home() {
         // Extract unique locations from properties
         const uniqueLocations = ["All Locations", ...new Set(data.map(p => p.location).filter(Boolean))];
         setLocations(uniqueLocations);
+        setFilteredLocations(uniqueLocations);
       } catch (err) {
         console.error("Error fetching properties:", err);
         setError("Unable to load residences. Please check if the server is running.");
@@ -112,12 +117,27 @@ export default function Home() {
     fetchProperties();
   }, []);
 
+  // ── Filter locations based on search input ──
+  useEffect(() => {
+    if (locationSearch.trim() === "") {
+      setFilteredLocations(locations);
+    } else {
+      const filtered = locations.filter(loc => 
+        loc.toLowerCase().includes(locationSearch.toLowerCase())
+      );
+      setFilteredLocations(filtered);
+    }
+  }, [locationSearch, locations]);
+
   // ── Close dropdowns on outside click ──
   useEffect(() => {
     const handler = (e) => {
       if (roomsRef.current && !roomsRef.current.contains(e.target)) setShowRooms(false);
       if (guestsRef.current && !guestsRef.current.contains(e.target)) setShowGuests(false);
-      if (locationsRef.current && !locationsRef.current.contains(e.target)) setShowLocations(false);
+      if (locationsRef.current && !locationsRef.current.contains(e.target)) {
+        setShowLocations(false);
+        setLocationSearch(""); // Clear search when closing
+      }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -205,15 +225,16 @@ export default function Home() {
 
       {/* ═══════════════════════════════════════════════════════
           HERO — static Capital3.jpeg background with navbar offset
+          FURTHER REDUCED TOP PADDING to bring content up
       ═══════════════════════════════════════════════════════ */}
       <div
-        className="min-h-screen bg-cover bg-center relative pt-24 md:pt-28"
+        className="min-h-screen bg-cover bg-center relative pt-20 md:pt-24"
         style={{ backgroundImage: "url('/Capital3.jpeg')" }}
       >
         {/* Dark teal #093A3E overlay fading downwards */}
         <div className="absolute inset-0 bg-gradient-to-b from-[#093A3E]/90 via-[#093A3E]/50 to-transparent" />
 
-        <section className="relative z-10 min-h-screen flex flex-col items-center justify-center px-4 md:px-6">
+        <section className="relative z-10 min-h-screen flex flex-col items-center justify-start px-4 md:px-6 pt-16 md:pt-20">
           <motion.div
             className="w-full max-w-4xl text-center"
             initial={{ opacity: 0, y: 24 }}
@@ -221,13 +242,13 @@ export default function Home() {
             transition={{ duration: 0.8, ease: "easeOut" }}
           >
             {/* Eyebrow */}
-            <p className="text-[11px] uppercase tracking-[0.3em] text-[#ED9B40]/80 mb-4">
+            <p className="text-[11px] uppercase tracking-[0.3em] text-[#ED9B40]/80 mb-2">
               Nairobi · Premium Residences
             </p>
 
-            {/* Headline */}
+            {/* Headline - Further reduced margins */}
             <h1
-              className="text-4xl md:text-6xl font-light tracking-tight mb-8 text-white"
+              className="text-4xl md:text-6xl font-light tracking-tight mb-4 text-white"
               style={{ fontFamily: "'Playfair Display', serif" }}
             >
               <span className="block leading-[1.1]">Refined</span>
@@ -239,7 +260,7 @@ export default function Home() {
               {/* Desktop row / Mobile stack */}
               <div className="flex flex-col md:flex-row md:items-center md:divide-x divide-white/20">
 
-                {/* LOCATION */}
+                {/* LOCATION - Now with search input */}
                 <div className="relative flex-1" ref={locationsRef}>
                   <button
                     onClick={() => { setShowLocations(s => !s); setShowRooms(false); setShowGuests(false); }}
@@ -259,20 +280,44 @@ export default function Home() {
                         initial={{ opacity: 0, y: 8, scale: 0.97 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 8, scale: 0.97 }}
-                        className="absolute top-full left-0 mt-2 bg-[#1C1917] rounded-xl shadow-2xl z-[100] w-64 border border-white/10 overflow-hidden"
+                        className="absolute top-full left-0 mt-2 bg-[#1C1917] rounded-xl shadow-2xl z-[100] w-72 border border-white/10 overflow-hidden"
                         style={{ position: 'absolute', top: '100%', left: 0, zIndex: 9999 }}
                       >
+                        {/* Search input inside dropdown */}
+                        <div className="p-3 border-b border-white/10">
+                          <input
+                            ref={locationInputRef}
+                            type="text"
+                            placeholder="Search locations..."
+                            value={locationSearch}
+                            onChange={(e) => setLocationSearch(e.target.value)}
+                            className="w-full px-3 py-2 bg-white/10 text-white text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ED9B40] placeholder-white/40"
+                            autoFocus
+                          />
+                        </div>
+                        
+                        {/* Location list */}
                         <div className="max-h-60 overflow-y-auto dropdown-scroll">
-                          {locations.map((location) => (
-                            <button
-                              key={location}
-                              onClick={() => { setSelectedLocation(location); setShowLocations(false); }}
-                              className={`block w-full text-left px-4 py-3 text-sm transition-colors border-b border-white/5 last:border-0
-                                ${selectedLocation === location ? "text-[#ED9B40] bg-white/5" : "text-white/80 hover:bg-white/5 hover:text-white"}`}
-                            >
-                              {location}
-                            </button>
-                          ))}
+                          {filteredLocations.length === 0 ? (
+                            <div className="px-4 py-3 text-white/40 text-sm text-center">
+                              No locations found
+                            </div>
+                          ) : (
+                            filteredLocations.map((location) => (
+                              <button
+                                key={location}
+                                onClick={() => { 
+                                  setSelectedLocation(location); 
+                                  setShowLocations(false);
+                                  setLocationSearch("");
+                                }}
+                                className={`block w-full text-left px-4 py-3 text-sm transition-colors border-b border-white/5 last:border-0
+                                  ${selectedLocation === location ? "text-[#ED9B40] bg-white/5" : "text-white/80 hover:bg-white/5 hover:text-white"}`}
+                              >
+                                {location}
+                              </button>
+                            ))
+                          )}
                         </div>
                       </motion.div>
                     )}
@@ -375,7 +420,7 @@ export default function Home() {
             </div>
 
             {/* Simple trust indicator */}
-            <p className="text-white/60 text-xs mt-6 tracking-wide">
+            <p className="text-white/60 text-xs mt-4 tracking-wide">
               ✦ 500+ happy guests ✦ 4.9/5 rating ✦
             </p>
           </motion.div>
@@ -394,7 +439,7 @@ export default function Home() {
       </div>
 
       {/* ═══════════════════════════════════════════════════════
-          SEARCH RESULTS SECTION - Appears on top when search is active
+          SEARCH RESULTS SECTION - Only shows after search
       ═══════════════════════════════════════════════════════ */}
       {hasSearched && (
         <section ref={searchResultsRef} className="py-16 px-6 relative z-10 bg-stone-50 scroll-mt-24">
@@ -446,10 +491,27 @@ export default function Home() {
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-12">
                   {displayedSearchResults.map((property, idx) => (
-                    <Link
-                      to={`/booking/${property.id}`}
+                    <div
                       key={property.id || idx}
-                      className="block group relative overflow-hidden rounded-sm transition-all duration-300"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (!isAuthenticated) {
+                          localStorage.setItem('redirectIntent', JSON.stringify({
+                            type: 'book',
+                            propertyId: property.id,
+                            path: `/booking/${property.id}`
+                          }));
+                          navigate('/login', { 
+                            state: { 
+                              from: '/',
+                              message: 'Please log in to book this property'
+                            }
+                          });
+                        } else {
+                          navigate(`/booking/${property.id}`);
+                        }
+                      }}
+                      className="block group cursor-pointer"
                     >
                       <div className="relative aspect-[3/4] overflow-hidden bg-stone-100 mb-4">
                         <motion.img
@@ -487,7 +549,7 @@ export default function Home() {
                           </div>
                         </div>
                       </div>
-                    </Link>
+                    </div>
                   ))}
                 </div>
 
@@ -553,10 +615,27 @@ export default function Home() {
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-12">
                 {featuredProperties.map((property, idx) => (
-                  <Link
-                    to={`/booking/${property.id}`}
+                  <div
                     key={property.id || idx}
-                    className="block group relative overflow-hidden rounded-sm transition-all duration-300"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (!isAuthenticated) {
+                        localStorage.setItem('redirectIntent', JSON.stringify({
+                          type: 'book',
+                          propertyId: property.id,
+                          path: `/booking/${property.id}`
+                        }));
+                        navigate('/login', { 
+                          state: { 
+                            from: '/',
+                            message: 'Please log in to book this property'
+                          }
+                        });
+                      } else {
+                        navigate(`/booking/${property.id}`);
+                      }
+                    }}
+                    className="block group cursor-pointer"
                   >
                     <div className="relative aspect-[3/4] overflow-hidden bg-stone-100 mb-4">
                       <motion.img
@@ -594,17 +673,17 @@ export default function Home() {
                         </div>
                       </div>
                     </div>
-                  </Link>
+                  </div>
                 ))}
               </div>
 
-              {/* View All Properties Button - Centered at bottom */}
+              {/* View All Properties Button - FIXED to navigate to /properties */}
               <div className="mt-16 text-center">
                 <button
                   onClick={() => navigate('/properties')}
                   className="px-8 py-3 bg-[#ED9B40] text-white text-xs uppercase tracking-widest font-bold rounded-lg hover:bg-[#d4882d] transition-colors inline-flex items-center gap-2"
                 >
-                  View All Properties
+                  Browse All Properties
                   <span className="text-lg">→</span>
                 </button>
               </div>
@@ -709,14 +788,14 @@ export default function Home() {
       </section>
 
       {/* ═══════════════════════════════════════════════════════
-          CTA FOOTER
+          CTA FOOTER - FIXED button to navigate to /properties
       ═══════════════════════════════════════════════════════ */}
       <section className="py-20 bg-[#093A3E] text-[#f5f2ee] text-center px-6 relative z-10">
         <h2 className="text-4xl md:text-6xl font-serif mb-6">Ready to Book?</h2>
         <p className="text-[#F5F2EE]/70 max-w-lg mx-auto mb-10 font-light">Experience the finest homes Kenya has to offer. Book your sanctuary today.</p>
         <div className="flex justify-center gap-6">
           <button
-            onClick={() => propertiesRef.current?.scrollIntoView({ behavior: "smooth" })}
+            onClick={() => navigate('/properties')}
             className="px-8 py-3 bg-[#ED9B40] text-[#093A3E] text-xs uppercase tracking-widest font-bold hover:bg-white transition-colors"
           >
             Browse Properties

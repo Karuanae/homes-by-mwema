@@ -2,7 +2,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import socketService from '../../services/socketService';
 import api from '../../services/api';
-import { FaPaperPlane, FaTimes, FaUser, FaCrown, FaCheckDouble, FaSpinner } from 'react-icons/fa';
+import { 
+  FaPaperPlane, FaTimes, FaUser, FaCrown, 
+  FaCheck, FaCheckDouble, FaSpinner, FaArrowLeft 
+} from 'react-icons/fa';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function ChatWindow({ chatId, currentUser, onClose, propertyName = '' }) {
   const [messages, setMessages] = useState([]);
@@ -12,107 +16,94 @@ export default function ChatWindow({ chatId, currentUser, onClose, propertyName 
   const [loading, setLoading] = useState(true);
   const [chatInfo, setChatInfo] = useState(null);
   const [sending, setSending] = useState(false);
+  const [error, setError] = useState(null);
+  const [retryCount, setRetryCount] = useState(0);
+  
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const inputRef = useRef(null);
 
-  // Debug logging
-  useEffect(() => {
-    console.log('💬 ChatWindow Mounted:', {
-      chatId,
-      currentUserId: currentUser?.id,
-      messagesCount: messages.length,
-      socketConnected: socketService.isConnected
-    });
-  }, []);
-
+  // ── Initialization ────────────────────────────────────────
   useEffect(() => {
     if (!chatId || !currentUser) {
-      console.error('❌ Missing chatId or currentUser');
+      setError('Missing chat information');
       return;
     }
 
-    console.log('🔌 Initializing chat:', chatId);
+    initializeChat();
 
-    // Load existing messages from REST API
-    loadMessages();
-    
-    // Connect to socket if not already connected
-    if (!socketService.isConnected) {
-      console.log('🔄 Connecting socket...');
-      socketService.connect();
-    }
-    
-    // Authenticate with socket
-    socketService.authenticate(currentUser.id, currentUser.role || 'user');
-    
-    // Join chat room
-    console.log('🎯 Joining chat room:', chatId);
-    socketService.joinChat(chatId);
-
-    // Subscribe to socket events
-    socketService.on('new_message', handleNewMessage);
-    socketService.on('user_typing', handleUserTyping);
-    socketService.on('joined_chat', handleJoinedChat);
-    socketService.on('messages_read', handleMessagesRead);
-    socketService.on('chat_notification', handleChatNotification);
-
-    // Set up typing indicator debounce
     return () => {
-      console.log('🧹 Cleaning up chat:', chatId);
-      
-      // Clean up socket listeners
+      // Cleanup
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      socketService.leaveChat(chatId);
       socketService.off('new_message', handleNewMessage);
       socketService.off('user_typing', handleUserTyping);
       socketService.off('joined_chat', handleJoinedChat);
       socketService.off('messages_read', handleMessagesRead);
-      socketService.off('chat_notification', handleChatNotification);
-      
-      // Clear typing timeout
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
-      
-      // Leave chat room
-      socketService.leaveChat(chatId);
     };
-  }, [chatId, currentUser]);
+  }, [chatId, currentUser, retryCount]);
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
-  // Debug effect to log message changes
-  useEffect(() => {
-    console.log('📊 Messages updated:', messages.length, 'messages');
-    if (messages.length > 0) {
-      console.log('Latest message:', messages[messages.length - 1]);
+  // ── Socket Setup ──────────────────────────────────────────
+  const initializeChat = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Load messages from REST API
+      await loadMessages();
+      
+      // Setup socket connection
+      if (!socketService.isConnected) {
+        socketService.connect();
+      }
+      
+      socketService.authenticate(currentUser.id, currentUser.role || 'user');
+      socketService.joinChat(chatId);
+
+      // Subscribe to events
+      socketService.on('new_message', handleNewMessage);
+      socketService.on('user_typing', handleUserTyping);
+      socketService.on('joined_chat', handleJoinedChat);
+      socketService.on('messages_read', handleMessagesRead);
+
+      // Mark messages as read
+      try {
+        await api.chats.markRead(chatId);
+      } catch (readError) {
+        console.warn('Could not mark messages as read:', readError);
+      }
+
+    } catch (err) {
+      console.error('Failed to initialize chat:', err);
+      setError('Failed to load conversation');
+    } finally {
+      setLoading(false);
     }
-  }, [messages]);
+  };
 
   const loadMessages = async () => {
-    setLoading(true);
     try {
-      console.log('📥 Loading messages for chat:', chatId);
-      
-      // Load chat history from REST API
       const response = await api.chats.getMessages(chatId);
       const messagesData = response.data || [];
       
-      console.log('📨 API messages response:', messagesData);
-      
-      // Ensure all messages have required fields
+      // Format messages consistently
       const formattedMessages = messagesData.map(msg => ({
-        id: msg.id || `msg_${Date.now()}_${Math.random()}`,
+        id: msg.id,
         content: msg.content || msg.message || '',
         sender_id: msg.sender_id || msg.user_id,
         sender_name: msg.sender_name || msg.user_name || 'User',
-        is_host: msg.is_host || (msg.sender_type === 'admin') || false,
+        is_host: msg.is_host || false,
         timestamp: msg.timestamp || msg.created_at || new Date().toISOString(),
         is_read: msg.is_read || false,
         chat_id: msg.chat_id || chatId
       }));
       
-      console.log('✅ Formatted messages:', formattedMessages);
       setMessages(formattedMessages);
       
       // Load chat info
@@ -128,46 +119,29 @@ export default function ChatWindow({ chatId, currentUser, onClose, propertyName 
         console.warn('Could not load chat info:', chatInfoError);
       }
       
-      // Mark messages as read
-      try {
-        await api.chats.markRead(chatId);
-        console.log('✅ Messages marked as read');
-      } catch (readError) {
-        console.warn('Could not mark messages as read:', readError);
-      }
-    } catch (error) {
-      console.error('❌ Error loading messages:', error);
-      // Fallback to empty messages
-      setMessages([]);
-    } finally {
-      setLoading(false);
+    } catch (err) {
+      console.error('Error loading messages:', err);
+      throw err;
     }
   };
 
+  // ── Socket Event Handlers ─────────────────────────────────
   const handleNewMessage = (socketMessage) => {
-    console.log('📩 RAW socket new_message:', socketMessage);
-    
-    // Transform socket message to match your message format
     const newMessageObj = {
-      id: socketMessage.message_id || socketMessage.id || `socket_${Date.now()}_${Math.random()}`,
-      content: socketMessage.content || socketMessage.message || socketMessage.message_preview || '',
+      id: socketMessage.id || `msg_${Date.now()}`,
+      content: socketMessage.content || socketMessage.message || '',
       sender_id: socketMessage.sender_id || socketMessage.user_id,
       sender_name: socketMessage.sender_name || socketMessage.user_name || 'User',
-      is_host: socketMessage.is_host || (socketMessage.sender_type === 'admin') || false,
-      timestamp: socketMessage.timestamp || socketMessage.created_at || new Date().toISOString(),
+      is_host: socketMessage.is_host || false,
+      timestamp: socketMessage.timestamp || new Date().toISOString(),
       is_read: socketMessage.is_read || false,
       chat_id: socketMessage.chat_id || chatId
     };
-    
-    console.log('📨 Transformed new message:', newMessageObj);
-    
-    // Check if this message belongs to current chat
-    const isSameChat = newMessageObj.chat_id === chatId || 
-                      newMessageObj.chat_id?.toString() === chatId?.toString();
-    
-    if (isSameChat) {
+
+    // Only add if it belongs to this chat
+    if (newMessageObj.chat_id === chatId || newMessageObj.chat_id?.toString() === chatId?.toString()) {
       setMessages(prev => {
-        // Prevent duplicates by checking ID and timestamp
+        // Prevent duplicates
         const isDuplicate = prev.some(msg => 
           msg.id === newMessageObj.id || 
           (msg.content === newMessageObj.content && 
@@ -176,54 +150,42 @@ export default function ChatWindow({ chatId, currentUser, onClose, propertyName 
         );
         
         if (!isDuplicate) {
-          console.log('✅ Adding new message to state');
           return [...prev, newMessageObj];
-        } else {
-          console.log('⚠️  Duplicate message detected, skipping');
-          return prev;
         }
+        return prev;
       });
       
       setOtherUserTyping(false);
       
-      // If it's not our own message, mark as read
+      // If it's not our message, mark as read
       if (newMessageObj.sender_id !== currentUser.id) {
         setTimeout(() => {
-          markMessageAsRead(newMessageObj.id);
+          markMessagesAsRead();
         }, 500);
       }
-      
-      // Notify parent components if needed
-      socketService.emit('message_received', { chatId, messageId: newMessageObj.id });
-    } else {
-      console.log('⚠️  Message for different chat, ignoring');
     }
   };
 
   const handleUserTyping = (data) => {
-    console.log('✍️  User typing event:', data);
-    
-    // Only show typing indicator for other users
     if (data.user_id !== currentUser.id && data.chat_id === chatId) {
       setOtherUserTyping(data.is_typing);
       
-      // Auto-hide typing indicator after 2 seconds
+      // Auto-hide after 2 seconds
       clearTimeout(typingTimeoutRef.current);
-      typingTimeoutRef.current = setTimeout(() => {
-        setOtherUserTyping(false);
-      }, 2000);
+      if (data.is_typing) {
+        typingTimeoutRef.current = setTimeout(() => {
+          setOtherUserTyping(false);
+        }, 2000);
+      }
     }
   };
 
   const handleJoinedChat = (data) => {
-    console.log('✅ Successfully joined chat:', data);
+    console.log('✅ Joined chat:', data);
   };
 
   const handleMessagesRead = (data) => {
-    console.log('📖 Messages read event:', data);
-    
     if (data.chat_id === chatId) {
-      // Update read status for messages sent by the other user
       setMessages(prev => prev.map(msg => ({
         ...msg,
         is_read: msg.sender_id !== currentUser.id ? true : msg.is_read
@@ -231,83 +193,71 @@ export default function ChatWindow({ chatId, currentUser, onClose, propertyName 
     }
   };
 
-  const handleChatNotification = (notification) => {
-    console.log('🔔 Chat notification:', notification);
-    // This might be for other chats, but we can check
-    if (notification.chat_id === chatId) {
-      console.log('📬 Notification for current chat');
-    }
-  };
-
+  // ── Message Actions ───────────────────────────────────────
   const sendMessage = async () => {
     const messageContent = newMessage.trim();
     if (!messageContent || sending) return;
     
     setSending(true);
     
+    // Optimistic message
+    const optimisticMessage = {
+      id: `temp_${Date.now()}`,
+      content: messageContent,
+      sender_id: currentUser.id,
+      sender_name: currentUser.name || currentUser.email,
+      is_host: currentUser.role === 'admin',
+      timestamp: new Date().toISOString(),
+      is_read: false,
+      is_temp: true
+    };
+    
+    setMessages(prev => [...prev, optimisticMessage]);
+    setNewMessage('');
+    scrollToBottom();
+    
+    // Stop typing indicator
+    setIsTyping(false);
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    socketService.typing(chatId, false);
+
     try {
-      // Create optimistic message for immediate UI update
-      const optimisticMessage = {
-        id: `temp_${Date.now()}_${Math.random()}`,
-        content: messageContent,
-        sender_id: currentUser.id,
-        sender_name: currentUser.name,
-        is_host: currentUser.role === 'admin',
-        timestamp: new Date().toISOString(),
-        is_read: false,
-        chat_id: chatId,
-        is_temp: true
-      };
-      
-      console.log('📤 Sending message:', optimisticMessage);
-      
-      // Add to UI immediately
-      setMessages(prev => [...prev, optimisticMessage]);
-      setNewMessage('');
-      scrollToBottom();
-      
-      // Stop typing indicator
-      setIsTyping(false);
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
-      socketService.typing(chatId, false);
-      
-      // ONLY send via REST API - it will broadcast via socket to other clients
-      // This prevents duplicate messages (before we were sending both ways)
       const response = await api.chats.sendMessage(chatId, {
         message: messageContent,
         sender_id: currentUser.id,
-        sender_name: currentUser.name,
+        sender_name: currentUser.name || currentUser.email,
         is_host: currentUser.role === 'admin'
       });
       
-      console.log('✅ Message sent successfully:', response.data);
+      // Replace optimistic message with real one
+      setMessages(prev => prev.map(msg => 
+        msg.id === optimisticMessage.id 
+          ? { ...response.data, is_temp: false }
+          : msg
+      ));
       
-      // Update the temporary message with the real ID and mark as confirmed
-      if (response.data?.id) {
-        setMessages(prev => prev.map(msg => 
-          msg.id === optimisticMessage.id ? { ...msg, id: response.data.id, is_temp: false } : msg
-        ));
-      } else {
-        setMessages(prev => prev.map(msg => 
-          msg.id === optimisticMessage.id ? { ...msg, is_temp: false } : msg
-        ));
-      }
-      
-    } catch (error) {
-      console.error('❌ Error sending message:', error);
-      
+    } catch (err) {
+      console.error('Failed to send message:', err);
       // Remove optimistic message on error
       setMessages(prev => prev.filter(msg => msg.id !== optimisticMessage.id));
-      
-      // Show error to user
       alert('Failed to send message. Please try again.');
     } finally {
       setSending(false);
     }
   };
 
+  const markMessagesAsRead = async () => {
+    try {
+      await api.chats.markRead(chatId);
+      socketService.markMessagesRead(chatId);
+    } catch (err) {
+      console.warn('Failed to mark messages as read:', err);
+    }
+  };
+
+  // ── Typing Handler ────────────────────────────────────────
   const handleTyping = (typing) => {
     if (typing !== isTyping) {
       setIsTyping(typing);
@@ -318,7 +268,7 @@ export default function ChatWindow({ chatId, currentUser, onClose, propertyName 
         clearTimeout(typingTimeoutRef.current);
       }
       
-      // Auto-stop typing after 2 seconds
+      // Auto-stop after 2 seconds
       if (typing) {
         typingTimeoutRef.current = setTimeout(() => {
           handleTyping(false);
@@ -327,26 +277,10 @@ export default function ChatWindow({ chatId, currentUser, onClose, propertyName 
     }
   };
 
-  const markMessageAsRead = async (messageId) => {
-    try {
-      // Update local state
-      setMessages(prev => prev.map(msg => 
-        msg.id === messageId ? { ...msg, is_read: true } : msg
-      ));
-      
-      // Notify server via socket
-      socketService.markMessagesRead(chatId);
-    } catch (error) {
-      console.warn('Could not mark message as read:', error);
-    }
-  };
-
+  // ── UI Helpers ────────────────────────────────────────────
   const scrollToBottom = () => {
     setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ 
-        behavior: 'smooth',
-        block: 'end'
-      });
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
   };
 
@@ -355,7 +289,7 @@ export default function ChatWindow({ chatId, currentUser, onClose, propertyName 
     try {
       const date = new Date(timestamp);
       return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } catch (e) {
+    } catch {
       return '';
     }
   };
@@ -373,222 +307,273 @@ export default function ChatWindow({ chatId, currentUser, onClose, propertyName 
       } else if (date.toDateString() === yesterday.toDateString()) {
         return 'Yesterday';
       } else {
-        return date.toLocaleDateString();
+        return date.toLocaleDateString('en-US', { 
+          month: 'short', 
+          day: 'numeric', 
+          year: 'numeric' 
+        });
       }
-    } catch (e) {
+    } catch {
       return '';
     }
   };
 
-  const isAdmin = currentUser.role === 'admin';
-
-  // Group messages by date
-  const groupedMessages = messages.reduce((groups, message) => {
-    const date = formatDate(message.timestamp);
-    if (!groups[date]) {
-      groups[date] = [];
-    }
-    groups[date].push(message);
+  const groupMessagesByDate = (messages) => {
+    const groups = {};
+    messages.forEach(msg => {
+      const date = formatDate(msg.timestamp);
+      if (!groups[date]) groups[date] = [];
+      groups[date].push(msg);
+    });
     return groups;
-  }, {});
+  };
 
-  return (
-    <div className="flex flex-col h-full bg-[#F9F8F6] border border-stone-200 font-sans shadow-xl">
-      {/* Header - Matches your admin dashboard style */}
-      <div className="bg-[#1C2321] text-[#E5E5E0] p-6 flex items-center justify-between border-b border-stone-700">
-        <div className="flex items-center gap-4">
-          <div className="w-10 h-10 rounded-full bg-stone-700 flex items-center justify-center">
-            {isAdmin ? (
-              <FaCrown className="text-[#D4AF37] text-lg" />
-            ) : (
-              <FaUser className="text-stone-400 text-lg" />
-            )}
-          </div>
-          <div>
-            <h3 className="font-serif text-lg text-white">
-              {isAdmin ? (chatInfo?.user_name || 'Client') : 'Concierge Support'}
-            </h3>
-            {propertyName && (
-              <p className="text-xs text-stone-400 font-serif italic">{propertyName}</p>
-            )}
-            <div className="flex items-center gap-2 mt-1">
-              <div className={`w-2 h-2 rounded-full ${socketService.isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-              <p className="text-[10px] text-stone-500 uppercase tracking-widest">
-                {otherUserTyping ? 'Typing...' : (socketService.isConnected ? 'Online' : 'Offline')}
-              </p>
-            </div>
+  const shouldShowAvatar = (messages, index) => {
+    if (index === 0) return true;
+    const prevMsg = messages[index - 1];
+    const currMsg = messages[index];
+    return prevMsg.sender_id !== currMsg.sender_id;
+  };
+
+  // ── Loading State ─────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="flex flex-col h-full bg-white">
+        {/* Header Skeleton */}
+        <div className="bg-[#1C2321] p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-stone-700 animate-pulse"></div>
+          <div className="flex-1">
+            <div className="h-4 bg-stone-700 animate-pulse rounded w-32 mb-2"></div>
+            <div className="h-3 bg-stone-700 animate-pulse rounded w-24"></div>
           </div>
         </div>
-        <div className="flex items-center gap-4">
+
+        {/* Messages Skeleton */}
+        <div className="flex-1 p-4 space-y-4">
+          {[1,2,3].map(i => (
+            <div key={i} className={`flex ${i % 2 === 0 ? 'justify-end' : 'justify-start'}`}>
+              <div className={`w-2/3 h-16 ${i % 2 === 0 ? 'bg-stone-800' : 'bg-stone-200'} animate-pulse rounded-2xl`}></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Error State ───────────────────────────────────────────
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full bg-white p-8">
+        <div className="text-center max-w-sm">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-2xl">⚠️</span>
+          </div>
+          <h3 className="font-serif text-lg text-stone-900 mb-2">Something went wrong</h3>
+          <p className="text-stone-500 text-sm mb-6">{error}</p>
           <button
-            onClick={loadMessages}
-            className="text-xs text-stone-400 hover:text-white transition-colors uppercase tracking-widest"
+            onClick={() => setRetryCount(prev => prev + 1)}
+            className="px-6 py-2 bg-[#1C2321] text-white rounded-lg text-sm hover:bg-stone-800 transition-colors"
           >
-            Refresh
+            Try Again
           </button>
-          <button
-            onClick={onClose}
-            className="text-stone-400 hover:text-white text-xl transition-colors"
-          >
-            <FaTimes />
-          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Main Render ───────────────────────────────────────────
+  const groupedMessages = groupMessagesByDate(messages);
+  const isAdmin = currentUser.role === 'admin';
+
+  return (
+    <div className="flex flex-col h-full bg-white">
+      {/* Header */}
+      <div className="bg-[#1C2321] text-white px-4 py-3 flex items-center gap-3 flex-shrink-0">
+        <button
+          onClick={onClose}
+          className="md:hidden p-2 hover:bg-stone-700 rounded-full transition-colors touch-manipulation"
+          style={{ minHeight: '44px', minWidth: '44px' }}
+        >
+          <FaArrowLeft className="text-lg" />
+        </button>
+        
+        <div className="w-10 h-10 rounded-full bg-stone-700 flex items-center justify-center flex-shrink-0">
+          {isAdmin ? (
+            <FaCrown className="text-[#D4AF37] text-lg" />
+          ) : (
+            <FaUser className="text-stone-400 text-lg" />
+          )}
+        </div>
+        
+        <div className="flex-1 min-w-0">
+          <h3 className="font-serif text-lg truncate">
+            {isAdmin ? (chatInfo?.user_name || 'Client') : 'Concierge Support'}
+          </h3>
+          {propertyName && (
+            <p className="text-xs text-stone-400 truncate">{propertyName}</p>
+          )}
+          <div className="flex items-center gap-2 mt-1">
+            <div className={`w-2 h-2 rounded-full ${socketService.isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+            <p className="text-[10px] text-stone-400">
+              {otherUserTyping ? 'Typing...' : (socketService.isConnected ? 'Online' : 'Offline')}
+            </p>
+          </div>
         </div>
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-white">
-        {loading ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center">
-              <div className="w-8 h-8 border-2 border-stone-200 border-t-stone-600 rounded-full animate-spin mx-auto mb-3"></div>
-              <p className="font-serif text-stone-400 italic text-sm">Loading conversation...</p>
+      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 bg-stone-50">
+        {Object.entries(groupedMessages).map(([date, dateMessages]) => (
+          <div key={date}>
+            {/* Date Separator */}
+            <div className="flex justify-center mb-4">
+              <span className="text-xs bg-white px-3 py-1 rounded-full text-stone-500 shadow-sm">
+                {date}
+              </span>
             </div>
-          </div>
-        ) : messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center max-w-md">
-              <div className="text-5xl text-stone-200 mb-4">💬</div>
-              <h3 className="font-serif text-stone-600 text-lg mb-2">Start the Conversation</h3>
-              <p className="text-stone-400 font-light">
-                {isAdmin 
-                  ? 'Welcome the client and ask how you can assist them today.'
-                  : 'Ask our concierge about availability, amenities, or any special requests.'}
-              </p>
-            </div>
-          </div>
-        ) : (
-          Object.entries(groupedMessages).map(([date, dateMessages]) => (
-            <div key={date}>
-              {/* Date separator */}
-              <div className="flex items-center justify-center my-6">
-                <div className="text-xs text-stone-400 bg-white px-4 py-1 rounded-full border border-stone-200">
-                  {date}
-                </div>
-              </div>
-              
-              {/* Messages for this date */}
-              {dateMessages.map((msg, index) => {
-                const isOwnMessage = msg.sender_id === currentUser.id;
-                const isAdminMessage = msg.is_host;
-                const showSender = index === 0 || dateMessages[index - 1]?.sender_id !== msg.sender_id;
-                
+
+            {/* Messages */}
+            <div className="space-y-2">
+              {dateMessages.map((msg, idx) => {
+                const isOwn = msg.sender_id === currentUser.id;
+                const showAvatar = shouldShowAvatar(dateMessages, idx);
+
                 return (
-                  <div
-                    key={msg.id || index}
-                    className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} mb-3 animate-fade-in`}
+                  <motion.div
+                    key={msg.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={`flex ${isOwn ? 'justify-end' : 'justify-start'} items-end gap-2`}
                   >
+                    {/* Avatar for others */}
+                    {!isOwn && showAvatar && (
+                      <div className="w-8 h-8 rounded-full bg-stone-200 flex-shrink-0 mb-1 overflow-hidden">
+                        {msg.is_host ? (
+                          <div className="w-full h-full bg-stone-700 flex items-center justify-center text-white text-xs">
+                            H
+                          </div>
+                        ) : (
+                          <div className="w-full h-full bg-stone-400 flex items-center justify-center text-white text-xs">
+                            {msg.sender_name?.charAt(0) || 'U'}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {!isOwn && !showAvatar && <div className="w-8 flex-shrink-0" />}
+
+                    {/* Message Bubble */}
                     <div
-                      className={`max-w-[80%] rounded-lg p-4 shadow-sm transition-all duration-300 ${
-                        msg.is_temp ? 'opacity-70' : 'opacity-100'
-                      } ${
-                        isOwnMessage
-                          ? 'bg-[#1C2321] text-white rounded-br-none'
-                          : isAdminMessage
-                          ? 'bg-[#F0F0EC] text-stone-800 border-l-4 border-[#D4AF37] rounded-bl-none'
-                          : 'bg-stone-100 text-stone-800 rounded-bl-none'
+                      className={`max-w-[75%] group ${
+                        isOwn ? 'order-2' : 'order-1'
                       }`}
                     >
-                      {showSender && !isOwnMessage && (
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-xs font-medium text-stone-600">
-                            {msg.sender_name}
-                          </span>
-                          {isAdminMessage && (
-                            <span className="text-[10px] bg-[#D4AF37] text-white px-2 py-0.5 rounded-full">
-                              Admin
+                      {/* Sender Name (only first message in group) */}
+                      {!isOwn && showAvatar && (
+                        <p className="text-xs text-stone-500 mb-1 ml-2">
+                          {msg.is_host ? 'Host' : msg.sender_name}
+                        </p>
+                      )}
+
+                      <div
+                        className={`relative px-4 py-2 rounded-2xl ${
+                          isOwn
+                            ? 'bg-[#1C2321] text-white rounded-br-none'
+                            : 'bg-white text-stone-900 rounded-bl-none shadow-sm'
+                        } ${msg.is_temp ? 'opacity-70' : ''}`}
+                      >
+                        <p className="text-sm leading-relaxed pr-16">{msg.content}</p>
+                        
+                        {/* Timestamp & Status Inside Bubble */}
+                        <div className={`absolute bottom-1 right-2 flex items-center gap-1 text-[10px] ${
+                          isOwn ? 'text-stone-400' : 'text-stone-400'
+                        }`}>
+                          <span>{formatTime(msg.timestamp)}</span>
+                          {isOwn && (
+                            <span className="flex items-center">
+                              {msg.is_temp ? (
+                                <FaSpinner className="text-xs animate-spin" />
+                              ) : msg.is_read ? (
+                                <FaCheckDouble className="text-sm text-blue-400" />
+                              ) : (
+                                <FaCheck className="text-sm" />
+                              )}
                             </span>
                           )}
                         </div>
-                      )}
-                      
-                      <div className="text-sm leading-relaxed font-light">{msg.content}</div>
-                      
-                      <div className="flex items-center justify-between mt-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-stone-400">
-                            {formatTime(msg.timestamp)}
-                          </span>
-                          {msg.is_temp && (
-                            <FaSpinner className="text-xs text-stone-400 animate-spin" />
-                          )}
-                        </div>
-                        {isOwnMessage && (
-                          <FaCheckDouble className={`text-xs ${msg.is_read ? 'text-blue-400' : 'text-stone-400'}`} />
-                        )}
                       </div>
                     </div>
-                  </div>
+
+                    {/* Spacer for own messages */}
+                    {isOwn && <div className="w-8 flex-shrink-0" />}
+                  </motion.div>
                 );
               })}
             </div>
-          ))
-        )}
-        
+          </div>
+        ))}
+
         {/* Typing Indicator */}
-        {otherUserTyping && (
-          <div className="flex justify-start animate-pulse">
-            <div className="bg-stone-100 rounded-lg p-4">
-              <div className="flex items-center gap-2">
+        <AnimatePresence>
+          {otherUserTyping && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="flex justify-start items-end gap-2"
+            >
+              <div className="w-8 h-8 rounded-full bg-stone-200 flex-shrink-0 mb-1"></div>
+              <div className="bg-white px-4 py-3 rounded-2xl rounded-bl-none shadow-sm">
                 <div className="flex gap-1">
                   <div className="w-2 h-2 bg-stone-400 rounded-full animate-bounce"></div>
                   <div className="w-2 h-2 bg-stone-400 rounded-full animate-bounce delay-100"></div>
                   <div className="w-2 h-2 bg-stone-400 rounded-full animate-bounce delay-200"></div>
                 </div>
-                <span className="text-xs text-stone-500 ml-2">Typing...</span>
               </div>
-            </div>
-          </div>
-        )}
-        
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <div ref={messagesEndRef} />
       </div>
 
       {/* Input Area */}
-      <div className="p-6 border-t border-stone-200 bg-white">
-        <div className="flex gap-3">
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              value={newMessage}
-              onChange={(e) => {
-                setNewMessage(e.target.value);
-                if (e.target.value && !isTyping) {
-                  handleTyping(true);
-                }
-                if (!e.target.value && isTyping) {
-                  handleTyping(false);
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  sendMessage();
-                }
-              }}
-              onBlur={() => handleTyping(false)}
-              placeholder={isAdmin ? "Type your response..." : "Type your message..."}
-              className="w-full border border-stone-300 rounded-lg px-4 py-3 pr-12 focus:outline-none focus:border-stone-600 font-serif placeholder-stone-400 bg-stone-50"
-              disabled={sending}
-            />
-            <button
-              onClick={sendMessage}
-              disabled={!newMessage.trim() || sending}
-              className={`absolute right-2 top-1/2 transform -translate-y-1/2 p-2 rounded-full transition-all ${
-                newMessage.trim() && !sending
-                  ? 'bg-[#1C2321] text-white hover:bg-stone-900'
-                  : 'bg-stone-200 text-stone-400 cursor-not-allowed'
-              }`}
-            >
-              {sending ? (
-                <FaSpinner className="animate-spin" />
-              ) : (
-                <FaPaperPlane />
-              )}
-            </button>
-          </div>
+      <div className="bg-white border-t border-stone-200 px-4 py-3 flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <input
+            ref={inputRef}
+            type="text"
+            value={newMessage}
+            onChange={(e) => {
+              setNewMessage(e.target.value);
+              if (e.target.value && !isTyping) {
+                handleTyping(true);
+              }
+              if (!e.target.value && isTyping) {
+                handleTyping(false);
+              }
+            }}
+            onBlur={() => handleTyping(false)}
+            placeholder={isAdmin ? "Type your response..." : "Type a message..."}
+            className="flex-1 bg-stone-50 rounded-full px-6 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-stone-300 transition-all"
+            style={{ minHeight: '44px' }}
+            onKeyPress={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+              }
+            }}
+          />
+          <button
+            onClick={sendMessage}
+            disabled={!newMessage.trim() || sending}
+            className="bg-[#1C2321] text-white p-3 rounded-full hover:bg-stone-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
+            style={{ minHeight: '44px', minWidth: '44px' }}
+          >
+            {sending ? <FaSpinner className="animate-spin" /> : <FaPaperPlane />}
+          </button>
         </div>
-        <p className="text-[10px] text-stone-400 mt-2 text-center uppercase tracking-widest">
-          Press Enter to send • End-to-end encrypted
+        <p className="text-center text-[9px] text-stone-400 uppercase tracking-widest mt-3">
+          End-to-end encrypted • Typically replies in minutes
         </p>
       </div>
     </div>

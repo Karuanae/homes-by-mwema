@@ -3,26 +3,27 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="MWEMA ESTATE - Refined Living Awaits. Curated luxury residences in Nairobi's most prestigious locations." />
-    <meta name="keywords" content="luxury apartments, Nairobi real estate, premium homes, Kenya property, MWEMA estate" />
-    <meta name="author" content="MWEMA ESTATE" />
-    <meta property="og:title" content="MWEMA ESTATE | Refined Living Awaits" />
+    <meta name="description" content="Homes by Mwema - Refined Living Awaits. Curated luxury residences in Nairobi's most prestigious locations." />
+    <meta name="keywords" content="luxury apartments, Nairobi real estate, premium homes, Kenya property, Homes by Mwema, Mwema Estate" />
+    <meta name="author" content="Homes by Mwema" />
+    <meta property="og:title" content="Homes by Mwema | Refined Living Awaits" />
     <meta property="og:description" content="Experience the finest homes Kenya has to offer. Curated luxury residences in Nairobi's most prestigious locations." />
     <meta property="og:image" content="/og-image.jpg" />
     <meta property="og:url" content="https://homesbymwema.com" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@homesbymwema" />
     
     <!-- CRITICAL FIX FOR ROUTING -->
     <base href="/" />
     
     <!-- Favicon / Icon - Using larger PNG files for better quality -->
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="/android-chrome-192x192.png" />
     <link rel="icon" type="image/png" sizes="512x512" href="/android-chrome-512x512.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-    <!-- Keep smaller sizes for older browsers as fallback -->
-    
     <link rel="manifest" href="/site.webmanifest" />
-    <meta name="theme-color" content="#1C2321" />
+    <meta name="theme-color" content="#093A3E" />
     
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -30,9 +31,10 @@
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     
     <!-- Preload critical assets -->
-    <link rel="preload" href="/Logo.jpeg" as="image" />
+    <link rel="preload" href="/Logo3.png" as="image" />
+    <link rel="preload" href="/Capital3.jpeg" as="image" />
     
-    <title>MWEMA ESTATE | Refined Living Awaits</title>
+    <title>Homes by Mwema | Refined Living Awaits</title>
     
     <!-- Inline critical styles for initial render -->
     <style>
@@ -55,7 +57,7 @@
         opacity: 1;
       }
       
-      /* Loading animation */
+      /* Loading animation - Updated to Homes by Mwema branding */
       .initial-loader {
         position: fixed;
         top: 0;
@@ -72,28 +74,31 @@
       
       .loader-content {
         text-align: center;
+        max-width: 90%;
       }
       
       .loader-logo {
         font-family: 'Playfair Display', serif;
         font-size: 2.5rem;
-        letter-spacing: 4px;
-        color: #1C2321;
+        letter-spacing: 2px;
+        color: #093A3E;
         margin-bottom: 1rem;
         animation: pulse 2s infinite;
       }
       
-      .loader-logo span {
-        color: #D4AF37;
+      .loader-logo .mwema {
+        color: #ED9B40;
+        font-style: italic;
       }
       
       .loader-bar {
         width: 200px;
         height: 2px;
         background: #e0d9d0;
-        margin: 1rem auto;
+        margin: 1.5rem auto;
         position: relative;
         overflow: hidden;
+        border-radius: 2px;
       }
       
       .loader-bar::after {
@@ -103,8 +108,25 @@
         left: 0;
         width: 40%;
         height: 100%;
-        background: #1C2321;
+        background: #ED9B40;
         animation: loading 1.5s infinite;
+        border-radius: 2px;
+      }
+      
+      .loader-subtitle {
+        font-family: 'Playfair Display', serif;
+        font-size: 1rem;
+        font-style: italic;
+        color: #093A3E;
+        margin-bottom: 0.5rem;
+        opacity: 0.8;
+      }
+      
+      .loader-text {
+        font-size: 0.7rem;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        color: #8a7f74;
       }
       
       @keyframes pulse {
@@ -117,24 +139,27 @@
         100% { left: 100%; }
       }
       
-      .loader-text {
-        font-size: 0.75rem;
-        letter-spacing: 3px;
-        text-transform: uppercase;
-        color: #8a7f74;
-        margin-top: 1rem;
+      /* Mobile optimizations */
+      @media (max-width: 640px) {
+        .loader-logo {
+          font-size: 2rem;
+        }
+        .loader-bar {
+          width: 160px;
+        }
       }
     </style>
   </head>
   <body>
-    <!-- Initial Loader -->
+    <!-- Initial Loader - Updated with Homes by Mwema branding -->
     <div class="initial-loader" id="initial-loader">
       <div class="loader-content">
         <div class="loader-logo">
-          MWEMA<span>.</span>
+          HOMES <span class="mwema">by MWEMA</span>
         </div>
+        <div class="loader-subtitle">Refined Living Awaits</div>
         <div class="loader-bar"></div>
-        <div class="loader-text">Refined Living Awaits</div>
+        <div class="loader-text">Nairobi · Premium Residences</div>
       </div>
     </div>
 
@@ -142,15 +167,36 @@
     
     <script type="module" src="/src/main.jsx"></script>
     
-    <!-- Remove loader when app is ready -->
+    <!-- Remove loader when app is ready - with fallback -->
     <script>
-      window.addEventListener('load', function() {
-        setTimeout(function() {
-          document.getElementById('initial-loader').style.opacity = '0';
-          document.getElementById('initial-loader').style.visibility = 'hidden';
-          document.body.classList.add('loaded');
-        }, 800);
-      });
+      (function() {
+        // Function to remove loader
+        function removeLoader() {
+          var loader = document.getElementById('initial-loader');
+          if (loader) {
+            loader.style.opacity = '0';
+            loader.style.visibility = 'hidden';
+            document.body.classList.add('loaded');
+          }
+        }
+        
+        // Try to remove when app is ready
+        window.addEventListener('load', function() {
+          // Give React a moment to render
+          setTimeout(removeLoader, 800);
+        });
+        
+        // Fallback: remove after 3 seconds no matter what
+        setTimeout(removeLoader, 3000);
+        
+        // Also try to detect when React is ready
+        var checkReact = setInterval(function() {
+          if (document.getElementById('root') && document.getElementById('root').children.length > 0) {
+            clearInterval(checkReact);
+            setTimeout(removeLoader, 300);
+          }
+        }, 100);
+      })();
     </script>
   </body>
 </html>

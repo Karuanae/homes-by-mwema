@@ -1,4 +1,4 @@
-// src/services/socketService.js - COMPLETE SOCKET SERVICE FOR YOUR UI
+// src/services/socketService.js - COMPLETE UPDATED VERSION
 import io from 'socket.io-client';
 import { SOCKET_URL } from './api';
 
@@ -6,86 +6,131 @@ class SocketService {
   constructor() {
     this.socket = null;
     this.isConnected = false;
-    this.reconnectionAttempts = 0;
-    this.maxReconnectionAttempts = 5;
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = 10;
+    this.reconnectDelay = 1000; // Start with 1 second
+    this.maxReconnectDelay = 30000; // Max 30 seconds
     this.listeners = new Map();
     this.user = null;
-    
-    // Auto-reconnect settings
-    this.reconnectInterval = 2000; // 2 seconds
+    this.connectionPromise = null;
     this.heartbeatInterval = null;
+    this.pendingMessages = new Map(); // Store callbacks for message confirmations
   }
 
-  // Initialize connection
-connect() {
-  if (this.socket?.connected) {
-    console.log('🔌 Socket already connected');
-    return;
+  // ── Connection Management ─────────────────────────────────
+  connect() {
+    // If already connected, return
+    if (this.socket?.connected) {
+      console.log('🔌 Socket already connected');
+      return Promise.resolve();
+    }
+
+    // If connection is in progress, return that promise
+    if (this.connectionPromise) {
+      return this.connectionPromise;
+    }
+
+    console.log(`🔌 Connecting to Socket.IO: ${SOCKET_URL}`);
+
+    this.connectionPromise = new Promise((resolve, reject) => {
+      this.socket = io(SOCKET_URL, {
+        transports: ['websocket', 'polling'],
+        withCredentials: true,
+        reconnection: true,
+        reconnectionAttempts: this.maxReconnectAttempts,
+        reconnectionDelay: this.reconnectDelay,
+        reconnectionDelayMax: this.maxReconnectDelay,
+        timeout: 20000,
+        path: '/socket.io/',
+        secure: true,
+        autoConnect: true,
+        forceNew: false
+      });
+
+      this.setupEventListeners(resolve, reject);
+    });
+
+    return this.connectionPromise;
   }
 
-  // Using centralized SOCKET_URL from api.js
-
-
-  console.log(`🔌 Connecting to production Socket.IO: ${SOCKET_URL}`);
-
-  this.socket = io(SOCKET_URL, {
-    transports: ['websocket', 'polling'],
-    withCredentials: true,
-    reconnection: true,
-    reconnectionAttempts: 10,
-    reconnectionDelay: 1000,
-    timeout: 20000,
-    path: '/socket.io/',
-    secure: true,
-  });
-
-  this.setupEventListeners();
-}
-
-  // Setup all event listeners
-  setupEventListeners() {
+  setupEventListeners(resolve, reject) {
     if (!this.socket) return;
 
-    // Connection events
+    // Connection established
     this.socket.on('connect', () => {
       console.log('✅ SocketIO connected:', this.socket.id);
       this.isConnected = true;
-      this.reconnectionAttempts = 0;
-      this.emit('socket_connected', { socketId: this.socket.id });
+      this.reconnectAttempts = 0;
+      this.reconnectDelay = 1000;
+      this.connectionPromise = null;
       
-      // Start heartbeat
+      this.emit('socket_connected', { socketId: this.socket.id });
       this.startHeartbeat();
       
       // Re-authenticate if user was previously logged in
       if (this.user) {
         this.authenticate(this.user.id, this.user.role || 'user');
       }
+      
+      resolve();
     });
 
-    this.socket.on('disconnect', (reason) => {
-      console.log('❌ SocketIO disconnected:', reason);
+    // Connection error
+    this.socket.on('connect_error', (error) => {
+      console.error('❌ SocketIO connection error:', error.message);
       this.isConnected = false;
-      this.emit('socket_disconnected', { reason });
-      this.stopHeartbeat();
+      this.emit('socket_error', { error: error.message });
       
-      // Attempt reconnection
-      if (this.reconnectionAttempts < this.maxReconnectionAttempts) {
-        setTimeout(() => {
-          this.reconnectionAttempts++;
-          console.log(`🔄 Reconnection attempt ${this.reconnectionAttempts}/${this.maxReconnectionAttempts}`);
-          this.socket.connect();
-        }, this.reconnectInterval);
+      // Exponential backoff for reconnection attempts
+      this.reconnectAttempts++;
+      this.reconnectDelay = Math.min(
+        this.reconnectDelay * 2,
+        this.maxReconnectDelay
+      );
+      
+      if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+        reject(new Error('Max reconnection attempts reached'));
+        this.connectionPromise = null;
       }
     });
 
-    this.socket.on('connect_error', (error) => {
-      console.error('❌ SocketIO connection error:', error.message);
-      this.emit('socket_error', { error: error.message });
+    // Disconnection
+    this.socket.on('disconnect', (reason) => {
+      console.log('❌ SocketIO disconnected:', reason);
+      this.isConnected = false;
+      this.stopHeartbeat();
+      this.emit('socket_disconnected', { reason });
+      
+      // Clear any pending message promises
+      this.pendingMessages.forEach((_, msgId) => {
+        this.rejectPendingMessage(msgId, 'Connection lost');
+      });
+    });
+
+    // Reconnection attempts
+    this.socket.on('reconnect_attempt', (attempt) => {
+      console.log(`🔄 Reconnection attempt ${attempt}/${this.maxReconnectAttempts}`);
+      this.emit('reconnecting', { attempt, max: this.maxReconnectAttempts });
+    });
+
+    this.socket.on('reconnect', () => {
+      console.log('✅ Socket reconnected');
+      this.isConnected = true;
+      this.emit('reconnected');
+    });
+
+    this.socket.on('reconnect_error', (error) => {
+      console.error('❌ Reconnection error:', error);
+      this.emit('reconnect_error', { error: error.message });
+    });
+
+    this.socket.on('reconnect_failed', () => {
+      console.error('❌ Reconnection failed');
+      this.emit('reconnect_failed');
     });
 
     // Chat events
     this.socket.on('connected', (data) => {
-      console.log('🔌 Socket connected event:', data);
       this.emit('connected', data);
     });
 
@@ -100,47 +145,43 @@ connect() {
     });
 
     this.socket.on('new_message', (message) => {
-      console.log('📨 New message received:', message);
       this.emit('new_message', message);
+      
+      // Resolve any pending message promise
+      if (message.temp_id) {
+        this.resolvePendingMessage(message.temp_id, message);
+      }
     });
 
     this.socket.on('user_typing', (data) => {
-      console.log('✍️  User typing:', data);
       this.emit('user_typing', data);
     });
 
     this.socket.on('chat_notification', (notification) => {
-      console.log('🔔 Chat notification:', notification);
       this.emit('chat_notification', notification);
     });
 
     this.socket.on('joined_chat', (data) => {
-      console.log('✅ Joined chat:', data);
       this.emit('joined_chat', data);
     });
 
     this.socket.on('chat_created', (data) => {
-      console.log('💬 Chat created:', data);
       this.emit('chat_created', data);
     });
 
     this.socket.on('chat_exists', (data) => {
-      console.log('ℹ️  Chat exists:', data);
       this.emit('chat_exists', data);
     });
 
     this.socket.on('active_chats', (data) => {
-      console.log('📋 Active chats:', data.count);
       this.emit('active_chats', data);
     });
 
     this.socket.on('messages_read', (data) => {
-      console.log('📖 Messages read:', data);
       this.emit('messages_read', data);
     });
 
     this.socket.on('heartbeat_ack', (data) => {
-      // console.log('💓 Heartbeat acknowledged:', data);
       this.emit('heartbeat', data);
     });
 
@@ -150,17 +191,34 @@ connect() {
     });
 
     this.socket.on('pong', (data) => {
-      console.log('🏓 Pong received:', data);
       this.emit('pong', data);
     });
   }
 
-  // Authentication
+  // ── Heartbeat (optimized) ────────────────────────────────
+  startHeartbeat() {
+    this.stopHeartbeat();
+    // Less frequent heartbeat to save battery (60 seconds instead of 30)
+    this.heartbeatInterval = setInterval(() => {
+      if (this.isConnected) {
+        this.socket.emit('heartbeat');
+      }
+    }, 60000); // Every 60 seconds
+  }
+
+  stopHeartbeat() {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+  }
+
+  // ── Authentication ────────────────────────────────────────
   authenticate(userId, userType = 'user') {
     this.user = { id: userId, role: userType };
     
     if (!this.isConnected) {
-      console.log('⚠️  Not connected, storing credentials for later authentication');
+      console.log('⚠️ Not connected, will authenticate on reconnect');
       return;
     }
 
@@ -171,7 +229,55 @@ connect() {
     });
   }
 
-  // Chat operations
+  // ── Message Queue for Reliable Delivery ───────────────────
+  sendMessageWithAck(chatId, content, senderName = 'User', tempId = null) {
+    return new Promise((resolve, reject) => {
+      if (!this.isConnected) {
+        reject(new Error('Not connected to server'));
+        return;
+      }
+
+      const messageId = tempId || `msg_${Date.now()}_${Math.random()}`;
+      
+      // Store the promise callbacks
+      this.pendingMessages.set(messageId, { resolve, reject });
+
+      // Set timeout for acknowledgment
+      const timeout = setTimeout(() => {
+        this.rejectPendingMessage(messageId, 'Message delivery timeout');
+      }, 10000);
+
+      // Store timeout with the pending message
+      this.pendingMessages.get(messageId).timeout = timeout;
+
+      this.socket.emit('send_message', {
+        chat_id: chatId,
+        content: content,
+        sender_name: senderName,
+        temp_id: messageId
+      });
+    });
+  }
+
+  resolvePendingMessage(messageId, data) {
+    const pending = this.pendingMessages.get(messageId);
+    if (pending) {
+      clearTimeout(pending.timeout);
+      pending.resolve(data);
+      this.pendingMessages.delete(messageId);
+    }
+  }
+
+  rejectPendingMessage(messageId, error) {
+    const pending = this.pendingMessages.get(messageId);
+    if (pending) {
+      clearTimeout(pending.timeout);
+      pending.reject(new Error(error));
+      this.pendingMessages.delete(messageId);
+    }
+  }
+
+  // ── Chat Operations ───────────────────────────────────────
   createChat(userId, propertyId = null, initialMessage = 'Hello, I need assistance.') {
     return new Promise((resolve, reject) => {
       if (!this.isConnected) {
@@ -221,15 +327,13 @@ connect() {
   sendMessage(chatId, content, senderName = 'User') {
     if (!this.isConnected) {
       console.error('❌ Cannot send message: Not connected');
-      return;
+      return Promise.reject(new Error('Not connected'));
     }
 
-    console.log(`📤 Sending message to chat ${chatId}:`, content.substring(0, 50) + '...');
-    this.socket.emit('send_message', {
-      chat_id: chatId,
-      content: content,
-      sender_name: senderName
-    });
+    console.log(`📤 Sending message to chat ${chatId}`);
+    
+    // Use the reliable version with acknowledgment
+    return this.sendMessageWithAck(chatId, content, senderName);
   }
 
   typing(chatId, isTyping) {
@@ -267,24 +371,7 @@ connect() {
     });
   }
 
-  // Heartbeat for connection health
-  startHeartbeat() {
-    this.stopHeartbeat();
-    this.heartbeatInterval = setInterval(() => {
-      if (this.isConnected) {
-        this.socket.emit('heartbeat');
-      }
-    }, 30000); // Every 30 seconds
-  }
-
-  stopHeartbeat() {
-    if (this.heartbeatInterval) {
-      clearInterval(this.heartbeatInterval);
-      this.heartbeatInterval = null;
-    }
-  }
-
-  // Test ping
+  // ── Connection Health ────────────────────────────────────
   ping() {
     if (!this.isConnected) {
       console.error('❌ Cannot ping: Not connected');
@@ -294,19 +381,30 @@ connect() {
     this.socket.emit('ping');
   }
 
-  // Disconnect
+  // ── Disconnect & Cleanup ─────────────────────────────────
   disconnect() {
     this.stopHeartbeat();
+    
+    // Reject all pending messages
+    this.pendingMessages.forEach((_, msgId) => {
+      this.rejectPendingMessage(msgId, 'Socket disconnected');
+    });
+    
     if (this.socket) {
+      this.socket.removeAllListeners();
       this.socket.disconnect();
       this.socket = null;
     }
+    
     this.isConnected = false;
     this.user = null;
-    console.log('👋 Socket disconnected');
+    this.connectionPromise = null;
+    this.listeners.clear();
+    
+    console.log('👋 Socket disconnected and cleaned up');
   }
 
-  // Event subscription system
+  // ── Event Subscription System ────────────────────────────
   on(event, callback) {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set());
@@ -332,7 +430,7 @@ connect() {
     }
   }
 
-  // Utility methods
+  // ── Utility Methods ───────────────────────────────────────
   getSocketId() {
     return this.socket?.id || null;
   }
@@ -341,18 +439,38 @@ connect() {
     return {
       isConnected: this.isConnected,
       socketId: this.getSocketId(),
-      user: this.user
+      user: this.user,
+      reconnectAttempts: this.reconnectAttempts,
+      pendingMessages: this.pendingMessages.size
     };
+  }
+
+  // Check if we're online
+  isOnline() {
+    return navigator.onLine && this.isConnected;
   }
 }
 
 // Create singleton instance
 const socketService = new SocketService();
 
-// Auto-connect when imported (optional)
+// Auto-connect when imported (only on client-side)
 if (typeof window !== 'undefined') {
-  // Connect on client-side only
-  socketService.connect();
+  // Listen for online/offline events
+  window.addEventListener('online', () => {
+    console.log('🌐 Browser online, reconnecting socket...');
+    socketService.connect();
+  });
+
+  window.addEventListener('offline', () => {
+    console.log('🌐 Browser offline');
+    // Don't disconnect, let socket handle reconnection
+  });
+
+  // Initial connection with slight delay to ensure auth is ready
+  setTimeout(() => {
+    socketService.connect();
+  }, 1000);
 }
 
 export default socketService;
