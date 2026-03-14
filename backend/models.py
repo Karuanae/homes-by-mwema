@@ -120,11 +120,59 @@ class Booking(db.Model):
     idempotency_key = db.Column(db.String(100), unique=True, nullable=True)
     expires_at = db.Column(db.DateTime, nullable=True)
     booking_metadata = db.Column(db.JSON, default={})
+    
+    # NEW CANCELLATION FIELDS
+    cancellation_policy = db.Column(db.String(20), default='moderate')  # 'flexible', 'moderate', 'strict'
+    cancellation_deadline_30 = db.Column(db.Date, nullable=True)  # 30-day free cancellation deadline
+    cancellation_deadline_14 = db.Column(db.Date, nullable=True)  # 14-day partial refund deadline
+    cancelled_at = db.Column(db.DateTime, nullable=True)
+    cancellation_fee = db.Column(db.Numeric(10, 2), default=0)
+    refund_amount = db.Column(db.Numeric(10, 2), default=0)
+    refund_processed = db.Column(db.Boolean, default=False)
+    refund_processed_at = db.Column(db.DateTime, nullable=True)
+    
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     payments = db.relationship('Payment', backref='booking', lazy=True)
     chat = db.relationship('Chat', backref='booking', uselist=False, lazy=True)
+    
+    # NEW METHOD to calculate cancellation deadlines
+    def calculate_cancellation_deadlines(self):
+        """Calculate cancellation deadlines based on check-in date"""
+        if self.check_in:
+            # 30 days before check-in
+            self.cancellation_deadline_30 = self.check_in - timedelta(days=30)
+            # 14 days before check-in
+            self.cancellation_deadline_14 = self.check_in - timedelta(days=14)
+    
+    # NEW METHOD to calculate refund amount
+    def calculate_refund_amount(self):
+        """Calculate refund amount based on policy and current date"""
+        if not self.check_in:
+            return 0, 0
+            
+        now = datetime.now().date()
+        days_until_checkin = (self.check_in - now).days
+        
+        # Default to full refund (0 fee)
+        fee_amount = 0
+        refund_amount = float(self.total_amount or 0)
+        
+        if days_until_checkin >= 30:
+            # Free cancellation - full refund
+            fee_amount = 0
+            refund_amount = float(self.total_amount or 0)
+        elif days_until_checkin >= 14:
+            # 50% refund within 14-29 days
+            fee_amount = float(self.total_amount or 0) * 0.5
+            refund_amount = float(self.total_amount or 0) * 0.5
+        else:
+            # No refund within 14 days
+            fee_amount = float(self.total_amount or 0)
+            refund_amount = 0
+            
+        return fee_amount, refund_amount
     
 class Payment(db.Model):
     __tablename__ = 'payments'

@@ -658,34 +658,86 @@ def get_my_bookings():
 
 @booking_bp.route('/<int:booking_id>/cancel', methods=['POST'])
 @jwt_required()
-def cancel_booking(booking_id):
+def cancel_booking():
     """
-    Cancel a booking (user-initiated)
+    Cancel a booking with automatic refund calculation
     """
-    user_id = get_jwt_identity()
-    
-    booking = Booking.query.filter_by(id=booking_id, user_id=user_id).first()
-    if not booking:
-        return jsonify({'error': 'Booking not found'}), 404
-    
-    # Check if cancellation is allowed
-    now = datetime.now().date()
-    if booking.check_in <= now:
+    try:
+        user_id = get_jwt_identity()
+        data = request.get_json() or {}
+        booking_id = data.get('booking_id') or request.view_args.get('booking_id')
+        
+        if not booking_id:
+            return jsonify({'error': 'Booking ID is required'}), 400
+            
+        booking = Booking.query.filter_by(id=booking_id, user_id=user_id).first()
+        
+        if not booking:
+            return jsonify({'error': 'Booking not found'}), 404
+        
+        # Check if already cancelled
+        if booking.status == 'cancelled':
+            return jsonify({'error': 'Booking already cancelled'}), 400
+        
+        # Check if booking can be cancelled (not started)
+        now = datetime.now().date()
+        if booking.check_in <= now:
+            return jsonify({
+                'success': False,
+                'error': 'Cannot cancel booking that has already started',
+                'can_cancel': False
+            }), 400
+        
+        # Calculate cancellation deadlines if not set
+        if not booking.cancellation_deadline_30 or not booking.cancellation_deadline_14:
+            booking.calculate_cancellation_deadlines()
+        
+        # Calculate refund amount
+        fee_amount, refund_amount = booking.calculate_refund_amount()
+        
+        # Log the cancellation details
+        logger.info(f"Processing cancellation for booking {booking.id}:")
+        logger.info(f"  - Days until check-in: {(booking.check_in - now).days}")
+        logger.info(f"  - Fee amount: KES {fee_amount}")
+        logger.info(f"  - Refund amount: KES {refund_amount}")
+        
+        # Update booking status
+        booking.status = 'cancelled'
+        booking.cancelled_at = datetime.utcnow()
+        booking.cancellation_fee = fee_amount
+        booking.refund_amount = refund_amount
+        booking.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        # Send cancellation email (using your email service)
+        try:
+            from views.email_service import email_service
+            email_service.send_cancellation_email(booking, refund_amount)
+        except Exception as email_err:
+            logger.warning(f"Failed to send cancellation email: {email_err}")
+        
+        # Prepare response message
+        if refund_amount > 0:
+            if refund_amount == booking.total_amount:
+                message = 'Booking cancelled successfully. Full refund will be processed.'
+            else:
+                message = f'Booking cancelled successfully. Partial refund of KES {refund_amount:,.0f} will be processed.'
+        else:
+            message = 'Booking cancelled successfully. No refund applicable as per cancellation policy.'
+        
         return jsonify({
-            'success': False,
-            'error': 'Cannot cancel booking that has already started'
-        }), 400
-    
-    # Update status
-    booking.status = 'cancelled'
-    booking.confirmation = 'cancelled'
-    
-    db.session.commit()
-    
-    return jsonify({
-        'success': True,
-        'message': 'Booking cancelled successfully'
-    }), 200
+            'success': True,
+            'message': message,
+            'refund_amount': float(refund_amount),
+            'fee_amount': float(fee_amount),
+            'cancelled_at': booking.cancelled_at.isoformat()
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Cancellation error: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': 'Failed to cancel booking'}), 500
 
 # Background task to expire old pending bookings
 # Run this every minute via cron or scheduler

@@ -5,7 +5,7 @@ import {
   FaMapMarkerAlt, FaStar, FaDownload, FaWhatsapp, 
   FaPhone, FaQuestionCircle, FaBed, FaSearch, 
   FaFilter, FaChevronRight, FaCrown, FaCalendarAlt, FaHistory, FaMoneyBillWave, FaExclamationTriangle,
-  FaEye, FaTimes, FaCheck, FaClock
+  FaEye, FaTimes, FaCheck, FaClock, FaSpinner
 } from "react-icons/fa";
 import api, { IMAGE_BASE_URL } from "../services/api";
 
@@ -20,6 +20,10 @@ export default function MyBookings() {
   const [showFilters, setShowFilters] = useState(false);
   const [filterStatus, setFilterStatus] = useState("all");
   const [selectedBooking, setSelectedBooking] = useState(null);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelCalculation, setCancelCalculation] = useState(null);
+  
 
   // Timer state for pending bookings
   const [timers, setTimers] = useState({});
@@ -102,6 +106,65 @@ export default function MyBookings() {
     const secs = Math.floor((diff % 60000) / 1000);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+
+  // Handle cancel button click - show modal with refund calculation
+const handleCancelClick = (booking, e) => {
+  e.stopPropagation();
+  setSelectedBooking(booking);
+  
+  // Calculate refund based on days until check-in
+  const today = new Date();
+  const checkIn = new Date(booking.checkIn);
+  const daysUntilCheckIn = Math.ceil((checkIn - today) / (1000 * 60 * 60 * 24));
+  
+  let refundAmount = 0;
+  let message = '';
+  
+  if (daysUntilCheckIn >= 30) {
+    refundAmount = booking.totalAmount;
+    message = 'Full refund (cancellation more than 30 days before check-in)';
+  } else if (daysUntilCheckIn >= 14) {
+    refundAmount = booking.totalAmount * 0.5;
+    message = '50% refund (cancellation 14-29 days before check-in)';
+  } else {
+    refundAmount = 0;
+    message = 'No refund (cancellation less than 14 days before check-in)';
+  }
+  
+  setCancelCalculation({
+    refundAmount,
+    message,
+    daysUntilCheckIn
+  });
+  
+  setShowCancelModal(true);
+};
+
+// Confirm cancellation
+const confirmCancellation = async () => {
+  if (!selectedBooking) return;
+  
+  setCancelling(true);
+  try {
+    const response = await api.bookings.cancel(selectedBooking.id);
+    
+    // Show success message
+    alert(response.data.message || 'Booking cancelled successfully');
+    
+    // Refresh bookings
+    const updatedBookings = await api.bookings.getUserBookings();
+    setBookings(updatedBookings.data);
+    
+    // Close modal
+    setShowCancelModal(false);
+    setSelectedBooking(null);
+    
+  } catch (error) {
+    alert(error.response?.data?.error || 'Failed to cancel booking');
+  } finally {
+    setCancelling(false);
+  }
+};
 
   /* --- STATUS HELPERS --- */
   const getStatusStyle = (status) => {
@@ -216,6 +279,100 @@ export default function MyBookings() {
       </div>
 
       <div className="max-w-7xl mx-auto px-6">
+
+        {/* Cancel Booking Modal */}
+<AnimatePresence>
+  {showCancelModal && selectedBooking && (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+      onClick={() => setShowCancelModal(false)}
+    >
+      <motion.div
+        initial={{ scale: 0.95, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.95, y: 20 }}
+        className="bg-white rounded-xl max-w-md w-full"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="p-6">
+          {/* Header */}
+          <div className="flex justify-between items-start mb-4">
+            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+              <FaExclamationTriangle className="text-red-600 text-xl" />
+            </div>
+            <button
+              onClick={() => setShowCancelModal(false)}
+              className="p-2 hover:bg-stone-100 rounded-full"
+            >
+              <FaTimes />
+            </button>
+          </div>
+
+          <h3 className="font-serif text-xl mb-2">Cancel Booking?</h3>
+          <p className="text-stone-500 text-sm mb-6">
+            Are you sure you want to cancel your stay at <span className="font-medium text-stone-900">{selectedBooking?.propertyName}</span>?
+          </p>
+
+          {/* Booking Summary */}
+          <div className="bg-stone-50 p-4 rounded-lg mb-6 space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-stone-600">Check-in</span>
+              <span className="font-medium">{formatDate(selectedBooking?.checkIn)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-stone-600">Check-out</span>
+              <span className="font-medium">{formatDate(selectedBooking?.checkOut)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-stone-600">Total paid</span>
+              <span className="font-medium">{formatCurrency(selectedBooking?.totalAmount)}</span>
+            </div>
+          </div>
+
+          {/* Refund Info */}
+          <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+            <p className="text-sm text-amber-800 mb-2">⚠️ Refund Policy</p>
+            <p className="text-xs text-amber-700">
+              {cancelCalculation?.message || "Refund amount will be calculated based on days until check-in."}
+            </p>
+            {cancelCalculation?.refundAmount > 0 && (
+              <p className="text-sm font-medium text-amber-800 mt-2">
+                Refund amount: {formatCurrency(cancelCalculation.refundAmount)}
+              </p>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowCancelModal(false)}
+              className="flex-1 px-4 py-3 border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors text-sm"
+            >
+              Keep Booking
+            </button>
+            <button
+              onClick={confirmCancellation}
+              disabled={cancelling}
+              className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {cancelling ? (
+                <>
+                  <FaSpinner className="animate-spin" />
+                  Cancelling...
+                </>
+              ) : (
+                'Yes, Cancel'
+              )}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  )}
+</AnimatePresence>
         
         {/* 2. TABS & FILTER BAR */}
         <div className="flex flex-col md:flex-row justify-between items-center gap-6 mb-12">
@@ -362,6 +519,17 @@ export default function MyBookings() {
                         Complete Payment
                       </button>
                     )}
+
+                      {/* CANCEL BUTTON - Show for pending/confirmed/upcoming bookings */}
+  {['pending', 'confirmed', 'upcoming'].includes(booking.status) && (
+    <button 
+      onClick={(e) => handleCancelClick(booking, e)}
+      className="border border-red-300 text-red-600 px-10 py-4 text-[10px] uppercase tracking-[0.2em] font-bold hover:bg-red-50 transition-all"
+    >
+      Cancel Booking
+    </button>
+  )}
+
                   </div>
                 </div>
               </motion.div>
