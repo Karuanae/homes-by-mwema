@@ -81,20 +81,52 @@ export default function MyBookings() {
     fetchBookings();
   }, [location]);
 
-  // Timer update effect
-  useEffect(() => {
-    const timerInterval = setInterval(() => {
+  // REAL-TIME EXPIRY CHECK for pending bookings
+useEffect(() => {
+  const checkPendingBookings = async () => {
+    const pendingIds = bookings
+      .filter(b => b.status === 'pending' && b.expiresAt)
+      .map(b => b.id);
+    
+    if (pendingIds.length === 0) return;
+    
+    try {
+      // Fetch latest status for all pending bookings
+      const promises = pendingIds.map(id => api.bookings.getStatus(id));
+      const responses = await Promise.all(promises);
+      
+      let needsRefresh = false;
       const newTimers = {};
-      bookings.forEach(booking => {
-        if (booking.status === 'pending' && booking.expiresAt) {
-          newTimers[booking.id] = calculateTimeLeft(booking.expiresAt);
+      
+      responses.forEach((response, index) => {
+        const bookingId = pendingIds[index];
+        if (response.data.is_expired) {
+          // Booking just expired - refresh the whole list
+          needsRefresh = true;
+        } else if (response.data.time_left) {
+          newTimers[bookingId] = `${response.data.time_left.minutes}:${response.data.time_left.seconds.toString().padStart(2, '0')}`;
         }
       });
-      setTimers(newTimers);
-    }, 1000);
-
-    return () => clearInterval(timerInterval);
-  }, [bookings]);
+      
+      if (needsRefresh) {
+        fetchBookings();
+      } else {
+        setTimers(newTimers);
+      }
+      
+    } catch (error) {
+      console.error('Error checking booking statuses:', error);
+    }
+  };
+  
+  // Check immediately
+  checkPendingBookings();
+  
+  // Then check every 5 seconds
+  const interval = setInterval(checkPendingBookings, 5000);
+  
+  return () => clearInterval(interval);
+}, [bookings]); // Re-run when bookings change
 
   const calculateTimeLeft = (expiresAt) => {
     const now = new Date();

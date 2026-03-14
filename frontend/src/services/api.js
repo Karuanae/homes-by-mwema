@@ -210,15 +210,26 @@ export const bookingsAPI = {
 // ==================== PAYMENTS API - ENHANCED ====================
 export const paymentsAPI = {
   // M-PESA: Initiate STK Push
-  initiateMpesa: async (bookingId, phoneNumber, amount) => {
+ initiateMpesa: async (bookingId, phoneNumber, amount) => {
+  try {
     const response = await api.post('/payments/mpesa/initiate', {
       booking_id: bookingId,
       phone_number: phoneNumber,
       amount: amount
     });
     return response.data;
-  },
-
+  } catch (error) {
+    // Check if it's an expiry error
+    if (error.response?.data?.expired) {
+      // Create a custom error object with isExpired flag
+      const expiryError = new Error(error.response.data.error || 'Booking expired');
+      expiryError.isExpired = true;
+      expiryError.response = error.response;
+      throw expiryError;
+    }
+    throw error;
+  }
+},
   // M-PESA: Check payment status
   checkMpesaStatus: async (checkoutRequestId) => {
     const response = await api.get(`/payments/mpesa/status/${checkoutRequestId}`);
@@ -525,6 +536,11 @@ export const adminAPI = {
 
   updateBookingStatus: async (id, status) => {
     const response = await api.put(`/admin/bookings/${id}/status`, { status });
+    return response;
+  },
+
+  deleteBooking: async (id) => {
+    const response = await api.delete(`/admin/bookings/${id}`);
     return response;
   },
 

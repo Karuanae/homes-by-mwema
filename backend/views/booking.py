@@ -10,6 +10,8 @@ import logging
 booking_bp = Blueprint('booking', __name__)
 logger = logging.getLogger(__name__)
 
+# ==================== HELPER FUNCTIONS ====================
+
 def check_property_availability(property_id, check_in, check_out, exclude_booking_id=None):
     """
     SIMPLE availability check:
@@ -41,6 +43,24 @@ def check_property_availability(property_id, check_in, check_out, exclude_bookin
     conflicting = query.all()
     
     return len(conflicting) == 0, conflicting
+
+
+def check_and_update_expired(booking):
+    """
+    REAL-TIME EXPIRY CHECK - Check if a booking is expired and update its status if needed.
+    Returns True if booking was just expired, False otherwise.
+    """
+    if (booking.status == 'pending' and 
+        booking.expires_at and 
+        booking.expires_at < datetime.utcnow()):
+        booking.status = 'expired'
+        db.session.commit()
+        logger.info(f"⚡ Real-time expiry: Booking {booking.id} expired")
+        return True
+    return False
+
+
+# ==================== CREATE BOOKING ====================
 
 @booking_bp.route('', methods=['POST'])
 @jwt_required()
@@ -313,7 +333,9 @@ def create_booking():
             'details': str(e)
         }), 500
 
-# ========== NEW ENDPOINT FOR SESSION BOOKING ==========
+
+# ========== SESSION BOOKING ==========
+
 @booking_bp.route('/create-from-session', methods=['POST'])
 @jwt_required()
 def create_booking_from_session():
@@ -485,11 +507,14 @@ def create_booking_from_session():
             'error': 'Failed to create booking. Please try again.'
         }), 500
 
+
+# ==================== GET BOOKING STATUS ====================
+
 @booking_bp.route('/<int:booking_id>/status', methods=['GET'])
 @jwt_required()
 def get_booking_status(booking_id):
     """
-    Check if booking is still valid (not expired)
+    REAL-TIME STATUS CHECK - Check if booking is still valid (not expired)
     Used by frontend to show timeout warnings
     """
     user_id = get_jwt_identity()
@@ -497,6 +522,9 @@ def get_booking_status(booking_id):
     booking = Booking.query.filter_by(id=booking_id, user_id=user_id).first()
     if not booking:
         return jsonify({'error': 'Booking not found'}), 404
+    
+    # REAL-TIME EXPIRY CHECK - happens on every status request
+    was_expired = check_and_update_expired(booking)
     
     # Check if expired
     now = datetime.utcnow()
@@ -517,9 +545,13 @@ def get_booking_status(booking_id):
         'status': booking.status,
         'payment_status': booking.payment_status,
         'is_expired': is_expired,
+        'was_just_expired': was_expired,
         'expires_at': booking.expires_at.isoformat() if booking.expires_at else None,
         'time_left': time_left
     }), 200
+
+
+# ==================== CHECK AVAILABILITY ====================
 
 @booking_bp.route('/check-availability', methods=['POST'])
 def check_availability():
@@ -577,11 +609,14 @@ def check_availability():
             'available': False
         }), 500
 
+
+# ==================== GET MY BOOKINGS ====================
+
 @booking_bp.route('/my-bookings', methods=['GET'])
 @jwt_required()
 def get_my_bookings():
     """
-    Get all bookings for current user
+    Get all bookings for current user with REAL-TIME status
     Includes pending, upcoming, past
     """
     try:
@@ -597,12 +632,9 @@ def get_my_bookings():
         
         for booking in bookings:
             try:
-                # Auto-update expired pending bookings
-                if (booking.status == 'pending' and 
-                    booking.expires_at and 
-                    booking.expires_at < datetime.utcnow()):
-                    booking.status = 'expired'
-                    db.session.commit()
+                # REAL-TIME EXPIRY CHECK for each pending booking
+                if booking.status == 'pending':
+                    check_and_update_expired(booking)
                 
                 # Determine display status
                 display_status = booking.status
@@ -621,6 +653,16 @@ def get_my_bookings():
                 property_image = None
                 if property_obj.images and len(property_obj.images) > 0:
                     property_image = f"/api/admin/property-image/{property_obj.images[0].id}"
+                
+                # Calculate time left for pending bookings
+                time_left = None
+                if booking.status == 'pending' and booking.expires_at:
+                    diff = booking.expires_at - datetime.utcnow()
+                    if diff.total_seconds() > 0:
+                        time_left = {
+                            'minutes': diff.seconds // 60,
+                            'seconds': diff.seconds % 60
+                        }
                 
                 result.append({
                     'id': booking.id,
@@ -641,6 +683,7 @@ def get_my_bookings():
                     'status': display_status,
                     'original_status': booking.status,
                     'expires_at': booking.expires_at.isoformat() if booking.expires_at else None,
+                    'time_left': time_left,
                     'created_at': booking.created_at.isoformat() if booking.created_at else None,
                     'can_cancel': booking.status in ['pending', 'confirmed'] and booking.check_in > now
                 })
@@ -656,11 +699,14 @@ def get_my_bookings():
             'message': str(e)
         }), 500
 
+
+# ==================== CANCEL BOOKING ====================
+
 @booking_bp.route('/<int:booking_id>/cancel', methods=['POST'])
 @jwt_required()
 def cancel_booking():
     """
-    Cancel a booking with automatic refund calculation
+    Cancel a booking (user-initiated) with refund calculation
     """
     try:
         user_id = get_jwt_identity()
@@ -674,6 +720,14 @@ def cancel_booking():
         
         if not booking:
             return jsonify({'error': 'Booking not found'}), 404
+        
+        # REAL-TIME EXPIRY CHECK - if expired, can't cancel
+        if check_and_update_expired(booking):
+            return jsonify({
+                'success': False,
+                'error': 'Booking has expired and cannot be cancelled',
+                'expired': True
+            }), 400
         
         # Check if already cancelled
         if booking.status == 'cancelled':
@@ -689,11 +743,24 @@ def cancel_booking():
             }), 400
         
         # Calculate cancellation deadlines if not set
-        if not booking.cancellation_deadline_30 or not booking.cancellation_deadline_14:
+        if hasattr(booking, 'calculate_cancellation_deadlines') and (not booking.cancellation_deadline_30 or not booking.cancellation_deadline_14):
             booking.calculate_cancellation_deadlines()
         
         # Calculate refund amount
-        fee_amount, refund_amount = booking.calculate_refund_amount()
+        if hasattr(booking, 'calculate_refund_amount'):
+            fee_amount, refund_amount = booking.calculate_refund_amount()
+        else:
+            # Default if methods don't exist
+            days_until_checkin = (booking.check_in - now).days
+            if days_until_checkin >= 30:
+                fee_amount = 0
+                refund_amount = float(booking.total_amount)
+            elif days_until_checkin >= 14:
+                fee_amount = float(booking.total_amount) * 0.5
+                refund_amount = float(booking.total_amount) * 0.5
+            else:
+                fee_amount = float(booking.total_amount)
+                refund_amount = 0
         
         # Log the cancellation details
         logger.info(f"Processing cancellation for booking {booking.id}:")
@@ -704,18 +771,13 @@ def cancel_booking():
         # Update booking status
         booking.status = 'cancelled'
         booking.cancelled_at = datetime.utcnow()
-        booking.cancellation_fee = fee_amount
-        booking.refund_amount = refund_amount
+        if hasattr(booking, 'cancellation_fee'):
+            booking.cancellation_fee = fee_amount
+        if hasattr(booking, 'refund_amount'):
+            booking.refund_amount = refund_amount
         booking.updated_at = datetime.utcnow()
         
         db.session.commit()
-        
-        # Send cancellation email (using your email service)
-        try:
-            from views.email_service import email_service
-            email_service.send_cancellation_email(booking, refund_amount)
-        except Exception as email_err:
-            logger.warning(f"Failed to send cancellation email: {email_err}")
         
         # Prepare response message
         if refund_amount > 0:
@@ -729,9 +791,9 @@ def cancel_booking():
         return jsonify({
             'success': True,
             'message': message,
-            'refund_amount': float(refund_amount),
-            'fee_amount': float(fee_amount),
-            'cancelled_at': booking.cancelled_at.isoformat()
+            'refund_amount': float(refund_amount) if refund_amount else 0,
+            'fee_amount': float(fee_amount) if fee_amount else 0,
+            'cancelled_at': booking.cancelled_at.isoformat() if booking.cancelled_at else None
         }), 200
         
     except Exception as e:
@@ -739,12 +801,13 @@ def cancel_booking():
         db.session.rollback()
         return jsonify({'error': 'Failed to cancel booking'}), 500
 
-# Background task to expire old pending bookings
-# Run this every minute via cron or scheduler
+
+# ==================== BACKGROUND TASK ====================
+
 def expire_old_pending_bookings():
     """
-    Find pending bookings older than configured minutes and expire them
-    Call this function every minute from a background task
+    BACKGROUND TASK - Find pending bookings older than configured minutes and expire them
+    This is a backup for the real-time checks
     """
     try:
         # Get timeout from app config
@@ -756,12 +819,18 @@ def expire_old_pending_bookings():
             Booking.expires_at < datetime.utcnow()
         ).all()
         
+        count = 0
         for booking in expired:
             booking.status = 'expired'
-            logger.info(f"⏰ Booking {booking.id} expired - no payment received")
+            logger.info(f"⏰ Background task: Booking {booking.id} expired - no payment received")
+            count += 1
         
-        db.session.commit()
-        return len(expired)
+        if count > 0:
+            db.session.commit()
+            logger.info(f"✅ Background task expired {count} pending bookings")
+        
+        return count
     except Exception as e:
         logger.error(f"Error expiring bookings: {str(e)}")
+        db.session.rollback()
         return 0

@@ -12,7 +12,7 @@ import uuid
 import requests
 from mpesa_service import MPesaService
 from paypal_service import PayPalService
-
+from views.booking import check_and_update_expired
 
 payment_bp = Blueprint('payment', __name__)
 logger = logging.getLogger(__name__)
@@ -70,6 +70,15 @@ def initiate_mpesa_payment():
 
     if not booking:
         return jsonify({'success': False, 'error': 'Booking not found'}), 404
+    
+    # REAL-TIME EXPIRY CHECK - happens right when user tries to pay
+    from views.booking import check_and_update_expired
+    if check_and_update_expired(booking):
+        return jsonify({
+            'success': False,
+            'error': 'Booking session expired. Please start over.',
+            'expired': True
+        }), 400
 
     # Check if booking is still valid (not expired)
     if booking.expires_at and booking.expires_at < datetime.utcnow():

@@ -64,6 +64,40 @@ export default function PaymentPage() {
     initializePayment();
   }, []);
 
+// REAL-TIME EXPIRY CHECK - Check every 10 seconds
+useEffect(() => {
+  const checkExpiry = async () => {
+    if (!booking?.id) return;
+    
+    try {
+      const response = await api.bookings.getStatus(booking.id);
+      
+      if (response.data.is_expired) {
+        setIsExpired(true);
+        setErrorMessage('Your booking session has expired. Please start over.');
+      }
+      
+      // Update timer if still pending
+      if (response.data.time_left && booking.status === 'pending') {
+        setTimeLeft({
+          minutes: response.data.time_left.minutes,
+          seconds: response.data.time_left.seconds
+        });
+      }
+      
+    } catch (error) {
+      console.error('Error checking expiry:', error);
+    }
+  };
+  
+  checkExpiry();
+  
+  // Check every 10 seconds while on the page
+  const interval = setInterval(checkExpiry, 10000);
+  
+  return () => clearInterval(interval);
+}, [booking?.id]);
+
   // Check if returning from PayPal redirect
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
