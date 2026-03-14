@@ -1,4 +1,3 @@
-# admin.py - COMPLETE UPDATED VERSION WITH USER MANAGEMENT
 from flask import Blueprint, request, jsonify, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import db, User, Property, Booking, Payment, Lead, HomepageContent, AdminStats, PropertyImage, Chat, ChatMessage
@@ -849,7 +848,7 @@ def admin_delete_user(user_id):
         print(f"❌ Error deleting user: {str(e)}")
         return jsonify({'error': f'Failed to delete user: {str(e)}'}), 500
 
-# ========== BOOKING MANAGEMENT ==========
+# ========== ADMIN BOOKING MANAGEMENT ==========
 @admin_bp.route('/bookings', methods=['GET'])
 @jwt_required()
 def admin_get_bookings():
@@ -859,10 +858,17 @@ def admin_get_bookings():
     
     result = []
     for booking in bookings:
+        # Get payment info
+        payments = Payment.query.filter_by(booking_id=booking.id).all()
+        total_paid = sum(float(p.amount) for p in payments if p.status == 'completed') if payments else 0
+        pending_amount = float(booking.total_amount) - total_paid if booking.total_amount else 0
+        
         result.append({
             'id': booking.id,
             'guest_name': booking.user.name if booking.user else 'Guest',
-            'email': booking.user.email if booking.user else '',
+            'guest_email': booking.user.email if booking.user else '',
+            'guest_phone': booking.user.phone if booking.user else '',
+            'property_id': booking.property_id,
             'property_name': booking.property.name if booking.property else '',
             'property_location': booking.property.location if booking.property else '',
             'property_image': booking.property.get_cover_image_url() if booking.property else '',
@@ -871,20 +877,67 @@ def admin_get_bookings():
             'nights': booking.nights,
             'guests': booking.guests or {'adults': 1, 'children': 0, 'infants': 0},
             'total_amount': float(booking.total_amount) if booking.total_amount else 0,
+            'base_amount': float(booking.base_amount) if booking.base_amount else 0,
+            'cleaning_fee': float(booking.cleaning_fee) if booking.cleaning_fee else 0,
+            'service_fee': float(booking.service_fee) if booking.service_fee else 0,
+            'pending_amount': pending_amount,
+            'paid_amount': total_paid,
             'payment_method': booking.payment_method,
             'payment_status': booking.payment_status,
             'confirmation': booking.confirmation,
             'status': booking.status,
+            'expires_at': booking.expires_at.isoformat() if booking.expires_at else None,
+            'cancelled_at': booking.cancelled_at.isoformat() if booking.cancelled_at else None,
+            'cancellation_fee': float(booking.cancellation_fee) if booking.cancellation_fee else 0,
+            'refund_amount': float(booking.refund_amount) if booking.refund_amount else 0,
             'created_at': booking.created_at.isoformat() if booking.created_at else None
         })
     
     return jsonify(result)
 
+@admin_bp.route('/bookings/<int:booking_id>', methods=['DELETE'])
+@jwt_required()
+def admin_delete_booking(booking_id):
+    """Admin: Delete a booking (for expired/cancelled bookings)"""
+    require_admin()
+    
+    booking = Booking.query.get(booking_id)
+    if not booking:
+        return jsonify({'error': 'Booking not found'}), 404
+    
+    # Only allow deletion of expired or cancelled bookings
+    if booking.status not in ['expired', 'cancelled']:
+        return jsonify({
+            'error': 'Can only delete expired or cancelled bookings',
+            'current_status': booking.status
+        }), 400
+    
+    try:
+        print(f"🗑️ Admin deleting booking {booking_id} (status: {booking.status})")
+        
+        # Delete related payments first
+        Payment.query.filter_by(booking_id=booking_id).delete()
+        
+        # Delete the booking
+        db.session.delete(booking)
+        db.session.commit()
+        
+        print(f"✅ Booking {booking_id} deleted successfully")
+        return jsonify({
+            'success': True,
+            'message': 'Booking deleted successfully'
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error deleting booking: {str(e)}")
+        return jsonify({'error': f'Failed to delete booking: {str(e)}'}), 500
+
 # ========== BOOKING STATUS UPDATE ==========
 @admin_bp.route('/bookings/<int:booking_id>/status', methods=['PUT', 'PATCH'])
 @jwt_required()
 def admin_update_booking_status(booking_id):
-    """Admin: Confirm or cancel a booking"""
+    """Admin: Update booking status"""
     require_admin()
 
     booking = Booking.query.get(booking_id)
@@ -894,7 +947,7 @@ def admin_update_booking_status(booking_id):
     data = request.json or {}
     new_status = data.get('status')
 
-    allowed = ['confirmed', 'cancelled', 'pending', 'upcoming', 'completed']
+    allowed = ['confirmed', 'cancelled', 'pending', 'upcoming', 'completed', 'expired']
     if new_status not in allowed:
         return jsonify({
             'error': f'Invalid status. Must be one of: {", ".join(allowed)}'

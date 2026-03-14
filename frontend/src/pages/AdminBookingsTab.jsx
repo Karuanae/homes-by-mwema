@@ -4,7 +4,8 @@ import {
   FaSearch, FaEye, FaCheck, FaTimes, FaClock,
   FaFilter, FaSync, FaDownload, FaChevronDown,
   FaPhone, FaEnvelope, FaMapMarkerAlt, FaCreditCard,
-  FaTrash, FaExclamationTriangle, FaHistory
+  FaTrash, FaExclamationTriangle, FaHistory, FaChartLine,
+  FaRegCalendarCheck, FaRegClock, FaDollarSign, FaPercentage
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 import api, { API_BASE_URL } from "../services/api";
@@ -12,20 +13,25 @@ import api, { API_BASE_URL } from "../services/api";
 const AdminBookingsTab = () => {
   const [bookings, setBookings] = useState([]);
   const [filteredBookings, setFilteredBookings] = useState([]);
+  const [cancelledBookings, setCancelledBookings] = useState([]);
   const [expiredBookings, setExpiredBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeTab, setActiveTab] = useState("pending"); // pending, confirmed, completed, expired
+  const [activeTab, setActiveTab] = useState("pending");
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
   const [showFilters, setShowFilters] = useState(false);
-  const [stats, setStats] = useState({
-    pending: 0,
-    confirmed: 0,
-    completed: 0,
-    expired: 0,
-    totalRevenue: 0
+  const [deleting, setDeleting] = useState(false);
+  const [financialStats, setFinancialStats] = useState({
+    totalRevenue: 0,
+    totalRefunds: 0,
+    netRevenue: 0,
+    pendingPayments: 0,
+    averageBookingValue: 0,
+    occupancyRate: 0,
+    cancellationRate: 0,
+    successfulStays: 0
   });
 
   // Status options for display only
@@ -33,6 +39,7 @@ const AdminBookingsTab = () => {
     { value: "pending", label: "Pending Payment", color: "bg-amber-500" },
     { value: "confirmed", label: "Confirmed", color: "bg-green-500" },
     { value: "completed", label: "Completed", color: "bg-stone-500" },
+    { value: "cancelled", label: "Cancelled", color: "bg-red-500" },
     { value: "expired", label: "Expired", color: "bg-stone-400" }
   ];
 
@@ -52,28 +59,85 @@ const AdminBookingsTab = () => {
         const checkOut = new Date(booking.check_out);
         checkOut.setHours(0, 0, 0, 0);
         
-        // Determine if booking is expired (check_out passed and not completed)
-        const isExpired = checkOut < today && booking.status !== 'completed' && booking.status !== 'cancelled';
+        // Determine if booking is expired (check_out passed and not completed/cancelled)
+        const isExpired = checkOut < today && 
+                         booking.status !== 'completed' && 
+                         booking.status !== 'cancelled' &&
+                         booking.status !== 'expired';
+        
+        // Calculate refund amount if cancelled
+        const refundAmount = booking.refund_amount || 0;
+        const cancellationFee = booking.cancellation_fee || 0;
+        const netEarnings = booking.payment_status === 'completed' 
+          ? (booking.total_amount - refundAmount) 
+          : 0;
         
         return {
           ...booking,
           isExpired,
-          displayStatus: isExpired ? 'expired' : booking.status
+          displayStatus: isExpired ? 'expired' : booking.status,
+          refundAmount,
+          cancellationFee,
+          netEarnings,
+          profitMargin: booking.total_amount > 0 
+            ? ((booking.total_amount - refundAmount) / booking.total_amount * 100).toFixed(1)
+            : 0
         };
       });
       
       setBookings(processedData);
       
-      // Calculate stats
-      const pending = processedData.filter(b => b.status === 'pending' && !b.isExpired).length;
-      const confirmed = processedData.filter(b => b.status === 'confirmed' && !b.isExpired).length;
-      const completed = processedData.filter(b => b.status === 'completed').length;
-      const expired = processedData.filter(b => b.isExpired).length;
+      // Separate bookings by status
+      const cancelled = processedData.filter(b => b.status === 'cancelled');
+      const expired = processedData.filter(b => b.isExpired);
+      const active = processedData.filter(b => !b.isExpired && b.status !== 'cancelled');
+      
+      setCancelledBookings(cancelled);
+      setExpiredBookings(expired);
+      
+      // Calculate financial statistics
       const totalRevenue = processedData
         .filter(b => b.payment_status === 'completed')
         .reduce((sum, b) => sum + (b.total_amount || 0), 0);
       
-      setStats({ pending, confirmed, completed, expired, totalRevenue });
+      const totalRefunds = processedData
+        .filter(b => b.status === 'cancelled')
+        .reduce((sum, b) => sum + (b.refundAmount || 0), 0);
+      
+      const pendingPayments = processedData
+        .filter(b => b.payment_status === 'pending')
+        .reduce((sum, b) => sum + (b.pending_amount || b.total_amount || 0), 0);
+      
+      const completedBookings = processedData.filter(b => b.status === 'completed').length;
+      const totalBookings = processedData.length;
+      const cancelledCount = processedData.filter(b => b.status === 'cancelled').length;
+      
+      // Calculate average booking value (excluding cancelled)
+      const paidBookings = processedData.filter(b => b.payment_status === 'completed');
+      const avgBookingValue = paidBookings.length > 0
+        ? paidBookings.reduce((sum, b) => sum + (b.total_amount || 0), 0) / paidBookings.length
+        : 0;
+      
+      // Calculate occupancy rate (simplified - based on completed vs total)
+      const occupancyRate = totalBookings > 0 
+        ? (completedBookings / totalBookings * 100).toFixed(1)
+        : 0;
+      
+      // Calculate cancellation rate
+      const cancellationRate = totalBookings > 0
+        ? (cancelledCount / totalBookings * 100).toFixed(1)
+        : 0;
+      
+      setFinancialStats({
+        totalRevenue,
+        totalRefunds,
+        netRevenue: totalRevenue - totalRefunds,
+        pendingPayments,
+        averageBookingValue: avgBookingValue, // Fixed: using avgBookingValue variable
+        occupancyRate,
+        cancellationRate,
+        successfulStays: completedBookings
+      });
       
       // Apply filters
       applyFilters(processedData, searchTerm, dateRange);
@@ -116,11 +180,13 @@ const AdminBookingsTab = () => {
     // Sort by date (most recent first)
     filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     
-    // Separate expired bookings
+    // Separate by status
     const expired = filtered.filter(b => b.isExpired);
-    const active = filtered.filter(b => !b.isExpired);
+    const cancelled = filtered.filter(b => b.status === 'cancelled' && !b.isExpired);
+    const active = filtered.filter(b => !b.isExpired && b.status !== 'cancelled');
     
     setExpiredBookings(expired);
+    setCancelledBookings(cancelled);
     setFilteredBookings(active);
   };
 
@@ -128,20 +194,34 @@ const AdminBookingsTab = () => {
     applyFilters(bookings, searchTerm, dateRange);
   }, [searchTerm, dateRange]);
 
-  // Handle delete expired booking
-  const handleDeleteExpired = async (bookingId) => {
-    if (!window.confirm('Are you sure you want to delete this expired booking? This action cannot be undone.')) {
-      return;
+  // Handle delete booking
+const handleDeleteBooking = async (bookingId) => {
+  if (!window.confirm('Are you sure you want to delete this booking? This action cannot be undone.')) {
+    return;
+  }
+  
+  setDeleting(true);
+  try {
+    // Use the admin delete endpoint instead of user cancel
+    await api.admin.deleteBooking(bookingId);
+    
+    // Refresh bookings after successful deletion
+    await fetchBookings();
+    
+    // Close modal if open
+    if (selectedBooking?.id === bookingId) {
+      setSelectedBooking(null);
     }
     
-    try {
-      // Note: You'll need to implement this endpoint in your backend
-      await api.admin.deleteBooking(bookingId);
-      fetchBookings(); // Refresh
-    } catch (error) {
-      alert('Failed to delete booking');
-    }
-  };
+    alert('Booking deleted successfully');
+    
+  } catch (error) {
+    console.error('Delete error:', error);
+    alert(error.response?.data?.error || 'Failed to delete booking');
+  } finally {
+    setDeleting(false);
+  }
+};
 
   // Format helpers
   const formatDate = (dateStr) => {
@@ -176,6 +256,7 @@ const AdminBookingsTab = () => {
       'pending': 'bg-amber-100 text-amber-700 border-amber-200',
       'confirmed': 'bg-green-100 text-green-700 border-green-200',
       'completed': 'bg-stone-100 text-stone-600 border-stone-200',
+      'cancelled': 'bg-red-50 text-red-700 border-red-200',
       'expired': 'bg-stone-100 text-stone-500 border-stone-200'
     };
     return colors[status] || 'bg-stone-100 text-stone-600 border-stone-200';
@@ -193,9 +274,8 @@ const AdminBookingsTab = () => {
 
   // Get bookings based on active tab
   const getCurrentBookings = () => {
-    if (activeTab === 'expired') {
-      return expiredBookings;
-    }
+    if (activeTab === 'expired') return expiredBookings;
+    if (activeTab === 'cancelled') return cancelledBookings;
     return filteredBookings.filter(b => b.status === activeTab && !b.isExpired);
   };
 
@@ -203,8 +283,10 @@ const AdminBookingsTab = () => {
 
   // Export to CSV
   const exportToCSV = () => {
-    const headers = ['ID', 'Property', 'Guest', 'Email', 'Check In', 'Check Out', 'Nights', 'Total', 'Status', 'Payment', 'Created'];
-    const csvData = (activeTab === 'expired' ? expiredBookings : filteredBookings).map(b => [
+    const headers = ['ID', 'Property', 'Guest', 'Email', 'Check In', 'Check Out', 'Nights', 'Total', 'Refund', 'Net', 'Status', 'Payment', 'Created'];
+    const csvData = (activeTab === 'expired' ? expiredBookings : 
+                     activeTab === 'cancelled' ? cancelledBookings : 
+                     filteredBookings).map(b => [
       b.id,
       b.property_name,
       b.guest_name,
@@ -213,6 +295,8 @@ const AdminBookingsTab = () => {
       b.check_out,
       b.nights,
       b.total_amount,
+      b.refundAmount || 0,
+      b.netEarnings || b.total_amount,
       b.displayStatus || b.status,
       b.payment_status,
       new Date(b.created_at).toLocaleDateString()
@@ -237,6 +321,47 @@ const AdminBookingsTab = () => {
 
   return (
     <div className="space-y-6">
+      {/* Financial Statistics Dashboard */}
+      <div className="bg-white rounded-lg border border-stone-200 p-6">
+        <h3 className="font-serif text-lg mb-4 flex items-center gap-2">
+          <FaChartLine className="text-[#093A3E]" /> Financial Overview
+        </h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+          <div className="text-center">
+            <p className="text-[10px] uppercase text-stone-500">Revenue</p>
+            <p className="text-lg font-serif text-green-600">{formatCurrency(financialStats.totalRevenue)}</p>
+          </div>
+          <div className="text-center">
+            <p className="text-[10px] uppercase text-stone-500">Refunds</p>
+            <p className="text-lg font-serif text-red-600">{formatCurrency(financialStats.totalRefunds)}</p>
+          </div>
+          <div className="text-center">
+            <p className="text-[10px] uppercase text-stone-500">Net</p>
+            <p className="text-lg font-serif text-[#093A3E]">{formatCurrency(financialStats.netRevenue)}</p>
+          </div>
+          <div className="text-center">
+            <p className="text-[10px] uppercase text-stone-500">Pending</p>
+            <p className="text-lg font-serif text-amber-600">{formatCurrency(financialStats.pendingPayments)}</p>
+          </div>
+          <div className="text-center">
+            <p className="text-[10px] uppercase text-stone-500">Avg. Booking</p>
+            <p className="text-sm font-medium">{formatCurrency(financialStats.averageBookingValue)}</p>
+          </div>
+          <div className="text-center">
+            <p className="text-[10px] uppercase text-stone-500">Occupancy</p>
+            <p className="text-sm font-medium">{financialStats.occupancyRate}%</p>
+          </div>
+          <div className="text-center">
+            <p className="text-[10px] uppercase text-stone-500">Cancellation</p>
+            <p className="text-sm font-medium">{financialStats.cancellationRate}%</p>
+          </div>
+          <div className="text-center">
+            <p className="text-[10px] uppercase text-stone-500">Success</p>
+            <p className="text-sm font-medium">{financialStats.successfulStays}</p>
+          </div>
+        </div>
+      </div>
+
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div 
@@ -246,7 +371,7 @@ const AdminBookingsTab = () => {
           }`}
         >
           <p className="text-[10px] uppercase text-amber-600">Pending</p>
-          <p className="text-2xl font-serif text-amber-600">{stats.pending}</p>
+          <p className="text-2xl font-serif text-amber-600">{filteredBookings.filter(b => b.status === 'pending').length}</p>
         </div>
         <div 
           onClick={() => setActiveTab('confirmed')}
@@ -255,7 +380,7 @@ const AdminBookingsTab = () => {
           }`}
         >
           <p className="text-[10px] uppercase text-green-600">Confirmed</p>
-          <p className="text-2xl font-serif text-green-600">{stats.confirmed}</p>
+          <p className="text-2xl font-serif text-green-600">{filteredBookings.filter(b => b.status === 'confirmed').length}</p>
         </div>
         <div 
           onClick={() => setActiveTab('completed')}
@@ -264,7 +389,16 @@ const AdminBookingsTab = () => {
           }`}
         >
           <p className="text-[10px] uppercase text-stone-500">Completed</p>
-          <p className="text-2xl font-serif">{stats.completed}</p>
+          <p className="text-2xl font-serif">{filteredBookings.filter(b => b.status === 'completed').length}</p>
+        </div>
+        <div 
+          onClick={() => setActiveTab('cancelled')}
+          className={`bg-white p-4 rounded-lg border cursor-pointer transition-all ${
+            activeTab === 'cancelled' ? 'border-red-500 shadow-md' : 'border-stone-200 hover:border-red-200'
+          }`}
+        >
+          <p className="text-[10px] uppercase text-red-600">Cancelled</p>
+          <p className="text-2xl font-serif text-red-600">{cancelledBookings.length}</p>
         </div>
         <div 
           onClick={() => setActiveTab('expired')}
@@ -273,11 +407,7 @@ const AdminBookingsTab = () => {
           }`}
         >
           <p className="text-[10px] uppercase text-stone-500">Expired</p>
-          <p className="text-2xl font-serif">{stats.expired}</p>
-        </div>
-        <div className="bg-white p-4 rounded-lg border border-stone-200">
-          <p className="text-[10px] uppercase text-stone-500">Revenue</p>
-          <p className="text-lg font-serif">{formatCurrency(stats.totalRevenue)}</p>
+          <p className="text-2xl font-serif">{expiredBookings.length}</p>
         </div>
       </div>
 
@@ -364,6 +494,8 @@ const AdminBookingsTab = () => {
                 <th className="px-4 py-3 text-[10px] uppercase text-stone-500">Dates</th>
                 <th className="px-4 py-3 text-[10px] uppercase text-stone-500">Nights</th>
                 <th className="px-4 py-3 text-[10px] uppercase text-stone-500">Total</th>
+                <th className="px-4 py-3 text-[10px] uppercase text-stone-500">Refund</th>
+                <th className="px-4 py-3 text-[10px] uppercase text-stone-500">Net</th>
                 <th className="px-4 py-3 text-[10px] uppercase text-stone-500">Status</th>
                 <th className="px-4 py-3 text-[10px] uppercase text-stone-500">Payment</th>
                 {activeTab === 'pending' && (
@@ -375,7 +507,7 @@ const AdminBookingsTab = () => {
             <tbody>
               {currentBookings.length === 0 ? (
                 <tr>
-                  <td colSpan={activeTab === 'pending' ? 10 : 9} className="text-center py-12 text-stone-400">
+                  <td colSpan={activeTab === 'pending' ? 13 : 12} className="text-center py-12 text-stone-400">
                     No {activeTab} bookings found
                   </td>
                 </tr>
@@ -404,6 +536,8 @@ const AdminBookingsTab = () => {
                     </td>
                     <td className="px-4 py-3">{booking.nights}</td>
                     <td className="px-4 py-3 font-medium">{formatCurrency(booking.total_amount)}</td>
+                    <td className="px-4 py-3 text-red-600">{formatCurrency(booking.refundAmount || 0)}</td>
+                    <td className="px-4 py-3 text-green-600 font-medium">{formatCurrency(booking.netEarnings || booking.total_amount)}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-block px-2 py-1 text-xs rounded-full ${getStatusColor(booking.displayStatus || booking.status)}`}>
                         {booking.displayStatus || booking.status}
@@ -435,11 +569,12 @@ const AdminBookingsTab = () => {
                         >
                           <FaEye />
                         </button>
-                        {activeTab === 'expired' && (
+                        {(activeTab === 'expired' || activeTab === 'cancelled') && (
                           <button
-                            onClick={() => handleDeleteExpired(booking.id)}
-                            className="p-1 text-red-400 hover:text-red-600"
-                            title="Delete Expired Booking"
+                            onClick={() => handleDeleteBooking(booking.id)}
+                            disabled={deleting}
+                            className="p-1 text-red-400 hover:text-red-600 disabled:opacity-50"
+                            title="Delete Booking"
                           >
                             <FaTrash />
                           </button>
@@ -453,16 +588,20 @@ const AdminBookingsTab = () => {
           </table>
         </div>
 
-        {/* Summary for expired tab */}
-        {activeTab === 'expired' && expiredBookings.length > 0 && (
+        {/* Summary for expired/cancelled tabs */}
+        {(activeTab === 'expired' || activeTab === 'cancelled') && currentBookings.length > 0 && (
           <div className="p-4 bg-amber-50 border-t border-amber-200 text-amber-700 text-sm flex items-center gap-2">
             <FaExclamationTriangle />
-            <span>Expired bookings are past their check-out date and can be safely deleted.</span>
+            <span>
+              {activeTab === 'expired' 
+                ? 'Expired bookings are past their check-out date and can be safely deleted.'
+                : 'Cancelled bookings show refund amounts and can be deleted from the system.'}
+            </span>
           </div>
         )}
       </div>
 
-      {/* Booking Details Modal (View Only) */}
+      {/* Booking Details Modal */}
       <AnimatePresence>
         {selectedBooking && (
           <motion.div
@@ -495,14 +634,19 @@ const AdminBookingsTab = () => {
                   </button>
                 </div>
 
-                {/* Status Badges (View Only) */}
+                {/* Status Badges */}
                 <div className="flex gap-2 mb-6">
                   <span className={`px-3 py-1 text-xs rounded-full ${getStatusColor(selectedBooking.displayStatus || selectedBooking.status)}`}>
                     {selectedBooking.displayStatus || selectedBooking.status}
                   </span>
-                  <span className={`px-3 py-1 text-xs rounded-full bg-stone-100`}>
+                  <span className="px-3 py-1 text-xs rounded-full bg-stone-100">
                     Payment: {selectedBooking.payment_status}
                   </span>
+                  {selectedBooking.status === 'cancelled' && (
+                    <span className="px-3 py-1 text-xs rounded-full bg-red-100 text-red-700">
+                      Refund: {formatCurrency(selectedBooking.refundAmount || 0)}
+                    </span>
+                  )}
                 </div>
 
                 {/* Property Info */}
@@ -543,18 +687,16 @@ const AdminBookingsTab = () => {
                   <div className="bg-stone-50 p-3 rounded">
                     <p className="text-[10px] uppercase text-stone-400 mb-1">Check In</p>
                     <p className="font-medium">{formatDate(selectedBooking.check_in)}</p>
-                    <p className="text-xs text-stone-500">After 2:00 PM</p>
                   </div>
                   <div className="bg-stone-50 p-3 rounded">
                     <p className="text-[10px] uppercase text-stone-400 mb-1">Check Out</p>
                     <p className="font-medium">{formatDate(selectedBooking.check_out)}</p>
-                    <p className="text-xs text-stone-500">Before 11:00 AM</p>
                   </div>
                 </div>
 
-                {/* Payment Breakdown */}
+                {/* Financial Breakdown */}
                 <div className="border-t border-stone-200 pt-4 mb-6">
-                  <h4 className="font-medium mb-3">Payment Details</h4>
+                  <h4 className="font-medium mb-3">Financial Details</h4>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-stone-600">Base amount ({selectedBooking.nights} nights)</span>
@@ -572,6 +714,31 @@ const AdminBookingsTab = () => {
                       <span>Total</span>
                       <span>{formatCurrency(selectedBooking.total_amount)}</span>
                     </div>
+                    
+                    {/* Cancellation details if applicable */}
+                    {selectedBooking.status === 'cancelled' && (
+                      <>
+                        <div className="flex justify-between text-red-600 pt-2">
+                          <span>Refund issued</span>
+                          <span>-{formatCurrency(selectedBooking.refundAmount || 0)}</span>
+                        </div>
+                        <div className="flex justify-between text-amber-600">
+                          <span>Cancellation fee</span>
+                          <span>{formatCurrency(selectedBooking.cancellation_fee || 0)}</span>
+                        </div>
+                        <div className="flex justify-between text-green-600 font-bold pt-2 border-t">
+                          <span>Net earnings</span>
+                          <span>{formatCurrency(selectedBooking.netEarnings || 0)}</span>
+                        </div>
+                        {selectedBooking.cancelled_at && (
+                          <p className="text-xs text-stone-500 mt-2">
+                            Cancelled on: {new Date(selectedBooking.cancelled_at).toLocaleString()}
+                          </p>
+                        )}
+                      </>
+                    )}
+                    
+                    {/* Payment status */}
                     {selectedBooking.paid_amount > 0 && (
                       <div className="flex justify-between text-green-600">
                         <span>Paid</span>
@@ -587,11 +754,27 @@ const AdminBookingsTab = () => {
                   </div>
                 </div>
 
-                {/* View Only Notice */}
-                <div className="bg-stone-50 p-4 rounded-lg text-center text-sm text-stone-500">
-                  <FaEye className="inline mr-2" />
-                  This is a view-only summary. No actions can be taken on this page.
-                </div>
+                {/* Admin Actions */}
+                {(activeTab === 'expired' || activeTab === 'cancelled') && (
+                  <div className="flex gap-3 pt-4 border-t">
+                    <button
+                      onClick={() => handleDeleteBooking(selectedBooking.id)}
+                      disabled={deleting}
+                      className="flex-1 bg-red-600 text-white py-3 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {deleting ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          Deleting...
+                        </>
+                      ) : (
+                        <>
+                          <FaTrash /> Delete Booking
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
               </div>
             </motion.div>
           </motion.div>

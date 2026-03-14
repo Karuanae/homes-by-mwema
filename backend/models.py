@@ -1,5 +1,5 @@
 # models.py - COMPLETE UPDATED VERSION
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import MetaData
 from werkzeug.security import generate_password_hash, check_password_hash
