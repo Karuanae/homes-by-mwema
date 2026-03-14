@@ -174,31 +174,45 @@ useEffect(() => {
   };
 
   // Confirm cancellation
-  const confirmCancellation = async () => {
+ const confirmCancellation = async () => {
     if (!selectedBooking) return;
-    
     setCancelling(true);
     try {
       const response = await api.bookings.cancel(selectedBooking.id);
-      
-      // Show success message
       alert(response.data.message || 'Booking cancelled successfully');
       
-      // Refresh bookings
-      const updatedBookings = await api.bookings.getUserBookings();
-      setBookings(updatedBookings.data);
-      
-      // Close modal
+      // ✅ Re-run the full fetch + transform, not raw setBookings
+      const updatedResponse = await api.bookings.getUserBookings();
+      const transformed = (updatedResponse.data || []).map(booking => ({
+        id: booking.id,
+        propertyName: booking.property_name || booking.propertyName || 'Unknown Property',
+        propertyLocation: booking.property_location || booking.propertyLocation || 'Nairobi',
+        propertyImage: booking.property_image || booking.propertyImage,
+        checkIn: booking.check_in || booking.checkIn,
+        checkOut: booking.check_out || booking.checkOut,
+        nights: booking.nights || 0,
+        guests: booking.guests || { adults: 1, children: 0 },
+        totalAmount: booking.total_amount || booking.totalAmount || 0,
+        baseAmount: booking.base_amount || booking.baseAmount || 0,
+        cleaningFee: booking.cleaning_fee || booking.cleaningFee || 0,
+        serviceFee: booking.service_fee || booking.serviceFee || 0,
+        pendingAmount: booking.pending_amount || booking.pendingAmount || 0,
+        paidAmount: booking.total_amount - (booking.pending_amount || 0),
+        status: booking.status || 'pending',
+        paymentStatus: booking.payment_status || booking.paymentStatus || 'pending',
+        createdAt: booking.created_at || booking.createdAt,
+        expiresAt: booking.expires_at || booking.expiresAt
+      }));
+      setBookings(transformed);
       setShowCancelModal(false);
       setSelectedBooking(null);
-      
     } catch (error) {
       alert(error.response?.data?.error || 'Failed to cancel booking');
     } finally {
       setCancelling(false);
     }
   };
-
+  
   /* --- STATUS HELPERS --- */
   const getStatusStyle = (status) => {
     const styles = {

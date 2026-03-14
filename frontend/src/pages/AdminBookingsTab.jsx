@@ -56,34 +56,35 @@ const AdminBookingsTab = () => {
       today.setHours(0, 0, 0, 0);
       
       const processedData = data.map(booking => {
-        const checkOut = new Date(booking.check_out);
-        checkOut.setHours(0, 0, 0, 0);
-        
-        // Determine if booking is expired (check_out passed and not completed/cancelled)
-        const isExpired = checkOut < today && 
-                         booking.status !== 'completed' && 
-                         booking.status !== 'cancelled' &&
-                         booking.status !== 'expired';
-        
-        // Calculate refund amount if cancelled
-        const refundAmount = booking.refund_amount || 0;
-        const cancellationFee = booking.cancellation_fee || 0;
-        const netEarnings = booking.payment_status === 'completed' 
-          ? (booking.total_amount - refundAmount) 
-          : 0;
-        
-        return {
-          ...booking,
-          isExpired,
-          displayStatus: isExpired ? 'expired' : booking.status,
-          refundAmount,
-          cancellationFee,
-          netEarnings,
-          profitMargin: booking.total_amount > 0 
-            ? ((booking.total_amount - refundAmount) / booking.total_amount * 100).toFixed(1)
-            : 0
-        };
-      });
+  const now = new Date();
+  
+  // Timer-expired: booking is pending AND the expires_at timestamp has passed
+  const isTimerExpired = 
+    booking.status === 'pending' &&
+    booking.expires_at &&
+    new Date(booking.expires_at) < now;
+
+  // Use the DB status as truth, but catch the scheduler gap window
+  const effectiveStatus = isTimerExpired ? 'expired' : booking.status;
+
+  const refundAmount = booking.refund_amount || 0;
+  const cancellationFee = booking.cancellation_fee || 0;
+  const netEarnings = booking.payment_status === 'completed'
+    ? (booking.total_amount - refundAmount)
+    : 0;
+
+  return {
+    ...booking,
+    isExpired: effectiveStatus === 'expired',
+    displayStatus: effectiveStatus,
+    refundAmount,
+    cancellationFee,
+    netEarnings,
+    profitMargin: booking.total_amount > 0
+      ? ((booking.total_amount - refundAmount) / booking.total_amount * 100).toFixed(1)
+      : 0
+  };
+});
       
       setBookings(processedData);
       

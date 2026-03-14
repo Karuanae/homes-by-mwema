@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import eventlet
 from flask_mail import Mail
+import logging
 
 # Load environment variables from .env file
 load_dotenv()
@@ -17,6 +18,10 @@ load_dotenv()
 # Create the Flask application
 app = Flask(__name__)
 app.url_map.strict_slashes = False
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Database configuration - Force PostgreSQL in production, SQLite only for local dev
 database_url = os.environ.get('DATABASE_URL')
@@ -185,6 +190,18 @@ socketio = SocketIO(
     manage_session=False
 )
 
+# ===== INITIALIZE APSCHEDULER =====
+# Import and start the scheduler
+from scheduler import init_scheduler
+
+# Only start scheduler in production or when not in debug mode
+if not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+    try:
+        init_scheduler(app)
+        logger.info("✅ APScheduler initialized successfully")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize APScheduler: {e}")
+
 # JWT token blocklist callback
 @jwt.token_in_blocklist_loader
 def check_if_token_revoked(jwt_header, jwt_payload):
@@ -210,7 +227,7 @@ def health_check():
 @app.route('/')
 def index():
     return jsonify({
-        'name': 'MWEMA Estate API',
+        'name': 'Homes by Mwema API',
         'version': '1.0.0',
         'status': 'running',
         'environment': os.environ.get('FLASK_ENV', 'production'),
@@ -352,7 +369,7 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('FLASK_DEBUG', 'True').lower() == 'true'
     print("=" * 50)
-    print("🚀 Starting MWEMA Estate server locally...")
+    print("🚀 Starting Homes by Mwema server locally...")
     print(f"📡 Server will run on: http://0.0.0.0:{port}")
     print(f"📁 Upload folder: {UPLOAD_FOLDER}")
     print(f"🌐 CORS allowed origins: {all_domains}")
@@ -361,7 +378,7 @@ if __name__ == '__main__':
     socketio.run(app, debug=debug, host='0.0.0.0', port=port)
 else:
     print("=" * 50)
-    print("🚀 MWEMA Estate app initialized for production")
+    print("🚀 Homes by Mwema app initialized for production")
     print(f"📡 Database: {app.config['SQLALCHEMY_DATABASE_URI']}")
     print(f"📁 Upload folder: {app.config['UPLOAD_FOLDER']}")
     print(f"🌐 CORS allowed origins: {all_domains}")
