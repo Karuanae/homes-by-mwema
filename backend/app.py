@@ -172,7 +172,9 @@ print("=" * 50)
 
 # Initialize Mail
 mail = Mail(app)
-app.mail = mail 
+app.mail = mail
+from views.email_service import init_email_service
+init_email_service(mail)
 
 # Initialize extensions
 jwt = JWTManager(app)

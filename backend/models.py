@@ -176,7 +176,7 @@ class Booking(db.Model):
     
 class Payment(db.Model):
     __tablename__ = 'payments'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     booking_id = db.Column(db.Integer, db.ForeignKey('bookings.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
@@ -187,20 +187,38 @@ class Payment(db.Model):
     mpesa_number = db.Column(db.String(20))
     card_last_four = db.Column(db.String(4))
     status = db.Column(db.String(20), default='pending')
-    
+
     # M-PESA specific fields
     mpesa_receipt_number = db.Column(db.String(100))
     merchant_request_id = db.Column(db.String(100))
     checkout_request_id = db.Column(db.String(100))
     mpesa_response_code = db.Column(db.String(10))
     mpesa_response_description = db.Column(db.String(255))
-    
-    # Fields that exist in DB but were missing from model
+
+    # Idempotency / webhook fields
     idempotency_key = db.Column(db.String(100))
     webhook_received_at = db.Column(db.DateTime)
     retry_count = db.Column(db.Integer, default=0)
     error_log = db.Column(db.Text)
-    
+
+    # ── Refund tracking ──────────────────────────────────────────────────
+    # If this payment IS a refund, refund_payment_id points to the original
+    # payment that was refunded. Lets you query: "show me all refunds and
+    # which original payment each one corresponds to."
+    refund_payment_id = db.Column(
+        db.Integer, db.ForeignKey('payments.id'), nullable=True
+    )
+    refund_note = db.Column(db.Text, nullable=True)
+
+    # Self-referential relationship: original_payment.refunds → list of refund rows
+    refunds = db.relationship(
+        'Payment',
+        backref=db.backref('original_payment', remote_side='Payment.id'),
+        foreign_keys='Payment.refund_payment_id',
+        lazy=True
+    )
+    # ────────────────────────────────────────────────────────────────────
+
     payment_date = db.Column(db.DateTime, default=datetime.utcnow)
     completed_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

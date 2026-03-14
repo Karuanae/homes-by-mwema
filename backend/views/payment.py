@@ -56,13 +56,11 @@ def initiate_mpesa_payment():
 
     timeout_minutes = current_app.config['BOOKING_TIMEOUT_MINUTES']
 
-    # Validate required fields
     required_fields = ['booking_id', 'phone_number', 'amount']
     for field in required_fields:
         if field not in data:
             return jsonify({'success': False, 'error': f'Missing {field}'}), 400
 
-    # Find the booking
     booking = Booking.query.filter_by(
         id=data['booking_id'],
         user_id=user_id
@@ -70,9 +68,7 @@ def initiate_mpesa_payment():
 
     if not booking:
         return jsonify({'success': False, 'error': 'Booking not found'}), 404
-    
-    # REAL-TIME EXPIRY CHECK - happens right when user tries to pay
-    from views.booking import check_and_update_expired
+
     if check_and_update_expired(booking):
         return jsonify({
             'success': False,
@@ -80,7 +76,6 @@ def initiate_mpesa_payment():
             'expired': True
         }), 400
 
-    # Check if booking is still valid (not expired)
     if booking.expires_at and booking.expires_at < datetime.utcnow():
         booking.status = 'expired'
         db.session.commit()
@@ -90,21 +85,17 @@ def initiate_mpesa_payment():
             'expired': True
         }), 400
 
-    # Check if already paid
     if booking.payment_status == 'completed':
         return jsonify({'success': False, 'error': 'This booking is already paid'}), 400
 
-    # Format phone number (remove spaces, ensure 254 format)
     phone = data['phone_number'].strip().replace(' ', '').replace('+', '')
     if phone.startswith('0'):
         phone = '254' + phone[1:]
     elif not phone.startswith('254'):
         phone = '254' + phone
 
-    # Generate unique idempotency key
     idempotency_key = f"MPESA_{booking.id}_{datetime.utcnow().timestamp()}"
 
-    # Create payment record
     payment = Payment(
         booking_id=booking.id,
         user_id=user_id,
@@ -121,7 +112,6 @@ def initiate_mpesa_payment():
     db.session.commit()
 
     try:
-        # Use MPesaService to call the real Daraja API
         mpesa_service = MPesaService()
         mpesa_result = mpesa_service.stk_push(
             phone_number=phone,
@@ -131,7 +121,6 @@ def initiate_mpesa_payment():
         )
 
         if mpesa_result.get('success'):
-            # MPesaService returns lowercase keys
             payment.checkout_request_id = mpesa_result.get('checkout_request_id')
             payment.merchant_request_id = mpesa_result.get('merchant_request_id')
             db.session.commit()
@@ -182,14 +171,12 @@ def mpesa_callback():
         return jsonify({'ResultCode': 1, 'ResultDesc': 'Invalid signature'}), 401
 
     try:
-        # Use MPesaService to process the callback cleanly
         mpesa_service = MPesaService()
         callback_data = request.json
         processed = mpesa_service.process_callback(callback_data)
 
         checkout_request_id = processed.get('checkout_request_id')
 
-        # Find the payment record
         payment = Payment.query.filter_by(
             checkout_request_id=checkout_request_id
         ).first()
@@ -198,24 +185,22 @@ def mpesa_callback():
             logger.error(f"Payment not found for checkout: {checkout_request_id}")
             return jsonify({'ResultCode': 1, 'ResultDesc': 'Payment not found'}), 200
 
-        # Record callback received
         payment.webhook_received_at = datetime.utcnow()
 
         if processed.get('success'):
-            # SUCCESS — user entered PIN and payment completed
             payment.status = 'completed'
             payment.mpesa_receipt_number = processed.get('mpesa_receipt_number')
             payment.transaction_id = processed.get('mpesa_receipt_number')
             payment.completed_at = datetime.utcnow()
 
-            # Update the booking
             booking = Booking.query.get(payment.booking_id)
             if booking:
                 total_paid = db.session.query(
                     db.func.sum(Payment.amount)
                 ).filter(
                     Payment.booking_id == booking.id,
-                    Payment.status == 'completed'
+                    Payment.status == 'completed',
+                    Payment.method != 'refund'
                 ).scalar() or Decimal('0')
 
                 if total_paid >= booking.total_amount:
@@ -229,20 +214,26 @@ def mpesa_callback():
                     booking.confirmation = 'confirmed'
                     logger.info(f"✅ Booking {booking.id} partially paid — KES {total_paid}")
 
-                # Clear expiry since payment received
                 booking.expires_at = None
 
             db.session.commit()
             logger.info(f"💰 Payment completed: {processed.get('mpesa_receipt_number')} for KES {payment.amount}")
 
+            # Send payment received email
+            try:
+                from views.email_service import email_service
+                booking_user = User.query.get(payment.user_id)
+                if booking and booking_user:
+                    email_service.send_payment_received(booking, booking_user, payment)
+            except Exception as email_err:
+                logger.warning(f"⚠️  Payment email failed (non-fatal): {email_err}")
+
         else:
-            # FAILURE — user cancelled or transaction failed
             payment.status = 'failed'
             payment.error_log = processed.get('result_desc', 'Payment failed')
             db.session.commit()
             logger.warning(f"❌ Payment failed: {processed.get('result_desc')}")
 
-        # Always return success to M-PESA to prevent retries
         return jsonify({'ResultCode': 0, 'ResultDesc': 'Success'}), 200
 
     except Exception as e:
@@ -253,9 +244,7 @@ def mpesa_callback():
 @payment_bp.route('/mpesa/status/<checkout_request_id>', methods=['GET'])
 @jwt_required()
 def check_payment_status(checkout_request_id):
-    """
-    STEP 3: Frontend polls this to check if payment completed
-    """
+    """STEP 3: Frontend polls this to check if payment completed"""
     user_id = get_jwt_identity()
 
     payment = Payment.query.filter_by(
@@ -290,7 +279,7 @@ def check_payment_status(checkout_request_id):
 @payment_bp.route('/booking/<int:booking_id>/payments', methods=['GET'])
 @jwt_required()
 def get_booking_payments(booking_id):
-    """Get all payments for a specific booking"""
+    """Get all payments for a specific booking including refunds"""
     user_id = get_jwt_identity()
 
     booking = Booking.query.filter_by(id=booking_id, user_id=user_id).first()
@@ -309,6 +298,8 @@ def get_booking_payments(booking_id):
             'method': p.method,
             'status': p.status,
             'mpesa_receipt': p.mpesa_receipt_number,
+            'refund_payment_id': p.refund_payment_id,
+            'refund_note': p.refund_note,
             'created_at': p.created_at.isoformat() if p.created_at else None,
             'completed_at': p.completed_at.isoformat() if p.completed_at else None
         })
@@ -508,7 +499,8 @@ def capture_paypal_order():
                         db.func.sum(Payment.amount)
                     ).filter(
                         Payment.booking_id == booking.id,
-                        Payment.status == 'completed'
+                        Payment.status == 'completed',
+                        Payment.method != 'refund'
                     ).scalar() or Decimal('0')
 
                     booking.pending_amount = booking.total_amount - paid_amount
@@ -518,6 +510,15 @@ def capture_paypal_order():
                 booking.expires_at = None
 
             db.session.commit()
+
+            # Send payment received email
+            try:
+                from views.email_service import email_service
+                booking_user = User.query.get(payment.user_id)
+                if booking and booking_user:
+                    email_service.send_payment_received(booking, booking_user, payment)
+            except Exception as email_err:
+                logger.warning(f"⚠️  Payment email failed (non-fatal): {email_err}")
 
             return jsonify({
                 'success': True,
@@ -637,65 +638,185 @@ def paypal_webhook():
         return jsonify({'status': 'error'}), 500
 
 
-@payment_bp.route('/paypal/refund', methods=['POST'])
+# ==================== UNIFIED REFUND ENDPOINT ====================
+
+@payment_bp.route('/refund', methods=['POST'])
 @jwt_required()
-def refund_paypal_payment():
+def process_refund():
+    """
+    Admin: Process a refund for a cancelled booking.
+    Handles both M-PESA B2C and PayPal automatically based on
+    how the customer originally paid.
+
+    Body: { booking_id: int, note: str (optional) }
+    """
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
 
     if not user or user.role != 'admin':
         return jsonify({'error': 'Admin access required'}), 403
 
-    data = request.json
+    data = request.get_json() or {}
+    booking_id = data.get('booking_id')
 
-    if 'payment_id' not in data:
-        return jsonify({'error': 'Missing required field: payment_id'}), 400
+    if not booking_id:
+        return jsonify({'error': 'booking_id is required'}), 400
 
-    payment = Payment.query.filter_by(
-        id=data['payment_id'],
-        method='paypal',
+    # Validate booking
+    booking = Booking.query.get(booking_id)
+    if not booking:
+        return jsonify({'error': 'Booking not found'}), 404
+
+    if booking.status != 'cancelled':
+        return jsonify({'error': 'Booking is not cancelled'}), 400
+
+    refund_amount = float(booking.refund_amount or 0)
+    if refund_amount <= 0:
+        return jsonify({'error': 'No refund amount set for this booking'}), 400
+
+    if booking.refund_processed:
+        return jsonify({
+            'error': 'Refund already processed',
+            'refund_processed_at': booking.refund_processed_at.isoformat()
+                if booking.refund_processed_at else None
+        }), 400
+
+    # Find the original completed payment (excluding refund rows)
+    original_payment = Payment.query.filter_by(
+        booking_id=booking_id,
         status='completed'
-    ).first()
+    ).filter(
+        Payment.method != 'refund'
+    ).order_by(Payment.completed_at.desc()).first()
 
-    if not payment:
-        return jsonify({'error': 'Completed PayPal payment not found'}), 404
+    if not original_payment:
+        return jsonify({'error': 'No completed payment found for this booking'}), 400
 
-    if not payment.mpesa_receipt_number:
-        return jsonify({'error': 'Capture ID not found for this payment'}), 400
+    method = original_payment.method
+
+    # Call the appropriate refund API
+    try:
+        if method == 'mpesa':
+            result = _process_mpesa_refund(original_payment, refund_amount, booking)
+        elif method == 'paypal':
+            result = _process_paypal_refund(
+                original_payment, refund_amount,
+                note=data.get('note', 'Refund from Homes by Mwema')
+            )
+        else:
+            return jsonify({'error': f'Unsupported payment method: {method}'}), 400
+    except Exception as e:
+        logger.error(f"Refund API error for booking {booking_id}: {str(e)}")
+        return jsonify({'error': f'Refund failed: {str(e)}'}), 500
+
+    if not result.get('success'):
+        return jsonify({
+            'success': False,
+            'error': result.get('error', 'Refund failed')
+        }), 400
+
+    # Create a refund Payment row — negative amount so SUM(amount) = net revenue
+    refund_payment = Payment(
+        booking_id=booking_id,
+        user_id=booking.user_id,
+        property_id=booking.property_id,
+        amount=Decimal(str(-abs(refund_amount))),
+        method='refund',
+        status='completed',
+        transaction_id=result.get('transaction_id'),
+        refund_payment_id=original_payment.id,
+        refund_note=data.get('note', f'Refund for cancelled booking #{booking_id}'),
+        completed_at=datetime.utcnow(),
+        created_at=datetime.utcnow()
+    )
+    db.session.add(refund_payment)
+
+    # Mark booking as refunded
+    booking.refund_processed = True
+    booking.refund_processed_at = datetime.utcnow()
+    booking.payment_status = 'refunded'
+
+    db.session.commit()
+
+    logger.info(
+        f"✅ Refund processed for booking {booking_id}: "
+        f"KES {refund_amount} via {method} "
+        f"(refund payment id={refund_payment.id})"
+    )
+
+    # Send refund processed email
+    try:
+        from views.email_service import email_service
+        booking_user = User.query.get(booking.user_id)
+        if booking_user:
+            email_service.send_refund_processed(booking, booking_user, refund_amount, method)
+    except Exception as email_err:
+        logger.warning(f"⚠️  Refund email failed (non-fatal): {email_err}")
+
+    return jsonify({
+        'success': True,
+        'booking_id': booking_id,
+        'refund_amount': refund_amount,
+        'method': method,
+        'transaction_id': result.get('transaction_id'),
+        'refund_payment_id': refund_payment.id,
+        'original_payment_id': original_payment.id,
+        'processed_at': refund_payment.completed_at.isoformat()
+    }), 200
+
+
+def _process_mpesa_refund(original_payment, refund_amount, booking):
+    """Trigger M-PESA B2C reversal."""
+    mpesa_service = MPesaService()
+
+    phone = original_payment.mpesa_number
+    if not phone:
+        user = User.query.get(original_payment.user_id)
+        phone = user.phone if user else None
+
+    if not phone:
+        return {'success': False, 'error': 'No phone number for M-PESA refund'}
+
+    phone = phone.strip().replace('+', '').replace(' ', '')
+    if phone.startswith('0'):
+        phone = '254' + phone[1:]
 
     try:
-        paypal_service = PayPalService()
-        exchange_rate = current_app.config.get('KES_TO_USD_RATE', 129.0)
-
-        refund_amount = None
-        if data.get('amount'):
-            refund_amount = float(data['amount']) / exchange_rate
-
-        result = paypal_service.refund_capture(
-            capture_id=payment.mpesa_receipt_number,
-            amount=refund_amount,
-            note=data.get('note', 'Refund from Homes by Mwema')
+        result = mpesa_service.b2c_payment(
+            phone_number=phone,
+            amount=int(refund_amount),
+            occasion=f"Refund booking #{booking.id}",
+            remarks="Cancelled booking refund"
         )
-
-        if result['success']:
-            payment.status = 'refunded'
-            payment.mpesa_response_description = f"Refunded: {result['refund_id']}"
-            booking = Booking.query.get(payment.booking_id)
-            if booking:
-                booking.payment_status = 'refunded'
-            db.session.commit()
-
-            return jsonify({
+        if result.get('success'):
+            return {
                 'success': True,
-                'refund_id': result['refund_id'],
-                'status': result['status'],
-                'amount': result.get('amount')
-            }), 200
-        else:
-            return jsonify({'success': False, 'error': result.get('error', 'Refund failed')}), 400
-
+                'transaction_id': result.get('conversation_id') or result.get('transaction_id')
+            }
+        return {'success': False, 'error': result.get('error', 'M-PESA B2C failed')}
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return {'success': False, 'error': str(e)}
+
+
+def _process_paypal_refund(original_payment, refund_amount, note):
+    """Trigger PayPal capture refund."""
+    capture_id = original_payment.mpesa_receipt_number
+    if not capture_id:
+        return {'success': False, 'error': 'PayPal capture ID not found'}
+
+    exchange_rate = current_app.config.get('KES_TO_USD_RATE', 129.0)
+    amount_usd = refund_amount / exchange_rate
+
+    paypal_service = PayPalService()
+    result = paypal_service.refund_capture(
+        capture_id=capture_id,
+        amount=amount_usd,
+        note=note
+    )
+
+    if result.get('success'):
+        return {'success': True, 'transaction_id': result.get('refund_id')}
+    return {'success': False, 'error': result.get('error', 'PayPal refund failed')}
 
 
 # ==================== ADMIN ENDPOINTS ====================

@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   ArrowLeft, Clock, Shield, CheckCircle, XCircle, 
   AlertCircle, Smartphone, CreditCard, ChevronRight,
   Copy, Phone, Wallet, Loader, Lock, Eye, EyeOff,
-  ExternalLink
+  ExternalLink, MessageCircle, X, Send, Home, Check, CheckCheck
 } from "lucide-react";
 import api, { API_BASE_URL, IMAGE_BASE_URL } from "../services/api";
 import { useAuth } from "../context/AuthContext";
@@ -15,6 +15,235 @@ function parseUTCDate(dateStr) {
   if (!dateStr) return null;
   const str = dateStr.endsWith('Z') ? dateStr : dateStr + 'Z';
   return new Date(str);
+}
+
+// Chat Drawer Component
+function ChatDrawer({ isOpen, onClose, user }) {
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [chat, setChat] = useState(null);
+  const messagesEndRef = useRef(null);
+  const [sending, setSending] = useState(false);
+
+  // Initialize or fetch existing chat
+  useEffect(() => {
+    if (!isOpen || !user?.id) return;
+
+    const initChat = async () => {
+      setLoading(true);
+      try {
+        // Try to get existing chat or create new one
+        let chatId = localStorage.getItem('paymentChatId');
+        
+        if (!chatId) {
+          // Create a new chat for payment assistance
+          const response = await api.chats.startChat(user.id, null, null);
+          chatId = response.data.chat.id;
+          localStorage.setItem('paymentChatId', chatId);
+        }
+        
+        setChat({ id: chatId });
+        
+        // Load messages
+        const messagesRes = await api.chats.getMessages(chatId);
+        setMessages(messagesRes.data || []);
+        
+      } catch (error) {
+        console.error('Error initializing chat:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initChat();
+
+    return () => {
+      // Don't clear chatId on close - keep it for next time
+    };
+  }, [isOpen, user?.id]);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  };
+
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!newMessage.trim() || !chat?.id || sending) return;
+
+    const tempId = Date.now();
+    const optimisticMessage = {
+      id: tempId,
+      content: newMessage,
+      sender_id: user.id,
+      sender_name: user.name || 'Guest',
+      is_host: false,
+      timestamp: new Date().toISOString(),
+      is_read: false,
+      is_temp: true
+    };
+
+    setMessages(prev => [...prev, optimisticMessage]);
+    setNewMessage("");
+    scrollToBottom();
+    setSending(true);
+
+    try {
+      const response = await api.chats.sendMessage(chat.id, {
+        content: newMessage,
+        sender_id: user.id,
+        sender_name: user.name || 'Guest',
+        is_host: false,
+      });
+
+      setMessages(prev => prev.map(msg => 
+        msg.id === tempId ? { ...response.data, is_temp: false } : msg
+      ));
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      setMessages(prev => prev.filter(msg => msg.id !== tempId));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const formatTime = (timestamp) => {
+    if (!timestamp) return "";
+    try {
+      const date = new Date(timestamp);
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return "";
+    }
+  };
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50"
+            onClick={onClose}
+          />
+          
+          {/* Drawer */}
+          <motion.div
+            initial={{ y: "100%" }}
+            animate={{ y: 0 }}
+            exit={{ y: "100%" }}
+            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+            className="fixed bottom-0 left-0 right-0 h-[80vh] bg-white rounded-t-2xl shadow-2xl z-50 flex flex-col"
+          >
+            {/* Header */}
+            <div className="px-4 py-3 border-b border-stone-200 flex items-center justify-between bg-[#093A3E] text-white rounded-t-2xl">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-[#ED9B40] flex items-center justify-center">
+                  <MessageCircle size={16} className="text-[#093A3E]" />
+                </div>
+                <div>
+                  <h3 className="font-serif text-base">Concierge Support</h3>
+                  <p className="text-[10px] text-white/60">Typically replies in minutes</p>
+                </div>
+              </div>
+              <button
+                onClick={onClose}
+                className="p-2 hover:bg-white/10 rounded-full transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto p-4 bg-stone-50">
+              {loading ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="w-6 h-6 border-2 border-stone-300 border-t-[#093A3E] rounded-full animate-spin" />
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-center">
+                  <MessageCircle size={40} className="text-stone-300 mb-3" />
+                  <p className="text-stone-500 text-sm">How can we help you with your booking?</p>
+                  <p className="text-stone-400 text-xs mt-1">Send a message and we'll reply shortly</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {messages.map((msg) => {
+                    const isOwn = msg.sender_id === user?.id;
+                    return (
+                      <div
+                        key={msg.id}
+                        className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
+                      >
+                        <div className={`max-w-[80%] ${isOwn ? 'order-2' : 'order-1'}`}>
+                          <div
+                            className={`relative px-4 py-2 rounded-2xl ${
+                              isOwn
+                                ? 'bg-[#093A3E] text-white rounded-br-none'
+                                : 'bg-white text-stone-900 rounded-bl-none shadow-sm'
+                            }`}
+                          >
+                            <p className="text-sm pr-12">{msg.content}</p>
+                            <div className={`absolute bottom-1 right-2 flex items-center gap-1 text-[10px] ${
+                              isOwn ? 'text-white/60' : 'text-stone-400'
+                            }`}>
+                              <span>{formatTime(msg.timestamp)}</span>
+                              {isOwn && (
+                                <span>
+                                  {msg.is_temp ? (
+                                    <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                  ) : msg.is_read ? (
+                                    <CheckCheck size={12} className="text-blue-400" />
+                                  ) : (
+                                    <Check size={12} />
+                                  )}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div ref={messagesEndRef} />
+                </div>
+              )}
+            </div>
+
+            {/* Input */}
+            <div className="p-4 border-t border-stone-200 bg-white">
+              <form onSubmit={handleSendMessage} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  placeholder="Type your message..."
+                  className="flex-1 bg-stone-50 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#093A3E]"
+                  style={{ minHeight: '44px' }}
+                />
+                <button
+                  type="submit"
+                  disabled={!newMessage.trim() || sending}
+                  className="bg-[#093A3E] text-white p-3 rounded-full hover:bg-[#0a4a52] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Send size={18} />
+                </button>
+              </form>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
 }
 
 export default function PaymentPage() {
@@ -28,6 +257,7 @@ export default function PaymentPage() {
   const [processing, setProcessing] = useState(false);
   const [property, setProperty] = useState(null);
   const [booking, setBooking] = useState(null);
+  const [showChat, setShowChat] = useState(false);
   
   // Payment method state
   const [selectedMethod, setSelectedMethod] = useState('mpesa');
@@ -572,6 +802,15 @@ const initializePayment = async () => {
   return (
     <div className="min-h-screen bg-[#f5f2ee] pb-16 md:pb-24">
       
+      {/* Chat Drawer */}
+      {isAuthenticated && (
+        <ChatDrawer 
+          isOpen={showChat} 
+          onClose={() => setShowChat(false)} 
+          user={user}
+        />
+      )}
+      
       {/* MOBILE HEADER */}
       <div className="md:hidden fixed top-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-b border-stone-200 z-40 px-4 py-3 flex items-center justify-between">
         <button onClick={() => navigate(-1)} className="p-2 hover:bg-stone-100 rounded-full transition-colors">
@@ -972,12 +1211,23 @@ const initializePayment = async () => {
                       </div>
                     </div>
                   )}
+
+                  {/* Concierge Button */}
+                  {isAuthenticated && (
+                    <button
+                      onClick={() => setShowChat(true)}
+                      className="w-full mt-4 py-3 border border-[#093A3E] text-[#093A3E] rounded-lg hover:bg-[#093A3E] hover:text-white transition-colors text-sm font-medium flex items-center justify-center gap-2"
+                    >
+                      <MessageCircle size={18} />
+                      Contact Concierge
+                    </button>
+                  )}
                 </div>
 
                 {/* Help Section */}
                 <div className="p-4 bg-stone-50 border-t border-stone-200">
                   <p className="text-[10px] md:text-xs text-stone-500 text-center">
-                    Need help? <button className="text-stone-900 underline">Contact Concierge</button>
+                    Need help? <button onClick={() => setShowChat(true)} className="text-stone-900 underline">Contact Concierge</button>
                   </p>
                 </div>
               </div>
