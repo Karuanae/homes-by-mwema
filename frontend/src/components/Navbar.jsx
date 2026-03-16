@@ -1,4 +1,4 @@
-// Navbar.jsx - Updated with consistent navbar across all pages
+// Navbar.jsx - Updated with consistent navbar across all pages and Host button
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavbarState } from '../hooks/useNavbarState';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -342,7 +342,7 @@ const Navbar = () => {
                 {/* 1. Reserve a Unit */}
                 <Link
                   to="/properties"
-                  className="inline-flex items-center justify-center transition-all duration-300 px-4 py-1.5 relative group"
+                  className="inline-flex items-center justify-center relative group px-4 py-1.5"
                   style={{
                     backgroundColor: !isHomePage ? '#ED9B40' : (isHomePage && isAtTop) ? 'rgba(237, 155, 64, 0.9)' : '#ED9B40',
                     backdropFilter: (isHomePage && isAtTop) ? 'blur(8px)' : 'none',
@@ -353,7 +353,32 @@ const Navbar = () => {
                   </span>
                 </Link>
 
-                {/* 2. Management Services */}
+                {/* 2. Host Button */}
+                <Link
+                  to="/host"
+                  className="inline-flex items-center justify-center relative group px-1.5 py-1.5"
+                >
+                  <span 
+                    className="font-sans text-[10px] uppercase tracking-[0.18em] font-medium transition-colors duration-300 whitespace-nowrap"
+                    style={{
+                      color: !isHomePage ? '#ED9B40' : (isHomePage && isAtTop) ? 'white' : '#ED9B40',
+                      textShadow: (isHomePage && isAtTop) ? '0 1px 3px rgba(0,0,0,0.3)' : 'none'
+                    }}
+                  >
+                    Host
+                  </span>
+                  {/* Underline that appears on hover */}
+                  <span 
+                    className={`absolute bottom-0 left-0 h-[1px] transition-all duration-500 ${
+                      isActiveRoute('/host') ? 'w-full' : 'w-0 group-hover:w-full'
+                    }`}
+                    style={{
+                      backgroundColor: !isHomePage ? '#ED9B40' : (isHomePage && isAtTop) ? 'white' : '#ED9B40'
+                    }}
+                  />
+                </Link>
+
+                {/* 3. Management Services */}
                 <Link
                   to="/management"
                   className="inline-flex items-center justify-center relative group px-1.5 py-1.5"
@@ -378,7 +403,7 @@ const Navbar = () => {
                   />
                 </Link>
 
-                {/* 3. Other Services dropdown */}
+                {/* 4. Other Services dropdown */}
                 <div className="relative" ref={otherServicesRef}>
                   <button
                     onClick={() => setOtherServicesOpen(prev => !prev)}
@@ -401,7 +426,13 @@ const Navbar = () => {
                       }}
                       className={`transition-transform duration-300 ${otherServicesOpen ? 'rotate-180' : ''}`}
                     />
-                    {/* No underline for dropdown button */}
+                    {/* Underline that appears on hover */}
+                    <span 
+                      className={`absolute bottom-0 left-0 h-[1px] transition-all duration-500 w-0 group-hover:w-full`}
+                      style={{
+                        backgroundColor: !isHomePage ? '#ED9B40' : (isHomePage && isAtTop) ? 'white' : '#ED9B40'
+                      }}
+                    />
                   </button>
 
                   <AnimatePresence>
@@ -431,22 +462,30 @@ const Navbar = () => {
                   </AnimatePresence>
                 </div>
 
-                {/* 4. Schedule Consultation - Matching "Reserve a Unit" style */}
-<button
-  onClick={handleConsultClick}
-  className={`inline-flex items-center justify-center transition-all duration-300 px-4 py-1.5 rounded-lg ${
-    isActiveRoute('/my-consultations') || isActiveRoute('/consultation/new')
-      ? 'bg-[#ED9B40] text-[#093A3E] font-semibold'  // Active state - matches Reserve a Unit
-      : 'bg-transparent border border-[#ED9B40] text-[#ED9B40] hover:bg-[#ED9B40] hover:text-[#093A3E]'
-  }`}
-  style={{
-    backdropFilter: (isHomePage && isAtTop && !(isActiveRoute('/my-consultations') || isActiveRoute('/consultation/new'))) ? 'blur(8px)' : 'none',
-  }}
->
-  <span className="font-sans text-[10px] uppercase tracking-[0.18em] font-semibold whitespace-nowrap">
-    Schedule Consultation
-  </span>
-</button>
+                {/* 5. Schedule Consultation */}
+                <button
+                  onClick={handleConsultClick}
+                  className="inline-flex items-center justify-center relative group px-1.5 py-1.5"
+                >
+                  <span 
+                    className="font-sans text-[10px] uppercase tracking-[0.18em] font-medium transition-colors duration-300 whitespace-nowrap"
+                    style={{
+                      color: !isHomePage ? '#ED9B40' : (isHomePage && isAtTop) ? 'white' : '#ED9B40',
+                      textShadow: (isHomePage && isAtTop) ? '0 1px 3px rgba(0,0,0,0.3)' : 'none'
+                    }}
+                  >
+                    Schedule Consultation
+                  </span>
+                  {/* Underline that appears on hover */}
+                  <span 
+                    className={`absolute bottom-0 left-0 h-[1px] transition-all duration-500 ${
+                      isActiveRoute('/my-consultations') || isActiveRoute('/consultation/new') ? 'w-full' : 'w-0 group-hover:w-full'
+                    }`}
+                    style={{
+                      backgroundColor: !isHomePage ? '#ED9B40' : (isHomePage && isAtTop) ? 'white' : '#ED9B40'
+                    }}
+                  />
+                </button>
               </nav>
 
               {/* Notification Bell with popup panel */}
@@ -614,6 +653,15 @@ const Navbar = () => {
                             <ChevronRight size={10} />
                           </Link>
 
+                          {/* Host Button - Mobile */}
+                          <Link
+                            to="/host"
+                            onClick={() => setIsMenuOpen(false)}
+                            className="w-full text-left px-6 py-2 mb-1 text-[9px] uppercase tracking-[0.18em] font-bold text-[#ED9B40] hover:bg-white transition-colors block"
+                          >
+                            Host
+                          </Link>
+
                           {/* Management Services */}
                           <Link
                             to="/management"
@@ -662,7 +710,7 @@ const Navbar = () => {
                           {/* Schedule Consultation - Mobile */}
                           <button
                             onClick={() => { handleConsultClick(); setIsMenuOpen(false); }}
-                            className="w-full text-left px-6 py-2 mb-1 uppercase text-[9px] tracking-[0.2em] font-bold bg-[#ED9B40] text-[#093A3E] rounded-lg hover:bg-[#d4882d] transition-colors"
+                            className="w-full text-left px-6 py-2 mb-1 uppercase text-[9px] tracking-[0.2em] font-bold text-[#093A3E] hover:bg-white transition-colors"
                           >
                             Schedule Consultation
                           </button>

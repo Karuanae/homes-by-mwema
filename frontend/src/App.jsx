@@ -29,6 +29,7 @@ import Properties from "./pages/Properties";
 import MyConsultations from "./pages/MyConsultations";
 import NewConsultation from "./pages/NewConsultation";
 import ProfileSettings from "./pages/ProfileSettings";
+import HostComingSoon from "./pages/HostComingSoon";
 
 // NEW SERVICE PAGE IMPORTS
 import TermsAndPolicy from "./pages/TermsAndPolicy";
@@ -87,17 +88,27 @@ function AppContent() {
             </>
           </PublicRoute>
         } />
+{/* Properties Route */}
+<Route path="/properties" element={
+  <PublicRoute>
+    <>
+      <Header />
+      <Properties />
+      <Footer />
+    </>
+  </PublicRoute>
+} />
 
-        {/* Properties Route */}
-        <Route path="/properties" element={
-          <PublicRoute>
-            <>
-              <Header />
-              <Properties />
-              <Footer />
-            </>
-          </PublicRoute>
-        } />
+{/* NEW: Host Coming Soon Route */}
+<Route path="/host" element={
+  <PublicRoute>
+    <>
+      <Header />
+      <HostComingSoon />
+      <Footer />
+    </>
+  </PublicRoute>
+} />
 
         {/* Auth Routes */}
         <Route path="/login" element={
