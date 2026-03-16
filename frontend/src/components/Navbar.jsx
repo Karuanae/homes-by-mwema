@@ -25,7 +25,7 @@ const MINIMAL_NAVBAR_ROUTES = [
   '/checkout',
 ];
 
-// "Other Services" submenu items - EXPANDED WITH ALL SERVICE PAGES
+// "Other Services" submenu items - REMOVED Terms & Policy
 const OTHER_SERVICES = [
   { label: 'Photography & Videography', to: '/photography-videography' },
   { label: 'Listing Optimization', to: '/listing-optimization' },
@@ -35,7 +35,7 @@ const OTHER_SERVICES = [
   { label: 'Safari Tours', to: '/safari-tours' },
   { label: 'Airport & SGR Transfers', to: '/airport-transfers' },
   { label: 'Chef Services', to: '/chef-services' },
-  { label: 'Terms & Policy', to: '/terms' },
+  // Terms & Policy removed as requested
 ];
 
 // Scroll spy component
@@ -77,6 +77,12 @@ const Navbar = () => {
 
   // Check if we're at the top of the page (for transparency effects) - only applies to homepage
   const isAtTop = isHomePage ? scrollY < 50 : false;
+
+  // Helper function to check if a route is active
+  const isActiveRoute = (path) => {
+    if (path === '/') return location.pathname === '/';
+    return location.pathname.startsWith(path);
+  };
 
   useEffect(() => {
     setIsMenuOpen(false);
@@ -336,7 +342,7 @@ const Navbar = () => {
                 {/* 1. Reserve a Unit */}
                 <Link
                   to="/properties"
-                  className="inline-flex items-center justify-center transition-all duration-300 px-4 py-1.5"
+                  className="inline-flex items-center justify-center transition-all duration-300 px-4 py-1.5 relative group"
                   style={{
                     backgroundColor: !isHomePage ? '#ED9B40' : (isHomePage && isAtTop) ? 'rgba(237, 155, 64, 0.9)' : '#ED9B40',
                     backdropFilter: (isHomePage && isAtTop) ? 'blur(8px)' : 'none',
@@ -361,8 +367,11 @@ const Navbar = () => {
                   >
                     Management Services
                   </span>
+                  {/* Underline that stays when active */}
                   <span 
-                    className="absolute bottom-0 left-0 w-0 h-[1px] transition-all duration-500 group-hover:w-full"
+                    className={`absolute bottom-0 left-0 h-[1px] transition-all duration-500 ${
+                      isActiveRoute('/management') ? 'w-full' : 'w-0 group-hover:w-full'
+                    }`}
                     style={{
                       backgroundColor: !isHomePage ? '#ED9B40' : (isHomePage && isAtTop) ? 'white' : '#ED9B40'
                     }}
@@ -392,12 +401,7 @@ const Navbar = () => {
                       }}
                       className={`transition-transform duration-300 ${otherServicesOpen ? 'rotate-180' : ''}`}
                     />
-                    <span 
-                      className="absolute bottom-0 left-0 w-0 h-[1px] transition-all duration-500 group-hover:w-full"
-                      style={{
-                        backgroundColor: !isHomePage ? '#ED9B40' : (isHomePage && isAtTop) ? 'white' : '#ED9B40'
-                      }}
-                    />
+                    {/* No underline for dropdown button */}
                   </button>
 
                   <AnimatePresence>
@@ -427,27 +431,22 @@ const Navbar = () => {
                   </AnimatePresence>
                 </div>
 
-                {/* 4. Consultation */}
-                <button
-                  onClick={handleConsultClick}
-                  className="inline-flex items-center justify-center relative group"
-                >
-                  <span 
-                    className="font-sans text-[10px] uppercase tracking-[0.18em] font-medium whitespace-nowrap"
-                    style={{
-                      color: !isHomePage ? '#ED9B40' : (isHomePage && isAtTop) ? 'white' : '#ED9B40',
-                      textShadow: (isHomePage && isAtTop) ? '0 1px 3px rgba(0,0,0,0.3)' : 'none'
-                    }}
-                  >
-                    Consultation
-                  </span>
-                  <span 
-                    className="absolute -bottom-0.5 left-0 w-0 h-[1px] transition-all duration-500 group-hover:w-full"
-                    style={{
-                      backgroundColor: !isHomePage ? '#ED9B40' : (isHomePage && isAtTop) ? 'white' : '#ED9B40'
-                    }}
-                  />
-                </button>
+                {/* 4. Schedule Consultation - Matching "Reserve a Unit" style */}
+<button
+  onClick={handleConsultClick}
+  className={`inline-flex items-center justify-center transition-all duration-300 px-4 py-1.5 rounded-lg ${
+    isActiveRoute('/my-consultations') || isActiveRoute('/consultation/new')
+      ? 'bg-[#ED9B40] text-[#093A3E] font-semibold'  // Active state - matches Reserve a Unit
+      : 'bg-transparent border border-[#ED9B40] text-[#ED9B40] hover:bg-[#ED9B40] hover:text-[#093A3E]'
+  }`}
+  style={{
+    backdropFilter: (isHomePage && isAtTop && !(isActiveRoute('/my-consultations') || isActiveRoute('/consultation/new'))) ? 'blur(8px)' : 'none',
+  }}
+>
+  <span className="font-sans text-[10px] uppercase tracking-[0.18em] font-semibold whitespace-nowrap">
+    Schedule Consultation
+  </span>
+</button>
               </nav>
 
               {/* Notification Bell with popup panel */}
@@ -660,12 +659,12 @@ const Navbar = () => {
                             </AnimatePresence>
                           </div>
 
-                          {/* Consultation - Mobile */}
+                          {/* Schedule Consultation - Mobile */}
                           <button
                             onClick={() => { handleConsultClick(); setIsMenuOpen(false); }}
-                            className="w-full text-left px-6 py-2 mb-1 uppercase text-[9px] tracking-[0.2em] font-bold text-[#093A3E] bg-transparent hover:bg-white transition-colors"
+                            className="w-full text-left px-6 py-2 mb-1 uppercase text-[9px] tracking-[0.2em] font-bold bg-[#ED9B40] text-[#093A3E] rounded-lg hover:bg-[#d4882d] transition-colors"
                           >
-                            Consultation
+                            Schedule Consultation
                           </button>
 
                           <div className="h-px bg-[#EBE5DE] mx-4 my-1.5" />

@@ -17,6 +17,10 @@ export default function Register() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  
+  // NEW: Terms & Policy state
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [termsError, setTermsError] = useState('');
 
   // Redirect if already logged in
   useEffect(() => {
@@ -66,6 +70,7 @@ export default function Register() {
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
     setError('');
+    setTermsError('');
   };
 
   const validateForm = () => {
@@ -81,6 +86,13 @@ export default function Register() {
       setError('Passwords do not match.');
       return false;
     }
+    
+    // NEW: Validate terms acceptance
+    if (!termsAccepted) {
+      setTermsError('You must accept the Terms & Policy to register.');
+      return false;
+    }
+    
     return true;
   };
 
@@ -90,6 +102,8 @@ export default function Register() {
 
     setIsLoading(true);
     setError('');
+    setTermsError('');
+    
     try {
       const { user } = await signup({
         name: formData.name,
@@ -278,6 +292,45 @@ export default function Register() {
                 className="w-full px-4 py-3 border border-stone-200 rounded bg-stone-50 focus:outline-none focus:border-stone-400 text-sm pr-10"
               />
             </div>
+          </div>
+
+          {/* NEW: Terms & Policy Checkbox */}
+          <div className="space-y-2">
+            <div className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                id="terms"
+                checked={termsAccepted}
+                onChange={(e) => {
+                  setTermsAccepted(e.target.checked);
+                  setTermsError('');
+                }}
+                className="w-4 h-4 mt-1 accent-[#093A3E] flex-shrink-0"
+              />
+              <label htmlFor="terms" className="text-xs text-stone-600 leading-relaxed">
+                I agree to the{' '}
+                <Link 
+                  to="/terms" 
+                  target="_blank"
+                  className="text-[#093A3E] font-medium hover:underline"
+                >
+                  Terms of Service
+                </Link>{' '}
+                and{' '}
+                <Link 
+                  to="/privacy" 
+                  target="_blank"
+                  className="text-[#093A3E] font-medium hover:underline"
+                >
+                  Privacy Policy
+                </Link>
+              </label>
+            </div>
+            
+            {/* Terms Error Message */}
+            {termsError && (
+              <p className="text-xs text-red-600 pl-7">{termsError}</p>
+            )}
           </div>
 
           <button

@@ -314,7 +314,7 @@ useEffect(() => {
           </div>
         </div>
         <p className="text-stone-500 max-w-2xl">
-          Your travel journey with us. From upcoming adventures to cherished memories.
+          Your journey with us. From upcoming adventures to cherished memories.
         </p>
       </div>
 
