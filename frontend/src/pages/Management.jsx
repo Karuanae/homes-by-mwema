@@ -40,8 +40,8 @@ export default function Management() {
   const managedProperties = [
     {
       id: 1,
-      name: "The Urban Haven",
-      location: "Kilimani, Nairobi",
+      name: "Almasi Interiors",
+      location: "Thika Road",
       image: "https://images.unsplash.com/photo-1560448204-603b3fc33ddc?ixlib=rb-4.0.3&auto=format&fit=crop&w=2000&q=80",
       rating: 4.9,
       bookings: 124,
@@ -50,33 +50,33 @@ export default function Management() {
     },
     {
       id: 2,
-      name: "Serenity Suites",
-      location: "Westlands, Nairobi",
+      name: "Jaymilla Homes",
+      location: "Thika Road",
       image: "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?ixlib=rb-4.0.3&auto=format&fit=crop&w=2000&q=80",
       rating: 5.0,
       bookings: 89,
       revenue: "850K",
-      host: "Margaret W."
+      host: "Cess"
     },
     {
       id: 3,
-      name: "The Executive Pad",
-      location: "Lavington, Nairobi",
+      name: "Christine's Property",
+      location: "Kilimani",
       image: "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?ixlib=rb-4.0.3&auto=format&fit=crop&w=2000&q=80",
       rating: 4.8,
       bookings: 156,
       revenue: "1.5M",
-      host: "James K."
+      host: "Christine"
     },
     {
       id: 4,
-      name: "Sunset Retreat",
-      location: "Karen, Nairobi",
+      name: "Curtis Luxury Unit",
+      location: "Kileleshwa",
       image: "https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?ixlib=rb-4.0.3&auto=format&fit=crop&w=2000&q=80",
       rating: 4.9,
       bookings: 67,
       revenue: "980K",
-      host: "Sarah M."
+      host: "Curtis"
     }
   ];
 
@@ -84,7 +84,7 @@ export default function Management() {
     {
       id: 1,
       name: "Benny (@Almasi_interiors)",
-      location: "Diaspora",
+      location: "Diaspora/Thika Road",
       date: "January 2026",
       rating: 5,
       content: `My interaction with Homes by Mwema started in early January 2026 after I discovered the page on social media. Our first conversation happened while I was in the diaspora, and that's where my Airbnb journey began. 
@@ -93,15 +93,29 @@ Working with Ann (Homes by Mwema) has been an eye-opener—she helped me identif
 
 Right now the business is stable, scaling, and running smoothly even while I'm abroad. I highly recommend Homes by Mwema to anyone looking to start or grow in the Airbnb space. 
 
-Looking forward to more collaboration ahead. 🤝✨`,
+Looking forward to more collaboration ahead. 🤝✨ ~Benny (@Almasi_interiors) Benny,Thika Road`,
       shortContent: `My interaction with Homes by Mwema started in early January 2026... Working with Ann has been an eye-opener—she helped me identify and correct common mistakes many hosts make.`,
-      properties: [1] // References property IDs
+      properties: [1]
     },
     {
       id: 2,
-      name: "Margaret W.",
-      location: "Nairobi",
-      date: "December 2025",
+      name: "Cess",
+      location: "Thika Road",
+      date: "February 2026",
+      rating: 5,
+      content: `Four months ago I started my Airbnb business "Jaymilla Homes". I knew no one in the industry, but I trusted that it would work out since it was the festive season and hosting seemed quite demanding. I managed to host a few clients as I slowly learnt a few strategies on hosting, which was very motivating. However, when January came, things changed. Clients reduced and everything seemed to be at a standstill.
+
+As a host, I kept wondering how I would get more clients like other hosts. One of the toughest things I experienced was trying to receive genuine guidance from someone in the same space. Most people would say, "What worked for me might not work for you, find clients your own way," which was very disorienting as a beginner. That changed when I came across "Homes By Muema" on TikTok where she shared tips on hosting. I reached out to her and we set up a few guidance sessions. Since then, hosting has shifted from feeling like a burden to becoming much easier. From her I learnt how to handle and treat both new and existing clients, as well as the do's and don'ts of hosting, which helped improve my income even during the stagnant months. 
+
+Going forward, I look forward to working more with Muema and would definitely refer anyone who intends to venture into hosting. Cess,Thika road.`,
+      shortContent: `Four months ago I started my Airbnb business "Jaymilla Homes"... When January came, things changed. Clients reduced and everything seemed to be at a standstill. That changed when I came across "Homes By Muema" on TikTok.`,
+      properties: [2]
+    },
+    {
+      id: 3,
+      name: "Christine",
+      location: "Kilimani",
+      date: "February 2026",
       rating: 5,
       content: `When I started my Airbnb business, I believed that with the right agent the business would thrive. Unfortunately, the first two months were very challenging. I only managed to get two clients and had to keep going back to my own pocket to sustain the business. Eventually, I parted ways with my previous agent and was ready to sell the business.
 
@@ -109,29 +123,31 @@ Then I came across Homes by Mwema on TikTok and decided to reach out. From the f
 
 Since partnering with Homes by Mwema, I've received great support and guidance. I've learned the importance of listing optimization, strategic marketing, professional photos, and being part of a community of hosts and agents. Most importantly, they have significantly reduced the stress that comes with managing the business because I now have the right support and direction.
 
-I'm truly grateful for the professionalism and support from Homes by Mwema, I look forward to partnering together on many more opportunities in the future.`,
+I'm truly grateful for the professionalism and support from Homes by Mwema, I look forward to partnering together on many more opportunities in the future. Christine,Kilimani`,
       shortContent: `When I started my Airbnb business, I believed that with the right agent the business would thrive. Unfortunately, the first two months were very challenging... Since partnering with Homes by Mwema, I've received great support and guidance.`,
-      properties: [2, 3]
-    },
-    {
-      id: 3,
-      name: "James K.",
-      location: "Lavington",
-      date: "November 2025",
-      rating: 5,
-      content: `"A Big Thumb up to Homes By Mwema". As my Co-Host, has brought incredible expertise and dedication to our Airbnb Venture. Her keen eye for detail and responsiveness have been instrumental in my success. A+ Service, highly recommend.`,
-      shortContent: `"A Big Thumb up to Homes By Mwema". As my Co-Host, has brought incredible expertise and dedication to our Airbnb Venture.`,
       properties: [3]
     },
     {
       id: 4,
-      name: "Sarah M.",
-      location: "Karen",
-      date: "October 2025",
+      name: "Curtis",
+      location: "Kileleshwa",
+      date: "January 2026",
       rating: 5,
-      content: `I had almost given up on Airbnb management until I found Homes by Mwema. They transformed my property from earning 30K per month to consistently 80K+ within just two months. The professional photography and listing optimization made all the difference. Now I have guests booked months in advance!`,
-      shortContent: `I had almost given up on Airbnb management until I found Homes by Mwema. They transformed my property from earning 30K per month to consistently 80K+ within just two months.`,
+      content: `Before partnering with Homes By Mwema, I was struggling as a solo Airbnb host in Nairobi—double bookings were a nightmare, eating into my profits and stressing me out with guest complaints and rescheduling chaos. My listings barely got noticed amid the competition, and I felt stuck, barely covering costs let alone scaling up. That's when Mwema stepped in as my co-host; we connected through a virtual call where she shared her savvy tips on optimization. From day one, she dove in, sorting my calendar messes, preventing overlaps with smart blocking tools, and revamping my listings for killer visibility—boosting my search rankings and inquiries overnight.
+
+Now, thanks to Homes By Mwema, my properties are booked solid 80% of the time, revenue's up 3x, and I finally have breathing room to focus on growth. Mwema's not just a co-host; she's the game-changer who turned my side hustle into a thriving business. Looking ahead, I'm eyeing maximum expansion—adding one more luxury unit by mid-year, and with her help on dynamic pricing and pro photos, I know we'll smash occupancy targets and hit 7 figures annually. Curtis,Kileleshwa.`,
+      shortContent: `Before partnering with Homes By Mwema, I was struggling as a solo Airbnb host in Nairobi—double bookings were a nightmare... Now, thanks to Homes By Mwema, my properties are booked solid 80% of the time, revenue's up 3x.`,
       properties: [4]
+    },
+    {
+      id: 5,
+      name: "Lisa",
+      location: "Machakos",
+      date: "December 2025",
+      rating: 5,
+      content: `"A Big Thumb up to Homes By Mwema". As my Co-Host, has brought incredible expertise and dedication to our Airbnb Venture. Her keen eye for detail and responsiveness have been instrumental in my success. A+ Service, highly recommend. Lisa,Machakos`,
+      shortContent: `"A Big Thumb up to Homes By Mwema". As my Co-Host, has brought incredible expertise and dedication to our Airbnb Venture. A+ Service, highly recommend.`,
+      properties: []
     }
   ];
 
@@ -153,10 +169,17 @@ I'm truly grateful for the professionalism and support from Homes by Mwema, I lo
 
   const faqs = [
     { q: "How much does management cost?", a: "We offer flexible pricing tailored to your specific needs. Our rates typically range from 15-25% of booking revenue, depending on the level of service required and property location." },
-    { q: "Do you handle properties outside Nairobi?", a: "Currently, we primarily operate in Nairobi, but we're expanding to other major cities. Contact us for a consultation about your specific location." },
+    { q: "Do you handle properties outside Nairobi?", a: "Currently, we primarily operate in Nairobi, but we're expanding to other major cities like Thika Road, Machakos, and Kitengela. Contact us for a consultation about your specific location." },
     { q: "How quickly can you start managing my property?", a: "We can typically begin within 3-5 days after our initial consultation, including photography, listing creation, and pricing strategy setup." },
-    { q: "What makes Homes by Mwema different?", a: "We combine local expertise with professional hospitality standards. Our team personally inspects every property and provides dedicated support to both hosts and guests." }
+    { q: "What makes Homes by Mwema different?", a: "We combine local expertise with professional hospitality standards. Our team personally inspects every property and provides dedicated support to both hosts and guests. We specialize in helping diaspora hosts manage their properties remotely." }
   ];
+
+  const toggleReview = (reviewId) => {
+    setExpandedReviews(prev => ({
+      ...prev,
+      [reviewId]: !prev[reviewId]
+    }));
+  };
 
   return (
     <div className="bg-[#f5f2ee] font-sans text-black overflow-x-hidden selection:bg-stone-200">
@@ -398,7 +421,7 @@ I'm truly grateful for the professionalism and support from Homes by Mwema, I lo
 
                 {/* Review Content */}
                 <div className="relative">
-                  <p className="text-stone-700 leading-relaxed">
+                  <p className="text-stone-700 leading-relaxed whitespace-pre-line">
                     {expandedReviews[review.id] ? review.content : review.shortContent}
                   </p>
                   
@@ -418,24 +441,26 @@ I'm truly grateful for the professionalism and support from Homes by Mwema, I lo
                 </div>
 
                 {/* Associated Properties */}
-                <div className="mt-6 pt-4 border-t border-stone-200">
-                  <p className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">
-                    Properties featured in this review:
-                  </p>
-                  <div className="flex gap-2">
-                    {review.properties.map(propId => {
-                      const prop = managedProperties.find(p => p.id === propId);
-                      return prop ? (
-                        <div key={propId} className="relative w-12 h-12 rounded-sm overflow-hidden group">
-                          <img src={prop.image} alt={prop.name} className="w-full h-full object-cover" />
-                          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <span className="text-white text-[8px] uppercase tracking-widest">View</span>
+                {review.properties.length > 0 && (
+                  <div className="mt-6 pt-4 border-t border-stone-200">
+                    <p className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">
+                      Properties featured in this review:
+                    </p>
+                    <div className="flex gap-2">
+                      {review.properties.map(propId => {
+                        const prop = managedProperties.find(p => p.id === propId);
+                        return prop ? (
+                          <div key={propId} className="relative w-12 h-12 rounded-sm overflow-hidden group">
+                            <img src={prop.image} alt={prop.name} className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <span className="text-white text-[8px] uppercase tracking-widest">View</span>
+                            </div>
                           </div>
-                        </div>
-                      ) : null;
-                    })}
+                        ) : null;
+                      })}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Reviewer Info */}
                 <div className="mt-4 flex items-center justify-between">
@@ -444,6 +469,16 @@ I'm truly grateful for the professionalism and support from Homes by Mwema, I lo
                     <p className="text-xs text-stone-500">{review.location} · {review.date}</p>
                   </div>
                 </div>
+
+                {/* WhatsApp inquiry for this review */}
+                <a
+                  href={getWhatsAppLink(`Hello! I read ${review.name}'s review and I'm interested in learning more about your management services for properties in ${review.location}.`)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-4 inline-flex items-center gap-2 text-xs text-[#ED9B40] hover:text-[#0F4C55] transition-colors"
+                >
+                  <FaWhatsapp /> Get similar results for your property
+                </a>
               </motion.div>
             ))}
           </div>
@@ -499,7 +534,7 @@ I'm truly grateful for the professionalism and support from Homes by Mwema, I lo
             Ready to Maximize Your <span className="text-[#ED9B40]">Returns?</span>
           </h2>
           <p className="text-white/80 text-lg mb-10 max-w-2xl mx-auto">
-            Join 50+ successful hosts who've transformed their Airbnb business with our management expertise.
+            Join 50+ successful hosts like Benny, Cess, Christine, Curtis, and Lisa who've transformed their Airbnb business with our management expertise.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <a
@@ -525,8 +560,8 @@ I'm truly grateful for the professionalism and support from Homes by Mwema, I lo
             <a href={`https://wa.me/${whatsappNumber}`} className="flex items-center gap-2 text-white/70 hover:text-[#ED9B40] transition-colors text-sm">
               <FaWhatsapp /> WhatsApp
             </a>
-            <a href="mailto:hello@homesbymwema.com" className="flex items-center gap-2 text-white/70 hover:text-[#ED9B40] transition-colors text-sm">
-              <FaEnvelope /> hello@homesbymwema.com
+            <a href="mailto:homesbymwema@gmail.com" className="flex items-center gap-2 text-white/70 hover:text-[#ED9B40] transition-colors text-sm">
+              <FaEnvelope /> homesbymwema@gmail.com
             </a>
             <a href="tel:+254720108914" className="flex items-center gap-2 text-white/70 hover:text-[#ED9B40] transition-colors text-sm">
               <FaPhone /> Call Us
