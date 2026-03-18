@@ -733,24 +733,105 @@ const StepImages = ({ form, setForm, onCoverUpload, onGalleryUpload, onRemoveNew
 );
 
 const StepAmenities = ({ form, setForm }) => {
-  const toggle = (v) => setForm(p=>({...p,amenities:p.amenities.includes(v)?p.amenities.filter(a=>a!==v):[...p.amenities,v]}));
+  const [customInput, setCustomInput] = useState("");
+
+  const presetValues = AMENITIES.map(a => a.value);
+
+  const toggle = (v) => setForm(p => ({
+    ...p,
+    amenities: p.amenities.includes(v) ? p.amenities.filter(a => a !== v) : [...p.amenities, v]
+  }));
+
+  const addCustom = () => {
+    const val = customInput.trim().toLowerCase();
+    if (!val) return;
+    if (form.amenities.includes(val)) {
+      toast("Already added!", { icon: "⚠️", duration: 1500 });
+      return;
+    }
+    setForm(p => ({ ...p, amenities: [...p.amenities, val] }));
+    setCustomInput("");
+  };
+
+  const removeAmenity = (v) => setForm(p => ({ ...p, amenities: p.amenities.filter(a => a !== v) }));
+
+  // custom amenities = those not in the preset list
+  const customAmenities = form.amenities.filter(a => !presetValues.includes(a));
+
   return (
-    <div>
-      <p className="f-body text-sm text-stone-400 mb-5">Select all amenities available at this property.</p>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        {AMENITIES.map(a=>{
-          const on=form.amenities.includes(a.value);
-          return (
-            <motion.button key={a.value} type="button" onClick={()=>toggle(a.value)} whileTap={{scale:.97}}
-              className={`relative flex items-center gap-3 px-4 py-3.5 rounded-xl border transition-all duration-200 text-left ${on?"bg-[#093A3E] border-[#093A3E] text-white shadow-md shadow-teal-900/15":"bg-white border-stone-200 text-stone-600 hover:border-stone-300"}`}>
-              <span className={`text-base ${on?"text-[#ED9B40]":"text-stone-300"}`}>{a.icon}</span>
-              <span className="f-body text-xs font-medium">{a.label}</span>
-              {on&&<span className="absolute top-2 right-2 w-4 h-4 rounded-full bg-[#ED9B40] flex items-center justify-center"><FaCheck size={7} className="text-white"/></span>}
-            </motion.button>
-          );
-        })}
+    <div className="space-y-6">
+      {/* Preset toggles */}
+      <div>
+        <p className="f-body text-[10px] uppercase tracking-widest text-stone-400 mb-3">Quick select</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {AMENITIES.map(a => {
+            const on = form.amenities.includes(a.value);
+            return (
+              <motion.button key={a.value} type="button" onClick={() => toggle(a.value)} whileTap={{ scale: .97 }}
+                className={`relative flex items-center gap-3 px-4 py-3.5 rounded-xl border transition-all duration-200 text-left ${on ? "bg-[#093A3E] border-[#093A3E] text-white shadow-md shadow-teal-900/15" : "bg-white border-stone-200 text-stone-600 hover:border-stone-300"}`}>
+                <span className={`text-base ${on ? "text-[#ED9B40]" : "text-stone-300"}`}>{a.icon}</span>
+                <span className="f-body text-xs font-medium">{a.label}</span>
+                {on && <span className="absolute top-2 right-2 w-4 h-4 rounded-full bg-[#ED9B40] flex items-center justify-center"><FaCheck size={7} className="text-white" /></span>}
+              </motion.button>
+            );
+          })}
+        </div>
       </div>
-      {form.amenities.length>0&&<p className="f-body text-xs text-stone-400 mt-4 text-center">{form.amenities.length} amenit{form.amenities.length===1?"y":"ies"} selected</p>}
+
+      {/* Custom amenity input */}
+      <div>
+        <p className="f-body text-[10px] uppercase tracking-widest text-stone-400 mb-3">Add custom amenity</p>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={customInput}
+            onChange={e => setCustomInput(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && (e.preventDefault(), addCustom())}
+            placeholder="e.g. Rooftop terrace, Hot tub, EV charging…"
+            className="input-base flex-1"
+          />
+          <button
+            type="button"
+            onClick={addCustom}
+            disabled={!customInput.trim()}
+            className="flex items-center gap-1.5 px-4 py-2.5 bg-[#093A3E] text-white rounded-xl f-body text-sm font-medium hover:bg-[#0a4a52] transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+          >
+            <FaPlus size={11} /> Add
+          </button>
+        </div>
+        <p className="f-body text-[10px] text-stone-300 mt-1.5">Press Enter or click Add to include a custom amenity</p>
+      </div>
+
+      {/* Custom amenity chips */}
+      <AnimatePresence>
+        {customAmenities.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}>
+            <p className="f-body text-[10px] uppercase tracking-widest text-stone-400 mb-3">Custom amenities</p>
+            <div className="flex flex-wrap gap-2">
+              {customAmenities.map(a => (
+                <motion.span key={a}
+                  initial={{ opacity: 0, scale: .8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: .8 }}
+                  className="flex items-center gap-2 pl-3 pr-2 py-1.5 bg-[#ED9B40]/10 border border-[#ED9B40]/30 text-[#093A3E] rounded-xl f-body text-xs font-medium"
+                >
+                  ✦ {a}
+                  <button type="button" onClick={() => removeAmenity(a)}
+                    className="w-4 h-4 rounded-full bg-[#093A3E]/10 hover:bg-red-100 hover:text-red-500 flex items-center justify-center transition-colors">
+                    <FaTimes size={8} />
+                  </button>
+                </motion.span>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Summary */}
+      {form.amenities.length > 0 && (
+        <p className="f-body text-xs text-stone-400 text-center">
+          {form.amenities.length} amenit{form.amenities.length === 1 ? "y" : "ies"} selected
+          {customAmenities.length > 0 && ` (${customAmenities.length} custom)`}
+        </p>
+      )}
     </div>
   );
 };

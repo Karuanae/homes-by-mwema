@@ -37,33 +37,33 @@ export default function Home() {
   const { isAuthenticated } = useAuth();
   
   // Search state
-  const [showRooms,    setShowRooms]    = useState(false);
-  const [showGuests,   setShowGuests]   = useState(false);
-  const [showLocations, setShowLocations] = useState(false);
+  const [showRooms,      setShowRooms]      = useState(false);
+  const [showGuests,     setShowGuests]     = useState(false);
+  const [showLocations,  setShowLocations]  = useState(false);
 
   // Filter state
-  const [selectedRoom, setSelectedRoom] = useState(ROOM_OPTIONS[0]);
-  const [selectedLocation, setSelectedLocation] = useState("All Locations");
-  const [locationSearch, setLocationSearch] = useState("");
+  const [selectedRoom,      setSelectedRoom]      = useState(ROOM_OPTIONS[0]);
+  const [selectedLocation,  setSelectedLocation]  = useState("All Locations");
+  const [locationSearch,    setLocationSearch]    = useState("");
   const [filteredLocations, setFilteredLocations] = useState([]);
-  const [guests,       setGuests]       = useState({ adults: 1, children: 0, infants: 0 });
-  const [hasSearched,  setHasSearched]  = useState(false);
+  const [guests,            setGuests]            = useState({ adults: 1, children: 0, infants: 0 });
+  const [hasSearched,       setHasSearched]       = useState(false);
 
   // Data state
-  const [properties,       setProperties]       = useState([]);
-  const [featuredProperties, setFeaturedProperties] = useState([]);
-  const [searchResults,    setSearchResults]    = useState([]);
-  const [locations,        setLocations]        = useState([]);
-  const [visibleCount,     setVisibleCount]     = useState(8);
-  const [loading,          setLoading]          = useState(true);
-  const [error,            setError]            = useState(null);
-  const [openFaq,          setOpenFaq]          = useState(null);
+  const [properties,          setProperties]          = useState([]);
+  const [featuredProperties,  setFeaturedProperties]  = useState([]);
+  const [searchResults,       setSearchResults]       = useState([]);
+  const [locations,           setLocations]           = useState([]);
+  const [visibleCount,        setVisibleCount]        = useState(8);
+  const [loading,             setLoading]             = useState(true);
+  const [error,               setError]               = useState(null);
+  const [openFaq,             setOpenFaq]             = useState(null);
 
   // Refs
-  const roomsRef       = useRef(null);
-  const guestsRef      = useRef(null);
-  const locationsRef   = useRef(null);
-  const propertiesRef  = useRef(null);
+  const roomsRef         = useRef(null);
+  const guestsRef        = useRef(null);
+  const locationsRef     = useRef(null);
+  const propertiesRef    = useRef(null);
   const searchResultsRef = useRef(null);
   const locationInputRef = useRef(null);
 
@@ -74,9 +74,9 @@ export default function Home() {
     { id: 3, number: "III", title: "Curated Design",      description: "Interiors selected for their aesthetic value and comfort." },
   ];
   const testimonials = [
-    { id: 1, name: "Amina K.",   location: "Mombasa", content: "Capital Rise 2-Bedroom offered the perfect blend of modern luxury and authentic Kenyan hospitality. Truly exceptional." },
-    { id: 2, name: "James M.",   location: "Nairobi",  content: "The 2-bedroom in Kilimani was ideal for business hosting. Central, luxurious, and impressed all our international guests." },
-    { id: 3, name: "Lilian W.",  location: "Kisumu",   content: "Our stay at the house in Langata was magical. Spacious, serene, and perfect for our family retreat to Nairobi." },
+    { id: 1, name: "Amina K.",  location: "Mombasa", content: "Capital Rise 2-Bedroom offered the perfect blend of modern luxury and authentic Kenyan hospitality. Truly exceptional." },
+    { id: 2, name: "James M.",  location: "Nairobi",  content: "The 2-bedroom in Kilimani was ideal for business hosting. Central, luxurious, and impressed all our international guests." },
+    { id: 3, name: "Lilian W.", location: "Kisumu",   content: "Our stay at the house in Langata was magical. Spacious, serene, and perfect for our family retreat to Nairobi." },
   ];
   const faqData = [
     { id: 1, question: "Cancellation Policy", answer: "Cancel up to 24 hours before check-in for a full refund. Specific policies are detailed on each booking page." },
@@ -122,7 +122,7 @@ export default function Home() {
     if (locationSearch.trim() === "") {
       setFilteredLocations(locations);
     } else {
-      const filtered = locations.filter(loc => 
+      const filtered = locations.filter(loc =>
         loc.toLowerCase().includes(locationSearch.toLowerCase())
       );
       setFilteredLocations(filtered);
@@ -132,11 +132,11 @@ export default function Home() {
   // ── Close dropdowns on outside click ──
   useEffect(() => {
     const handler = (e) => {
-      if (roomsRef.current && !roomsRef.current.contains(e.target)) setShowRooms(false);
-      if (guestsRef.current && !guestsRef.current.contains(e.target)) setShowGuests(false);
+      if (roomsRef.current    && !roomsRef.current.contains(e.target))    setShowRooms(false);
+      if (guestsRef.current   && !guestsRef.current.contains(e.target))   setShowGuests(false);
       if (locationsRef.current && !locationsRef.current.contains(e.target)) {
         setShowLocations(false);
-        setLocationSearch(""); // Clear search when closing
+        setLocationSearch("");
       }
     };
     document.addEventListener("mousedown", handler);
@@ -148,11 +148,9 @@ export default function Home() {
     const totalGuests = guests.adults + guests.children + guests.infants;
 
     const results = properties.filter((p) => {
-      // Location filter
       const locationMatch = selectedLocation === "All Locations" || p.location === selectedLocation;
 
-      // Room type filter
-      const beds = p.rooms ?? p.bedrooms ?? 0;
+      const beds    = p.rooms ?? p.bedrooms ?? 0;
       const isStudio = beds === 0 || p.type === "studio";
       let roomMatch = true;
       if (selectedRoom.label !== "Any") {
@@ -163,7 +161,6 @@ export default function Home() {
         }
       }
 
-      // Guests filter — property must accommodate at least the requested guests
       const maxGuests = p.max_guests ?? p.maxGuests ?? 99;
       const guestMatch = totalGuests <= maxGuests;
 
@@ -174,7 +171,6 @@ export default function Home() {
     setVisibleCount(8);
     setHasSearched(true);
 
-    // Smooth scroll to search results
     setTimeout(() => {
       searchResultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 100);
@@ -190,8 +186,57 @@ export default function Home() {
   };
 
   const displayedSearchResults = searchResults.slice(0, visibleCount);
-  const hasMoreSearchResults = visibleCount < searchResults.length;
-  const totalGuests = guests.adults + guests.children + guests.infants;
+  const hasMoreSearchResults   = visibleCount < searchResults.length;
+  const totalGuests            = guests.adults + guests.children + guests.infants;
+
+  // ── Reusable property card (matches Properties.jsx pattern exactly) ────────
+  // Cards link straight to /booking/:id — auth is enforced on the booking page
+  // when the user clicks "Book Now", not before.
+  const PropertyCard = ({ property, idx }) => (
+    <Link
+      to={`/booking/${property.id}`}
+      key={property.id || idx}
+      className="block group cursor-pointer"
+    >
+      <div className="relative aspect-[3/4] overflow-hidden bg-stone-100 mb-4">
+        <motion.img
+          whileHover={{ scale: 1.05 }}
+          transition={{ duration: 0.7, ease: "easeOut" }}
+          src={getImageSrc(property.cover_image || property.images?.[0])}
+          alt={property.name}
+          className="w-full h-full object-cover"
+          onError={(e) => { e.target.src = "/default-property.jpg"; }}
+        />
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-300 flex items-center justify-center">
+          <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 backdrop-blur-sm px-4 py-2 text-xs font-bold uppercase tracking-widest text-black">
+            View Details
+          </span>
+        </div>
+        {property.tag && (
+          <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm px-2 py-1 text-[10px] uppercase tracking-widest font-bold text-black">
+            {property.tag}
+          </div>
+        )}
+      </div>
+
+      <div className="p-3">
+        <div className="flex justify-between items-start">
+          <div>
+            <h3 className="text-black text-lg font-serif leading-tight group-hover:text-stone-700 transition-colors">
+              {property.name}
+            </h3>
+            <p className="text-stone-500 text-xs mt-1 uppercase tracking-wide flex items-center gap-1">
+              <FaMapMarkerAlt className="text-[10px]" /> {property.location}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-black text-sm font-medium">Ksh {property.price?.toLocaleString()}</p>
+            <p className="text-stone-400 text-[10px] mt-1 uppercase">per night</p>
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
 
   return (
     <div className="bg-[#f5f2ee] font-sans text-black overflow-x-hidden selection:bg-stone-200">
@@ -205,33 +250,20 @@ export default function Home() {
         }
         .animate-marquee { animation: marquee 40s linear infinite; }
         @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
-        
-        /* Custom scrollbar for dropdowns */
-        .dropdown-scroll::-webkit-scrollbar {
-          width: 4px;
-        }
-        .dropdown-scroll::-webkit-scrollbar-track {
-          background: rgba(255, 255, 255, 0.1);
-        }
-        .dropdown-scroll::-webkit-scrollbar-thumb {
-          background: rgba(237, 155, 64, 0.5);
-          border-radius: 4px;
-        }
-        .dropdown-scroll::-webkit-scrollbar-thumb:hover {
-          background: rgba(237, 155, 64, 0.8);
-        }
+        .dropdown-scroll::-webkit-scrollbar { width: 4px; }
+        .dropdown-scroll::-webkit-scrollbar-track { background: rgba(255,255,255,0.1); }
+        .dropdown-scroll::-webkit-scrollbar-thumb { background: rgba(237,155,64,0.5); border-radius: 4px; }
+        .dropdown-scroll::-webkit-scrollbar-thumb:hover { background: rgba(237,155,64,0.8); }
       `}</style>
       <div className="bg-noise" />
 
       {/* ═══════════════════════════════════════════════════════
-          HERO — static Capital3.jpeg background with navbar offset
-          FURTHER REDUCED TOP PADDING to bring content up
+          HERO
       ═══════════════════════════════════════════════════════ */}
       <div
         className="min-h-screen bg-cover bg-center relative pt-20 md:pt-24"
         style={{ backgroundImage: "url('/Capital3.jpeg')" }}
       >
-        {/* Dark teal #093A3E overlay fading downwards */}
         <div className="absolute inset-0 bg-gradient-to-b from-[#093A3E]/90 via-[#093A3E]/50 to-transparent" />
 
         <section className="relative z-10 min-h-screen flex flex-col items-center justify-start px-4 md:px-6 pt-16 md:pt-20">
@@ -241,12 +273,10 @@ export default function Home() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, ease: "easeOut" }}
           >
-            {/* Eyebrow */}
             <p className="text-[11px] uppercase tracking-[0.3em] text-[#ED9B40]/80 mb-2">
               Nairobi · Premium Residences
             </p>
 
-            {/* Headline - Further reduced margins */}
             <h1
               className="text-4xl md:text-6xl font-light tracking-tight mb-4 text-white"
               style={{ fontFamily: "'Playfair Display', serif" }}
@@ -256,11 +286,10 @@ export default function Home() {
             </h1>
 
             {/* ── SEARCH BAR ── */}
-           <div className="bg-[#093A3E]/40 backdrop-blur-lg rounded-2xl border border-[#ED9B40]/30 shadow-2xl overflow-visible relative">
-              {/* Desktop row / Mobile stack */}
+            <div className="bg-[#093A3E]/40 backdrop-blur-lg rounded-2xl border border-[#ED9B40]/30 shadow-2xl overflow-visible relative">
               <div className="flex flex-col md:flex-row md:items-center md:divide-x divide-white/20">
 
-                {/* LOCATION - Now with search input */}
+                {/* LOCATION */}
                 <div className="relative flex-1" ref={locationsRef}>
                   <button
                     onClick={() => { setShowLocations(s => !s); setShowRooms(false); setShowGuests(false); }}
@@ -269,9 +298,7 @@ export default function Home() {
                     <p className="text-[10px] uppercase tracking-widest text-[#ED9B40]/70 font-medium mb-0.5 flex items-center gap-1">
                       <FaMapMarkerAlt className="text-[10px]" /> Location
                     </p>
-                    <p className="text-sm text-white font-light truncate">
-                      {selectedLocation}
-                    </p>
+                    <p className="text-sm text-white font-light truncate">{selectedLocation}</p>
                   </button>
 
                   <AnimatePresence>
@@ -281,9 +308,8 @@ export default function Home() {
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 8, scale: 0.97 }}
                         className="absolute top-full left-0 mt-2 bg-[#1C1917] rounded-xl shadow-2xl z-[100] w-72 border border-white/10 overflow-hidden"
-                        style={{ position: 'absolute', top: '100%', left: 0, zIndex: 9999 }}
+                        style={{ position: "absolute", top: "100%", left: 0, zIndex: 9999 }}
                       >
-                        {/* Search input inside dropdown */}
                         <div className="p-3 border-b border-white/10">
                           <input
                             ref={locationInputRef}
@@ -295,22 +321,14 @@ export default function Home() {
                             autoFocus
                           />
                         </div>
-                        
-                        {/* Location list */}
                         <div className="max-h-60 overflow-y-auto dropdown-scroll">
                           {filteredLocations.length === 0 ? (
-                            <div className="px-4 py-3 text-white/40 text-sm text-center">
-                              No locations found
-                            </div>
+                            <div className="px-4 py-3 text-white/40 text-sm text-center">No locations found</div>
                           ) : (
                             filteredLocations.map((location) => (
                               <button
                                 key={location}
-                                onClick={() => { 
-                                  setSelectedLocation(location); 
-                                  setShowLocations(false);
-                                  setLocationSearch("");
-                                }}
+                                onClick={() => { setSelectedLocation(location); setShowLocations(false); setLocationSearch(""); }}
                                 className={`block w-full text-left px-4 py-3 text-sm transition-colors border-b border-white/5 last:border-0
                                   ${selectedLocation === location ? "text-[#ED9B40] bg-white/5" : "text-white/80 hover:bg-white/5 hover:text-white"}`}
                               >
@@ -341,7 +359,7 @@ export default function Home() {
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 8, scale: 0.97 }}
                         className="absolute top-full left-0 mt-2 bg-[#1C1917] rounded-xl shadow-2xl z-[100] w-44 border border-white/10 overflow-hidden"
-                        style={{ position: 'absolute', top: '100%', left: 0, zIndex: 9999 }}
+                        style={{ position: "absolute", top: "100%", left: 0, zIndex: 9999 }}
                       >
                         <div className="max-h-60 overflow-y-auto dropdown-scroll">
                           {ROOM_OPTIONS.map((opt) => (
@@ -379,7 +397,7 @@ export default function Home() {
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 8, scale: 0.97 }}
                         className="absolute top-full right-0 mt-2 bg-[#1C1917] rounded-xl shadow-2xl z-[100] w-52 p-4 border border-white/10"
-                        style={{ position: 'absolute', top: '100%', right: 0, zIndex: 9999 }}
+                        style={{ position: "absolute", top: "100%", right: 0, zIndex: 9999 }}
                       >
                         <div className="max-h-60 overflow-y-auto dropdown-scroll px-1">
                           {["adults","children","infants"].map((type) => (
@@ -419,7 +437,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Simple trust indicator */}
             <p className="text-white/60 text-xs mt-4 tracking-wide">
               ✦ 500+ happy guests ✦ 4.9/5 rating ✦
             </p>
@@ -439,13 +456,12 @@ export default function Home() {
       </div>
 
       {/* ═══════════════════════════════════════════════════════
-          SEARCH RESULTS SECTION - Only shows after search
+          SEARCH RESULTS — only shows after search
       ═══════════════════════════════════════════════════════ */}
       {hasSearched && (
         <section ref={searchResultsRef} className="py-16 px-6 relative z-10 bg-stone-50 scroll-mt-24">
           <div className="max-w-[1400px] mx-auto">
 
-            {/* Section header with clear search button */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12">
               <div>
                 <h2 className="text-3xl md:text-4xl text-black" style={{ fontFamily: "'Playfair Display', serif" }}>
@@ -458,102 +474,36 @@ export default function Home() {
                   {totalGuests > 1 && ` · ${totalGuests} guests`}
                 </p>
               </div>
-              
-              {/* Clear Search Button */}
               <button
                 onClick={clearSearch}
                 className="mt-4 md:mt-0 px-6 py-2 border border-stone-300 text-stone-700 text-xs uppercase tracking-widest font-bold rounded-lg hover:bg-stone-100 transition-colors flex items-center gap-2"
               >
-                Clear Search
-                <span className="text-lg">×</span>
+                Clear Search <span className="text-lg">×</span>
               </button>
             </div>
 
-            {/* No results message */}
             {searchResults.length === 0 && (
               <div className="text-center py-20 bg-white rounded-xl border border-stone-100">
                 <div className="max-w-md mx-auto">
                   <FaSearch className="text-4xl text-stone-300 mx-auto mb-4" />
                   <h3 className="text-xl font-serif text-stone-900 mb-2">No properties found</h3>
                   <p className="text-stone-500 mb-6">Try adjusting your location, room type or guest count.</p>
-                  <button
-                    onClick={clearSearch}
-                    className="px-6 py-2 bg-[#ED9B40] text-white rounded-lg hover:bg-[#d4882d] transition-colors"
-                  >
+                  <button onClick={clearSearch} className="px-6 py-2 bg-[#ED9B40] text-white rounded-lg hover:bg-[#d4882d] transition-colors">
                     Clear filters
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Search Results Grid */}
+            {/* ── Search results grid ── */}
             {searchResults.length > 0 && (
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-12">
                   {displayedSearchResults.map((property, idx) => (
-                    <div
-                      key={property.id || idx}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        if (!isAuthenticated) {
-                          localStorage.setItem('redirectIntent', JSON.stringify({
-                            type: 'book',
-                            propertyId: property.id,
-                            path: `/booking/${property.id}`
-                          }));
-                          navigate('/login', { 
-                            state: { 
-                              from: '/',
-                              message: 'Please log in to book this property'
-                            }
-                          });
-                        } else {
-                          navigate(`/booking/${property.id}`);
-                        }
-                      }}
-                      className="block group cursor-pointer"
-                    >
-                      <div className="relative aspect-[3/4] overflow-hidden bg-stone-100 mb-4">
-                        <motion.img
-                          whileHover={{ scale: 1.05 }}
-                          transition={{ duration: 0.7, ease: "easeOut" }}
-                          src={getImageSrc(property.cover_image || property.images?.[0])}
-                          alt={property.name}
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-300 flex items-center justify-center">
-                          <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 backdrop-blur-sm px-4 py-2 text-xs font-bold uppercase tracking-widest text-black">
-                            View Details
-                          </span>
-                        </div>
-                        {property.tag && (
-                          <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm px-2 py-1 text-[10px] uppercase tracking-widest font-bold text-black">
-                            {property.tag}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="p-3">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h3 className="text-black text-lg font-serif leading-tight group-hover:text-stone-700 transition-colors">
-                              {property.name}
-                            </h3>
-                            <p className="text-stone-500 text-xs mt-1 uppercase tracking-wide flex items-center gap-1">
-                              <FaMapMarkerAlt className="text-[10px]" /> {property.location}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-black text-sm font-medium">Ksh {property.price?.toLocaleString()}</p>
-                            <p className="text-stone-400 text-[10px] mt-1 uppercase">per night</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    <PropertyCard key={property.id || idx} property={property} idx={idx} />
                   ))}
                 </div>
 
-                {/* Load more button for search results */}
                 {hasMoreSearchResults && (
                   <div className="mt-16 text-center">
                     <button
@@ -571,29 +521,27 @@ export default function Home() {
       )}
 
       {/* ═══════════════════════════════════════════════════════
-          FEATURED PROPERTIES SECTION - Always visible below search results
+          FEATURED PROPERTIES — always visible
       ═══════════════════════════════════════════════════════ */}
-      <section ref={propertiesRef} className={`py-16 px-6 relative z-10 bg-white scroll-mt-24 ${hasSearched ? 'border-t border-stone-200' : ''}`}>
+      <section
+        ref={propertiesRef}
+        className={`py-16 px-6 relative z-10 bg-white scroll-mt-24 ${hasSearched ? "border-t border-stone-200" : ""}`}
+      >
         <div className="max-w-[1400px] mx-auto">
 
-          {/* Section header */}
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl text-black" style={{ fontFamily: "'Playfair Display', serif" }}>
               Featured <span className="italic font-light text-stone-500">Properties</span>
             </h2>
-            <p className="text-stone-500 text-sm mt-1">
-              Our newest and most sought-after residences
-            </p>
+            <p className="text-stone-500 text-sm mt-1">Our newest and most sought-after residences</p>
           </div>
 
-          {/* Loading */}
           {loading && (
             <div className="flex justify-center items-center py-20">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black" />
             </div>
           )}
 
-          {/* Error */}
           {error && !loading && (
             <div className="text-center py-20">
               <p className="text-stone-500 mb-4">{error}</p>
@@ -603,88 +551,27 @@ export default function Home() {
             </div>
           )}
 
-          {/* Empty state */}
           {!loading && !error && featuredProperties.length === 0 && (
             <div className="text-center py-20">
               <p className="text-stone-500 font-light">No residences available at the moment.</p>
             </div>
           )}
 
-          {/* Featured Properties Grid */}
+          {/* ── Featured properties grid ── */}
           {!loading && !error && featuredProperties.length > 0 && (
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-12">
                 {featuredProperties.map((property, idx) => (
-                  <div
-                    key={property.id || idx}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      if (!isAuthenticated) {
-                        localStorage.setItem('redirectIntent', JSON.stringify({
-                          type: 'book',
-                          propertyId: property.id,
-                          path: `/booking/${property.id}`
-                        }));
-                        navigate('/login', { 
-                          state: { 
-                            from: '/',
-                            message: 'Please log in to book this property'
-                          }
-                        });
-                      } else {
-                        navigate(`/booking/${property.id}`);
-                      }
-                    }}
-                    className="block group cursor-pointer"
-                  >
-                    <div className="relative aspect-[3/4] overflow-hidden bg-stone-100 mb-4">
-                      <motion.img
-                        whileHover={{ scale: 1.05 }}
-                        transition={{ duration: 0.7, ease: "easeOut" }}
-                        src={getImageSrc(property.cover_image || property.images?.[0])}
-                        alt={property.name}
-                        className="w-full h-full object-cover"
-                      />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-300 flex items-center justify-center">
-                        <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 backdrop-blur-sm px-4 py-2 text-xs font-bold uppercase tracking-widest text-black">
-                          View Details
-                        </span>
-                      </div>
-                      {property.tag && (
-                        <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm px-2 py-1 text-[10px] uppercase tracking-widest font-bold text-black">
-                          {property.tag}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="p-3">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h3 className="text-black text-lg font-serif leading-tight group-hover:text-stone-700 transition-colors">
-                            {property.name}
-                          </h3>
-                          <p className="text-stone-500 text-xs mt-1 uppercase tracking-wide flex items-center gap-1">
-                            <FaMapMarkerAlt className="text-[10px]" /> {property.location}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-black text-sm font-medium">Ksh {property.price?.toLocaleString()}</p>
-                          <p className="text-stone-400 text-[10px] mt-1 uppercase">per night</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  <PropertyCard key={property.id || idx} property={property} idx={idx} />
                 ))}
               </div>
 
-              {/* View All Properties Button - FIXED to navigate to /properties */}
               <div className="mt-16 text-center">
                 <button
-                  onClick={() => navigate('/properties')}
+                  onClick={() => navigate("/properties")}
                   className="px-8 py-3 bg-[#ED9B40] text-white text-xs uppercase tracking-widest font-bold rounded-lg hover:bg-[#d4882d] transition-colors inline-flex items-center gap-2"
                 >
-                  Browse All Properties
-                  <span className="text-lg">→</span>
+                  Browse All Properties <span className="text-lg">→</span>
                 </button>
               </div>
             </>
@@ -693,7 +580,7 @@ export default function Home() {
       </section>
 
       {/* ═══════════════════════════════════════════════════════
-          EDITORIAL FEATURES 
+          EDITORIAL FEATURES
       ═══════════════════════════════════════════════════════ */}
       <section className="py-24 px-6 bg-[#EBE5DE] relative z-10">
         <div className="max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
@@ -710,9 +597,7 @@ export default function Home() {
                   <span className="text-[#0F4C55] font-serif text-3xl font-bold group-hover:text-black transition-colors">{f.number}</span>
                   <div>
                     <h4 className="text-[#0F4C55] font-bold uppercase text-sm tracking-widest mb-2">{f.title}</h4>
-                    <p className="text-[#2C2C2C] font-medium text-base leading-relaxed max-w-sm">
-                      {f.description}
-                    </p>
+                    <p className="text-[#2C2C2C] font-medium text-base leading-relaxed max-w-sm">{f.description}</p>
                   </div>
                 </div>
               ))}
@@ -775,9 +660,7 @@ export default function Home() {
                       exit={{ height: 0, opacity: 0 }}
                       className="overflow-hidden"
                     >
-                      <p className="pb-6 text-black font-light leading-relaxed">
-                        {faq.answer}
-                      </p>
+                      <p className="pb-6 text-black font-light leading-relaxed">{faq.answer}</p>
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -788,14 +671,14 @@ export default function Home() {
       </section>
 
       {/* ═══════════════════════════════════════════════════════
-          CTA FOOTER - FIXED button to navigate to /properties
+          CTA FOOTER
       ═══════════════════════════════════════════════════════ */}
       <section className="py-20 bg-[#093A3E] text-[#f5f2ee] text-center px-6 relative z-10">
         <h2 className="text-4xl md:text-6xl font-serif mb-6">Ready to Book?</h2>
         <p className="text-[#F5F2EE]/70 max-w-lg mx-auto mb-10 font-light">Experience the finest homes Kenya has to offer. Book your sanctuary today.</p>
         <div className="flex justify-center gap-6">
           <button
-            onClick={() => navigate('/properties')}
+            onClick={() => navigate("/properties")}
             className="px-8 py-3 bg-[#ED9B40] text-[#093A3E] text-xs uppercase tracking-widest font-bold hover:bg-white transition-colors"
           >
             Browse Properties
