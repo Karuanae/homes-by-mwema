@@ -485,6 +485,12 @@ export const adminAPI = {
     return response;
   },
 
+  // NEW: Delete a property image
+  deletePropertyImage: async (imageId) => {
+    const response = await api.delete(`/admin/property-image/${imageId}`);
+    return response;
+  },
+
   // User management
   getUserDetails: async (userId) => {
     const response = await api.get(`/admin/users/${userId}/details`);

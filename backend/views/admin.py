@@ -233,6 +233,25 @@ def get_property_image(image_id):
         return jsonify({'error': 'Image not found'}), 404
     return Response(pi.image_data, mimetype=pi.mime_type)
 
+@admin_bp.route('/property-image/<int:image_id>', methods=['DELETE'])
+@jwt_required()
+def admin_delete_property_image(image_id):
+    """Admin: Delete a property image"""
+    require_admin()
+    
+    image = PropertyImage.query.get(image_id)
+    if not image:
+        return jsonify({'error': 'Image not found'}), 404
+    
+    try:
+        db.session.delete(image)
+        db.session.commit()
+        logger.info(f"✅ Property image {image_id} deleted by admin")
+        return jsonify({'success': True, 'message': 'Image deleted successfully'}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"❌ Error deleting property image: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 # ========== PROPERTY MANAGEMENT ==========
 @admin_bp.route('/properties', methods=['GET'])

@@ -16,6 +16,7 @@ import ChatWindow from "../components/Chat/ChatWindow";
 import socketService from "../services/socketService";
 import AdminConsultations from '../pages/AdminConsultations';
 import AdminBookingsTab from '../pages/AdminBookingsTab';
+import AdminPropertiesTab from '../pages/AdminPropertiesTab'; // NEW IMPORT
 
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -70,30 +71,9 @@ export default function AdminDashboard() {
   const [unreadCount,     setUnreadCount]     = useState(0);
   const [socketConnected, setSocketConnected] = useState(false);
 
-  const [showAddProperty,  setShowAddProperty]  = useState(false);
-  const [showEditProperty, setShowEditProperty] = useState(null);
-  const [uploading,        setUploading]        = useState(false);
-
   const [selectedClient,       setSelectedClient]       = useState(null);
   const [deletingClient,       setDeletingClient]       = useState(false);
   const [loadingClientDetails, setLoadingClientDetails] = useState(false);
-
-  const [newProperty, setNewProperty] = useState({
-    name: "", type: "studio", price: "", location: "", description: "",
-    coverImage: null, coverPreview: "", galleryImages: [], galleryPreviews: [],
-    amenities: [], rooms: 1, bathrooms: 1, maxGuests: 2, area: "",
-  });
-
-  const predefinedAmenities = [
-    { label: "WiFi",       value: "wifi"       }, { label: "Pool",      value: "pool"      },
-    { label: "Parking",    value: "parking"    }, { label: "AC",        value: "ac"        },
-    { label: "Kitchen",    value: "kitchen"    }, { label: "TV",        value: "tv"        },
-    { label: "Gym",        value: "gym"        }, { label: "Spa",       value: "spa"       },
-    { label: "Concierge",  value: "concierge"  }, { label: "Security",  value: "security"  },
-    { label: "Laundry",    value: "laundry"    }, { label: "Breakfast", value: "breakfast" },
-    { label: "Elevator",   value: "elevator"   }, { label: "Fireplace", value: "fireplace" },
-    { label: "BBQ Grill",  value: "bbq"        }, { label: "Balcony",   value: "balcony"   },
-  ];
 
   const navItems = [
     { id: "dashboard",     label: "Dashboard",     icon: FaHome },
@@ -103,12 +83,6 @@ export default function AdminDashboard() {
     { id: "consultations", label: "Consultations", icon: FaClipboardList },
     { id: "messages",      label: "Chat",          icon: FaEnvelope, badge: unreadCount > 0 ? unreadCount : null },
   ];
-
-  // ── Blob cleanup ─────────────────────────────────────────────────────────────
-  const cleanupBlobUrls = useCallback(() => {
-    if (newProperty.coverPreview?.startsWith("blob:")) URL.revokeObjectURL(newProperty.coverPreview);
-    newProperty.galleryPreviews.forEach(u => u?.startsWith("blob:") && URL.revokeObjectURL(u));
-  }, [newProperty.coverPreview, newProperty.galleryPreviews]);
 
   // ── Init ─────────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -129,8 +103,6 @@ export default function AdminDashboard() {
   useEffect(() => {
     scrollToBottom();
   }, [chatMessages]);
-
-  useEffect(() => () => cleanupBlobUrls(), [cleanupBlobUrls]);
 
   // ── Socket ────────────────────────────────────────────────────────────────────
   const initializeSocket = () => {
@@ -355,139 +327,6 @@ export default function AdminDashboard() {
     setMobileMenuOpen(false);
   };
 
-  // ── Property CRUD ─────────────────────────────────────────────────────────────
-  const handleDeleteProperty = async (id) => {
-    if (!window.confirm("Delete this property?")) return;
-    try { await api.admin.deleteProperty(id); fetchProperties(); fetchStats(); }
-    catch (e) { alert("Error: " + (e.response?.data?.error || e.message)); }
-  };
-
-  const handleAddProperty = async () => {
-    try {
-      setUploading(true);
-      const fd = new FormData();
-      fd.append("name", newProperty.name); fd.append("type", newProperty.type);
-      fd.append("price", newProperty.price); fd.append("location", newProperty.location);
-      fd.append("description", newProperty.description); fd.append("rooms", newProperty.rooms);
-      fd.append("bathrooms", newProperty.bathrooms); fd.append("maxGuests", newProperty.maxGuests);
-      fd.append("area", newProperty.area); fd.append("amenities", JSON.stringify(newProperty.amenities));
-      fd.append("specs", JSON.stringify({ guests: newProperty.maxGuests, bedrooms: newProperty.rooms, beds: newProperty.rooms, bathrooms: newProperty.bathrooms }));
-      fd.append("tags", JSON.stringify([]));
-      if (newProperty.coverImage) fd.append("coverImage", newProperty.coverImage);
-      newProperty.galleryImages.forEach(img => img && fd.append("galleryImages", img));
-      await api.admin.createPropertyWithImages(fd);
-      cleanupBlobUrls(); setShowAddProperty(false); resetPropertyForm(); fetchProperties(); fetchStats();
-    } catch (e) { alert("Error: " + (e.response?.data?.error || e.message)); }
-    finally { setUploading(false); }
-  };
-
-  const handleEditClick = (p) => {
-    // Create image preview URLs from existing images
-    const coverPreview = p.cover_image 
-      ? (p.cover_image.startsWith('http') ? p.cover_image : `${IMAGE_BASE_URL}${p.cover_image}`)
-      : '';
-      
-    const galleryPreviews = (p.images || []).slice(1).map(img => 
-      img.startsWith('http') ? img : `${IMAGE_BASE_URL}${img}`
-    );
-    
-    setNewProperty({ 
-      name: p.name, 
-      type: p.type, 
-      price: p.price, 
-      location: p.location, 
-      description: p.description || "",
-      coverImage: null, 
-      coverPreview: coverPreview, 
-      galleryImages: [], 
-      galleryPreviews: galleryPreviews,
-      amenities: p.amenities || [], 
-      rooms: p.rooms || 1, 
-      bathrooms: p.bathrooms || 1, 
-      maxGuests: p.max_guests || 2, 
-      area: p.area || "" 
-    });
-    setShowEditProperty(p.id);
-  };
-
-  const updateProperty = async () => {
-    try {
-      await api.admin.updateProperty(showEditProperty, {
-        name: newProperty.name, 
-        title: newProperty.name, 
-        type: newProperty.type,
-        price: parseFloat(newProperty.price), 
-        location: newProperty.location,
-        description: newProperty.description, 
-        amenities: newProperty.amenities,
-        bedrooms: newProperty.rooms, 
-        bathrooms: newProperty.bathrooms,
-        max_guests: newProperty.maxGuests, 
-        area: newProperty.area,
-        specs: { 
-          guests: newProperty.maxGuests, 
-          bedrooms: newProperty.rooms, 
-          beds: newProperty.rooms, 
-          bathrooms: newProperty.bathrooms 
-        }
-      });
-      
-      // Upload new images if any
-      if (newProperty.coverImage || newProperty.galleryImages.length > 0) {
-        const ifd = new FormData();
-        if (newProperty.coverImage) ifd.append("coverImage", newProperty.coverImage);
-        newProperty.galleryImages.forEach(img => img && ifd.append("galleryImages", img));
-        await api.admin.addPropertyImages(showEditProperty, ifd);
-      }
-      
-      cleanupBlobUrls(); 
-      setShowEditProperty(null); 
-      resetPropertyForm(); 
-      fetchProperties();
-    } catch (e) { 
-      alert("Error: " + (e.response?.data?.error || e.message)); 
-    }
-  };
-
-  const resetPropertyForm = () => {
-    cleanupBlobUrls();
-    setNewProperty({ name: "", type: "studio", price: "", location: "", description: "",
-      coverImage: null, coverPreview: "", galleryImages: [], galleryPreviews: [],
-      amenities: [], rooms: 1, bathrooms: 1, maxGuests: 2, area: "" });
-  };
-
-  const handleCoverImageUpload = (e) => {
-    const file = e.target.files[0]; if (!file) return;
-    if (newProperty.coverPreview?.startsWith("blob:")) URL.revokeObjectURL(newProperty.coverPreview);
-    setNewProperty({ ...newProperty, coverImage: file, coverPreview: URL.createObjectURL(file) });
-  };
-  const handleGalleryUpload = (e) => {
-    const files = Array.from(e.target.files); if (!files.length) return;
-    setNewProperty({ ...newProperty, galleryImages: [...newProperty.galleryImages, ...files],
-      galleryPreviews: [...newProperty.galleryPreviews, ...files.map(f => URL.createObjectURL(f))] });
-  };
-  const removeGalleryImage = (i) => {
-    const u = newProperty.galleryPreviews[i];
-    if (u?.startsWith("blob:")) URL.revokeObjectURL(u);
-    const imgs = [...newProperty.galleryImages]; const prevs = [...newProperty.galleryPreviews];
-    imgs.splice(i,1); prevs.splice(i,1);
-    setNewProperty({ ...newProperty, galleryImages: imgs, galleryPreviews: prevs });
-  };
-  const removeCoverImage = () => {
-    if (newProperty.coverPreview?.startsWith("blob:")) URL.revokeObjectURL(newProperty.coverPreview);
-    setNewProperty({ ...newProperty, coverImage: null, coverPreview: "" });
-  };
-  const toggleAmenity    = (v) => setNewProperty({ ...newProperty,
-    amenities: newProperty.amenities.includes(v) ? newProperty.amenities.filter(a=>a!==v) : [...newProperty.amenities, v] });
-  const addCustomAmenity = () => {
-    const inp = document.getElementById("custom-amenity-input");
-    if (inp?.value.trim() && !newProperty.amenities.includes(inp.value.trim())) {
-      setNewProperty({ ...newProperty, amenities: [...newProperty.amenities, inp.value.trim()] });
-      inp.value = "";
-    }
-  };
-  const removeAmenity    = (i) => { const a = [...newProperty.amenities]; a.splice(i,1); setNewProperty({ ...newProperty, amenities: a }); };
-
   // ── Client handlers ───────────────────────────────────────────────────────────
   const handleViewClient = async (client) => {
     setLoadingClientDetails(true);
@@ -502,6 +341,7 @@ export default function AdminDashboard() {
         recentActivity: [`Joined: ${new Date(client.created_at).toLocaleDateString()}`, "Details temporarily unavailable"] });
     } finally { setLoadingClientDetails(false); }
   };
+  
   const handleMessageClient = async (client) => {
     try {
       const chat = (await api.chats.startChat(client.id, null, null)).data.chat;
@@ -510,18 +350,13 @@ export default function AdminDashboard() {
       handleSelectChat(chat);
     } catch { alert("Could not start chat."); }
   };
+  
   const handleDeleteClient = async (id) => {
     if (!window.confirm("Delete this client? This cannot be undone.")) return;
     setDeletingClient(true);
     try { await api.admin.deleteUser(id); fetchCustomers(); }
     catch (e) { alert(e.response?.data?.error || "Failed to delete."); }
     finally { setDeletingClient(false); }
-  };
-
-  const getImageUrl = (p) => {
-    if (p.cover_image) return p.cover_image.startsWith("http") ? p.cover_image : `${IMAGE_BASE_URL}${p.cover_image}`;
-    if (p.images?.length) { const u=p.images[0]; return u.startsWith("http") ? u : `${IMAGE_BASE_URL}${u}`; }
-    return "/default-property.jpg";
   };
 
   // ── Mobile menu ───────────────────────────────────────────────────────────────
@@ -791,56 +626,11 @@ export default function AdminDashboard() {
           </motion.div>
         )}
 
-        {/* ══ PROPERTIES - Fixed image loading ══ */}
+        {/* ══ PROPERTIES - Using dedicated component ══ */}
         {activeTab === "properties" && (
-          <div className="space-y-8">
-            <div className="flex justify-end">
-              <button onClick={() => setShowAddProperty(true)}
-                className="bg-[#093A3E] text-white px-6 md:px-8 py-3 hover:bg-[#0a4a52] transition-colors flex items-center gap-2 uppercase tracking-widest text-xs font-medium">
-                <FaPlus/> Add Residence
-              </button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
-              {properties.map(p => (
-                <motion.div key={p.id} initial={{opacity:0}} animate={{opacity:1}}
-                  className="bg-white group border border-stone-100 hover:border-stone-300 transition-all duration-500">
-                  <div className="relative aspect-[4/3] overflow-hidden">
-                    <img 
-                      src={p.cover_image 
-                        ? (p.cover_image.startsWith('http') ? p.cover_image : `${IMAGE_BASE_URL}${p.cover_image}`)
-                        : (p.images?.length 
-                          ? (p.images[0].startsWith('http') ? p.images[0] : `${IMAGE_BASE_URL}${p.images[0]}`)
-                          : '/default-property.jpg')} 
-                      alt={p.name}
-                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 saturate-[0.85] group-hover:saturate-100"
-                      onError={(e) => { e.target.src = '/default-property.jpg'; }}
-                    />
-                    <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm px-3 py-1">
-                      <span className="text-xs font-serif font-bold text-[#1C2321]">Ksh {p.price?.toLocaleString()}</span>
-                    </div>
-                  </div>
-                  <div className="p-6">
-                    <h3 className="font-serif text-xl text-[#1C2321] mb-2">{p.name}</h3>
-                    <div className="flex items-center gap-1 text-stone-500 text-xs uppercase mb-4"><FaMapMarkerAlt/> {p.location}</div>
-                    <div className="flex items-center justify-between py-4 border-t border-b border-stone-100 text-stone-600 text-sm">
-                      <span className="flex items-center gap-2"><FaBed className="text-stone-400"/> {p.rooms}</span>
-                      <span className="flex items-center gap-2"><FaBath className="text-stone-400"/> {p.bathrooms}</span>
-                      <span className="flex items-center gap-2"><FaRulerCombined className="text-stone-400"/> {p.area||"N/A"}</span>
-                    </div>
-                    <div className="flex justify-between items-center mt-6">
-                      <span className={`text-[10px] uppercase tracking-widest px-2 py-1 border ${p.status==="booked"?"border-stone-300 text-stone-400":"border-[#093A3E] text-[#093A3E]"}`}>
-                        {p.status||"Available"}
-                      </span>
-                      <div className="flex gap-4">
-                        <button onClick={()=>handleEditClick(p)} className="text-stone-400 hover:text-[#093A3E] transition-colors"><FaEdit/></button>
-                        <button onClick={()=>handleDeleteProperty(p.id)} className="text-stone-400 hover:text-red-800 transition-colors"><FaTrash/></button>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </div>
+          <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} transition={{duration:0.4}}>
+            <AdminPropertiesTab onRefreshStats={fetchStats} />
+          </motion.div>
         )}
 
         {/* ══ BOOKINGS ══ */}
@@ -1225,166 +1015,6 @@ export default function AdminDashboard() {
           </div>
         )}
       </main>
-
-      {/* ══ ADD / EDIT PROPERTY MODAL ══ */}
-      <AnimatePresence>
-        {(showAddProperty || showEditProperty) && (
-          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
-            className="fixed inset-0 bg-[#1C2321]/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-            onClick={()=>{resetPropertyForm();setShowAddProperty(false);setShowEditProperty(null);}}>
-            <motion.div initial={{scale:0.95,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.95,opacity:0}}
-              className="bg-[#F9F8F6] w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl border border-white/20"
-              onClick={e=>e.stopPropagation()}>
-              <div className="p-6 md:p-10">
-                <div className="flex justify-between items-center mb-8 md:mb-10 border-b border-stone-200 pb-4">
-                  <h3 className="text-2xl md:text-3xl font-serif text-[#1C2321]">{showEditProperty?"Edit Residence":"New Residence"}</h3>
-                  <button onClick={()=>{resetPropertyForm();setShowAddProperty(false);setShowEditProperty(null);}}
-                    className="text-stone-400 hover:text-[#1C2321] text-2xl font-light">✕</button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 md:gap-x-12 gap-y-6 md:gap-y-8">
-                  {[
-                    {label:"Property Name",key:"name",type:"text",placeholder:"e.g. The Kensington Suite"},
-                    {label:"Price per Night (Ksh)",key:"price",type:"number",placeholder:"0.00"},
-                    {label:"Location",key:"location",type:"text",placeholder:"District, City"},
-                    {label:"Floor Area (sq ft)",key:"area",type:"text",placeholder:"e.g. 2,400"},
-                  ].map(f=>(
-                    <div key={f.key}>
-                      <label className="block text-xs uppercase tracking-widest text-stone-500 mb-2">{f.label}</label>
-                      <input type={f.type} value={newProperty[f.key]} placeholder={f.placeholder}
-                        onChange={e=>setNewProperty({...newProperty,[f.key]:e.target.value})}
-                        className="w-full py-3 bg-transparent border-b border-stone-300 focus:border-[#1C2321] outline-none font-serif text-lg text-[#1C2321] placeholder-stone-300 transition-colors"/>
-                    </div>
-                  ))}
-
-                  <div>
-                    <label className="block text-xs uppercase tracking-widest text-stone-500 mb-2">Residence Type</label>
-                    <select value={newProperty.type} onChange={e=>setNewProperty({...newProperty,type:e.target.value})}
-                      className="w-full py-3 bg-transparent border-b border-stone-300 focus:border-[#1C2321] outline-none font-serif text-lg text-[#1C2321]">
-                      <option value="studio">Studio Apartment</option>
-                      <option value="1_bedroom">One Bedroom Suite</option>
-                      <option value="2_bedroom">Two Bedroom Suite</option>
-                      <option value="3_bedroom">Three Bedroom Suite</option>
-                      <option value="penthouse">Penthouse</option>
-                      <option value="villa">Private Villa</option>
-                    </select>
-                  </div>
-
-                  <div className="md:col-span-2 grid grid-cols-3 gap-6 md:gap-8">
-                    {["rooms","bathrooms","maxGuests"].map(k=>(
-                      <div key={k}>
-                        <label className="block text-xs uppercase tracking-widest text-stone-500 mb-2">
-                          {k==="rooms"?"Bedrooms":k==="bathrooms"?"Bathrooms":"Max Guests"}
-                        </label>
-                        <input type="number" min="1" value={newProperty[k]}
-                          onChange={e=>setNewProperty({...newProperty,[k]:parseInt(e.target.value)||1})}
-                          className="w-full py-3 bg-transparent border-b border-stone-300 focus:border-[#1C2321] outline-none font-serif text-lg text-[#1C2321]"/>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <label className="block text-xs uppercase tracking-widest text-stone-500 mb-2">Description</label>
-                    <textarea value={newProperty.description} rows={4}
-                      onChange={e=>setNewProperty({...newProperty,description:e.target.value})}
-                      placeholder="Detail the property's features and atmosphere..."
-                      className="w-full p-4 bg-white border border-stone-200 focus:border-[#1C2321] outline-none font-sans font-light text-stone-600 leading-relaxed mt-2"/>
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <label className="block text-xs uppercase tracking-widest text-stone-500 mb-4">Amenities</label>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                      {predefinedAmenities.map(a=>(
-                        <label key={a.value} htmlFor={`amenity-${a.value}`}
-                          className={`flex items-center justify-center px-3 py-2 rounded-full border cursor-pointer transition-all text-xs font-medium ${
-                            newProperty.amenities.includes(a.value)?"bg-[#1C2321] text-white border-[#1C2321]":"bg-white text-stone-600 border-stone-300 hover:border-[#1C2321]"}`}>
-                          <input type="checkbox" id={`amenity-${a.value}`} className="hidden" checked={newProperty.amenities.includes(a.value)} onChange={()=>toggleAmenity(a.value)}/>
-                          {a.label}
-                        </label>
-                      ))}
-                    </div>
-                    <div className="flex gap-2 mt-2">
-                      <input id="custom-amenity-input" type="text" placeholder="Custom amenity…"
-                        className="flex-1 py-2 px-3 border border-stone-300 rounded focus:border-[#1C2321] outline-none text-sm"
-                        onKeyPress={e=>{if(e.key==="Enter"){e.preventDefault();addCustomAmenity();}}}/>
-                      <button type="button" onClick={addCustomAmenity} className="px-4 py-2 bg-stone-800 text-white rounded hover:bg-[#1C2321] transition-colors text-sm">Add</button>
-                    </div>
-                    {newProperty.amenities.length>0 && (
-                      <div className="flex flex-wrap gap-2 mt-4">
-                        {newProperty.amenities.map((a,i)=>(
-                          <span key={i} className="flex items-center gap-1 px-3 py-1 bg-stone-100 rounded-full text-sm text-stone-700">
-                            {a}<button type="button" onClick={()=>removeAmenity(i)} className="ml-1 text-stone-400 hover:text-red-500">×</button>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <label className="block text-xs uppercase tracking-widest text-stone-500 mb-4">Cover Image</label>
-                    <input type="file" id="cover-upload" accept="image/*" className="hidden" onChange={handleCoverImageUpload}/>
-                    <label htmlFor="cover-upload"
-                      className="flex items-center justify-center gap-3 px-6 py-4 border-2 border-dashed border-stone-300 rounded-lg cursor-pointer hover:border-[#1C2321] transition-colors">
-                      <FaCamera className="text-stone-400"/> <span className="text-stone-600">{newProperty.coverPreview?"Change Cover Image":"Upload Cover Image"}</span>
-                    </label>
-                    {newProperty.coverPreview && (
-                      <div className="relative w-full max-w-md aspect-[16/10] border border-stone-200 rounded-lg overflow-hidden mt-4">
-                        <img 
-                          src={newProperty.coverPreview} 
-                          alt="Cover" 
-                          className="w-full h-full object-cover"
-                          onError={(e) => { e.target.src = '/default-property.jpg'; }}
-                        />
-                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-4 flex justify-between items-center">
-                          <span className="text-white text-sm">Cover Preview</span>
-                          <button type="button" onClick={removeCoverImage} className="text-white bg-black/50 hover:bg-black/70 w-6 h-6 rounded-full flex items-center justify-center">×</button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <label className="block text-xs uppercase tracking-widest text-stone-500 mb-4">Gallery Images</label>
-                    <input type="file" id="gallery-upload" accept="image/*" multiple className="hidden" onChange={handleGalleryUpload}/>
-                    <label htmlFor="gallery-upload"
-                      className="inline-flex items-center gap-2 px-6 py-3 bg-[#1C2321] text-white rounded-lg cursor-pointer hover:bg-[#2C3632] transition-colors">
-                      <FaUpload/> <span>Upload Images</span>
-                    </label>
-                    {newProperty.galleryPreviews.length>0 && (
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-                        {newProperty.galleryPreviews.map((url,i)=>(
-                          <div key={i} className="relative aspect-square rounded-lg overflow-hidden group">
-                            <img 
-                              src={url} 
-                              alt="" 
-                              className="w-full h-full object-cover"
-                              onError={(e) => { e.target.src = '/default-property.jpg'; }}
-                            />
-                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
-                              <button type="button" onClick={()=>removeGalleryImage(i)}
-                                className="bg-red-500 hover:bg-red-600 text-white w-8 h-8 rounded-full flex items-center justify-center"><FaTrash className="text-xs"/></button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-4 md:gap-6 mt-10 md:mt-12 pt-6 border-t border-stone-200">
-                  <button onClick={()=>{resetPropertyForm();setShowAddProperty(false);setShowEditProperty(null);}}
-                    className="px-6 md:px-8 py-3 text-stone-500 hover:text-[#1C2321] transition-colors uppercase tracking-widest text-xs">Cancel</button>
-                  <button onClick={showEditProperty?updateProperty:handleAddProperty}
-                    disabled={!newProperty.name||!newProperty.price||!newProperty.location||uploading}
-                    className="px-8 md:px-10 py-3 bg-[#1C2321] text-white hover:bg-[#2C3632] transition-colors disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-widest text-xs font-medium">
-                    {uploading?"Saving…":showEditProperty?"Update Residence":"Save Property"}
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
