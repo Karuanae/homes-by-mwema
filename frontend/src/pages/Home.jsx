@@ -3,7 +3,8 @@ import { FaSearch, FaMapMarkerAlt } from "react-icons/fa";
 import { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import api, { IMAGE_BASE_URL } from "../services/api";
+import api from "../services/api";
+import PropertyCard, { PropertyCardSkeleton } from "../components/PropertyCard";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 const year  = new Date().getFullYear();
@@ -84,8 +85,7 @@ export default function Home() {
     { id: 3, question: "Amenities Included",  answer: "All stays include high-speed WiFi, premium linens, toiletries, and fully equipped kitchens." },
   ];
 
-  // ── Image helper ──
-  const getImageSrc = (url) => url && !url.startsWith("http") ? `${IMAGE_BASE_URL}${url}` : url;
+  // ── Image helper — kept for any inline uses; card images handled by PropertyCard ──
 
   // ── Fetch properties and extract unique locations ──
   useEffect(() => {
@@ -188,55 +188,6 @@ export default function Home() {
   const displayedSearchResults = searchResults.slice(0, visibleCount);
   const hasMoreSearchResults   = visibleCount < searchResults.length;
   const totalGuests            = guests.adults + guests.children + guests.infants;
-
-  // ── Reusable property card (matches Properties.jsx pattern exactly) ────────
-  // Cards link straight to /booking/:id — auth is enforced on the booking page
-  // when the user clicks "Book Now", not before.
-  const PropertyCard = ({ property, idx }) => (
-    <Link
-      to={`/booking/${property.id}`}
-      key={property.id || idx}
-      className="block group cursor-pointer"
-    >
-      <div className="relative aspect-[3/4] overflow-hidden bg-stone-100 mb-4">
-        <motion.img
-          whileHover={{ scale: 1.05 }}
-          transition={{ duration: 0.7, ease: "easeOut" }}
-          src={getImageSrc(property.cover_image || property.images?.[0])}
-          alt={property.name}
-          className="w-full h-full object-cover"
-          onError={(e) => { e.target.src = "/default-property.jpg"; }}
-        />
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-300 flex items-center justify-center">
-          <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 backdrop-blur-sm px-4 py-2 text-xs font-bold uppercase tracking-widest text-black">
-            View Details
-          </span>
-        </div>
-        {property.tag && (
-          <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm px-2 py-1 text-[10px] uppercase tracking-widest font-bold text-black">
-            {property.tag}
-          </div>
-        )}
-      </div>
-
-      <div className="p-3">
-        <div className="flex justify-between items-start">
-          <div>
-            <h3 className="text-black text-lg font-serif leading-tight group-hover:text-stone-700 transition-colors">
-              {property.name}
-            </h3>
-            <p className="text-stone-500 text-xs mt-1 uppercase tracking-wide flex items-center gap-1">
-              <FaMapMarkerAlt className="text-[10px]" /> {property.location}
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-black text-sm font-medium">Ksh {property.price?.toLocaleString()}</p>
-            <p className="text-stone-400 text-[10px] mt-1 uppercase">per night</p>
-          </div>
-        </div>
-      </div>
-    </Link>
-  );
 
   return (
     <div className="bg-[#f5f2ee] font-sans text-black overflow-x-hidden selection:bg-stone-200">
@@ -536,12 +487,6 @@ export default function Home() {
             <p className="text-stone-500 text-sm mt-1">Our newest and most sought-after residences</p>
           </div>
 
-          {loading && (
-            <div className="flex justify-center items-center py-20">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black" />
-            </div>
-          )}
-
           {error && !loading && (
             <div className="text-center py-20">
               <p className="text-stone-500 mb-4">{error}</p>
@@ -557,23 +502,28 @@ export default function Home() {
             </div>
           )}
 
-          {/* ── Featured properties grid ── */}
-          {!loading && !error && featuredProperties.length > 0 && (
+          {/* ── Featured properties grid — skeletons while loading, cards when ready ── */}
+          {!error && (
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-12">
-                {featuredProperties.map((property, idx) => (
-                  <PropertyCard key={property.id || idx} property={property} idx={idx} />
-                ))}
+                {loading
+                  ? Array.from({ length: 8 }).map((_, i) => <PropertyCardSkeleton key={i} />)
+                  : featuredProperties.map((property, idx) => (
+                      <PropertyCard key={property.id || idx} property={property} idx={idx} />
+                    ))
+                }
               </div>
 
-              <div className="mt-16 text-center">
-                <button
-                  onClick={() => navigate("/properties")}
-                  className="px-8 py-3 bg-[#ED9B40] text-white text-xs uppercase tracking-widest font-bold rounded-lg hover:bg-[#d4882d] transition-colors inline-flex items-center gap-2"
-                >
-                  Browse All Properties <span className="text-lg">→</span>
-                </button>
-              </div>
+              {!loading && (
+                <div className="mt-16 text-center">
+                  <button
+                    onClick={() => navigate("/properties")}
+                    className="px-8 py-3 bg-[#ED9B40] text-white text-xs uppercase tracking-widest font-bold rounded-lg hover:bg-[#d4882d] transition-colors inline-flex items-center gap-2"
+                  >
+                    Browse All Properties <span className="text-lg">→</span>
+                  </button>
+                </div>
+              )}
             </>
           )}
         </div>

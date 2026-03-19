@@ -368,7 +368,7 @@ def create_consultation():
             hour=hour,
             minute=minute,
             notes=data.get('notes', ''),
-            topic=data.get('topic', 'General Inquiry'),
+            topic=(data.get('topic') or '').strip() or 'General Inquiry',
             status='pending'
         )
 

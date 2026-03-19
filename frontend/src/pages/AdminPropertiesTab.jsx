@@ -10,7 +10,37 @@ import {
   FaList, FaCheck, FaImage, FaArrowLeft, FaThLarge
 } from "react-icons/fa";
 import { toast, Toaster } from 'react-hot-toast';
-import api, { IMAGE_BASE_URL } from "../services/api";
+import api, { API_BASE_URL } from "../services/api";
+
+/* ─── image URL resolver ──────────────────────────────────────────────────────
+   The backend returns image paths in two formats:
+   · "/api/admin/property-image/123"  → served by Flask, needs the API host
+   · "https://..."                    → already absolute
+   · "blob:..."                       → local object URL (new upload preview)
+
+   We derive the API host from API_BASE_URL (always defined) rather than
+   IMAGE_BASE_URL which can be undefined or wrong in some environments.
+
+   API_BASE_URL  = "https://host.railway.app/api"
+   API host      = "https://host.railway.app"          (strip /api suffix)
+────────────────────────────────────────────────────────────────────────────── */
+const API_HOST = API_BASE_URL
+  ? API_BASE_URL.replace(/\/api\/?$/, "").replace(/\/$/, "")
+  : "";
+
+const resolveUrl = (url) => {
+  if (!url) return "/default-property.jpg";
+  if (url.startsWith("http") || url.startsWith("blob:")) return url;
+  // Relative path from backend e.g. "/api/admin/property-image/123"
+  const path = url.startsWith("/") ? url : `/${url}`;
+  return `${API_HOST}${path}`;
+};
+
+const getImageUrl = (p) => {
+  if (p?.cover_image) return resolveUrl(p.cover_image);
+  if (p?.images?.length) return resolveUrl(p.images[0]);
+  return "/default-property.jpg";
+};
 
 /* ─── amenity config ─────────────────────────────────────────── */
 const AMENITIES = [
@@ -32,12 +62,6 @@ const BLANK = {
   name:"", type:"apartment", price:"", location:"", description:"",
   coverImage:null, coverPreview:"", galleryImages:[], galleryPreviews:[],
   amenities:[], rooms:1, bathrooms:1, maxGuests:2, area:"",
-};
-
-const getImageUrl = (p) => {
-  if (p?.cover_image) return p.cover_image.startsWith("http") ? p.cover_image : `${IMAGE_BASE_URL}${p.cover_image}`;
-  if (p?.images?.length) { const u = p.images[0]; return u.startsWith("http") ? u : `${IMAGE_BASE_URL}${u}`; }
-  return "/default-property.jpg";
 };
 
 const compressImage = (file) => new Promise((resolve) => {
@@ -71,13 +95,16 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
   const [uploadProg,    setUploadProg]    = useState({ current:0, total:0, pct:0, status:"" });
   const [deletingImgId, setDeletingImgId] = useState(null);
 
-  const fetchProperties = async () => {
-    setLoading(true);
-    try { const r = await api.properties.getAll(); setProperties(r.data || []); }
+  const fetchProperties = async (silent = false) => {
+    if (!silent) setLoading(true);
+    try {
+      const r = await api.admin.getProperties();
+      setProperties(r.data || []);
+    }
     catch { toast.error("Failed to load properties"); }
-    finally { setLoading(false); }
+    finally { if (!silent) setLoading(false); }
   };
-  useEffect(() => { fetchProperties(); }, []);
+  useEffect(() => { fetchProperties(false); }, []);
 
   const cleanBlobs = useCallback(() => {
     if (form.coverPreview?.startsWith("blob:")) URL.revokeObjectURL(form.coverPreview);
@@ -86,7 +113,14 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
   useEffect(() => () => cleanBlobs(), [cleanBlobs]);
 
   const resetForm = () => { cleanBlobs(); setForm(BLANK); };
-  const closeModal = () => { resetForm(); setModal(null); setSelectedProp(null); };
+  const closeModal = () => {
+    resetForm();
+    setModal(null);
+    setSelectedProp(null);
+    // Silent background refresh — no spinner, no unmounting
+    fetchProperties(true);
+    onRefreshStats?.();
+  };
 
   const handleCoverUpload = (e) => {
     const f = e.target.files[0]; if (!f) return;
@@ -118,16 +152,38 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
     try {
       await api.admin.deletePropertyImage(imageId);
       toast.dismiss(tid); toast.success("Image deleted", { icon:"🗑️", duration:3000 });
+
+      // Fetch updated property data to refresh the form previews
       const r = await api.properties.getById(propertyId);
       const up = r.data;
+      const newCover = up.cover_image ? resolveUrl(up.cover_image) : "";
+      const newGallery = (up.images||[])
+        .map(img => resolveUrl(img))
+        .filter(url => url !== newCover);
+
+      // Update the form in place — modal stays open, user keeps editing
       setForm(p => ({
         ...p,
-        coverPreview: up.cover_image ? (up.cover_image.startsWith("http") ? up.cover_image : `${IMAGE_BASE_URL}${up.cover_image}`) : "",
-        galleryPreviews: (up.images||[]).slice(1).map(img => img.startsWith("http") ? img : `${IMAGE_BASE_URL}${img}`),
+        coverPreview: newCover,
+        galleryPreviews: newGallery,
       }));
-      await fetchProperties(); onRefreshStats?.();
-    } catch (err) { toast.dismiss(tid); toast.error(err.response?.data?.error || "Failed to delete image"); }
-    finally { setDeletingImgId(null); }
+
+      // Also quietly update the card in the background list without
+      // triggering setLoading (which would unmount the modal)
+      setProperties(prev => prev.map(prop =>
+        prop.id === propertyId
+          ? { ...prop, cover_image: up.cover_image, images: up.images }
+          : prop
+      ));
+
+      // Defer stats refresh to after the modal closes — don't call it here
+      // so the parent doesn't re-render and kick us out of the edit modal
+    } catch (err) {
+      toast.dismiss(tid);
+      toast.error(err.response?.data?.error || "Failed to delete image");
+    } finally {
+      setDeletingImgId(null);
+    }
   };
 
   const handleCreate = async () => {
@@ -161,7 +217,6 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
         setUploadProg(p => ({ ...p, current:p.current+1, pct:Math.round(((p.current+1)/p.total)*100) }));
       }
       cleanBlobs(); resetForm(); closeModal(); setUploading(false);
-      await fetchProperties(); onRefreshStats?.();
       toast.success("Property created!", { id:tid, icon:"🎉", duration:5000 });
     } catch (err) { toast.error(err.response?.data?.error || "Failed to create property", { id:tid }); setUploading(false); }
   };
@@ -193,7 +248,6 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
         setUploadProg(p => ({ ...p, current:p.current+1, pct:Math.round(((p.current+1)/p.total)*100) }));
       }
       cleanBlobs(); closeModal(); setUploading(false);
-      await fetchProperties(); onRefreshStats?.();
       toast.success("Property updated!", { id:tid, icon:"✅", duration:5000 });
     } catch (err) { toast.error(err.response?.data?.error || "Failed to update property", { id:tid }); setUploading(false); }
   };
@@ -202,25 +256,41 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
     const tid = toast.loading("Deleting…");
     try {
       await api.admin.deleteProperty(id);
-      await fetchProperties(); onRefreshStats?.();
+      // Remove immediately from local state — no need to re-fetch the full list
+      setProperties(prev => prev.filter(p => p.id !== id));
       setDeleteTarget(null);
+      onRefreshStats?.();
       toast.success("Property deleted", { id:tid, icon:"🗑️", duration:3000 });
     } catch { toast.error("Failed to delete property", { id:tid }); }
   };
 
+  // Helper: build form state from a property object
+  const buildForm = (p) => {
+    const coverUrl = p.cover_image ? resolveUrl(p.cover_image) : "";
+    return {
+      name:p.name, type:p.type, price:p.price,
+      location:p.location, description:p.description||"",
+      coverImage:null,
+      coverPreview: coverUrl,
+      galleryImages:[],
+      galleryPreviews:(p.images||[])
+        .map(img => resolveUrl(img))
+        .filter(url => url !== coverUrl),
+      amenities:p.amenities||[], rooms:p.rooms||1,
+      bathrooms:p.bathrooms||1, maxGuests:p.max_guests||2, area:p.area||"",
+    };
+  };
+
   const openEdit = (p) => {
     setSelectedProp(p);
-    setForm({
-      name:p.name, type:p.type, price:p.price, location:p.location, description:p.description||"",
-      coverImage:null,
-      coverPreview:p.cover_image ? (p.cover_image.startsWith("http") ? p.cover_image : `${IMAGE_BASE_URL}${p.cover_image}`) : "",
-      galleryImages:[],
-      galleryPreviews:(p.images||[]).slice(1).map(img => img.startsWith("http") ? img : `${IMAGE_BASE_URL}${img}`),
-      amenities:p.amenities||[], rooms:p.rooms||1, bathrooms:p.bathrooms||1, maxGuests:p.max_guests||2, area:p.area||"",
-    });
+    setForm(buildForm(p));
     setModal("edit");
   };
-  const openView = (p) => { setSelectedProp(p); setModal("view"); };
+
+  const openView = (p) => {
+    setSelectedProp(p);
+    setModal("view");
+  };
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-[60vh]">
@@ -477,9 +547,13 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
               </div>
               {(selectedProp.images||[]).length>1&&(
                 <div className="flex gap-2 px-5 py-4 overflow-x-auto scrollbar-hide">
-                  {(selectedProp.images||[]).slice(1,6).map((img,i)=>(
+                  {(selectedProp.images||[])
+                    .map(img => resolveUrl(img))
+                    .filter(url => url !== getImageUrl(selectedProp))
+                    .slice(0, 5)
+                    .map((url,i)=>(
                     <div key={i} className="w-20 h-16 flex-shrink-0 rounded-xl overflow-hidden bg-stone-100">
-                      <img src={img.startsWith("http")?img:`${IMAGE_BASE_URL}${img}`} alt="" className="w-full h-full object-cover"/>
+                      <img src={url} alt="" className="w-full h-full object-cover"/>
                     </div>
                   ))}
                 </div>

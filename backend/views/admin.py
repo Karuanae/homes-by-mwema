@@ -1,10 +1,11 @@
+# admin.py - COMPLETE UPDATED VERSION
 from flask import Blueprint, request, jsonify, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import db, User, Property, Booking, Payment, Lead, HomepageContent, AdminStats, PropertyImage, Chat, ChatMessage
 from werkzeug.exceptions import Forbidden
 from datetime import datetime, timedelta
 from decimal import Decimal
-from sqlalchemy import func, extract, case
+from sqlalchemy import func, extract, case, select as sa_select
 import os
 from werkzeug.utils import secure_filename
 import uuid
@@ -28,7 +29,44 @@ def require_admin():
         raise Forbidden('Admin access required')
 
 
-# ========== PROPERTY WITH IMAGES ==========
+# ── ID-only image helpers ─────────────────────────────────────────────────────
+# These never load PropertyImage.image_data (the binary blob).
+# Only the integer ID column is fetched, keeping list endpoints fast.
+
+def _admin_cover_url(property_id):
+    """Return cover image URL using an ID-only query."""
+    row = db.session.execute(
+        sa_select(PropertyImage.id)
+        .where(PropertyImage.property_id == property_id)
+        .where(PropertyImage.is_cover == True)
+        .limit(1)
+    ).first()
+    if row:
+        return f"/api/admin/property-image/{row[0]}"
+    # Fallback: first image by ID if no cover is flagged
+    first = db.session.execute(
+        sa_select(PropertyImage.id)
+        .where(PropertyImage.property_id == property_id)
+        .order_by(PropertyImage.id)
+        .limit(1)
+    ).first()
+    return f"/api/admin/property-image/{first[0]}" if first else None
+
+
+def _admin_all_image_urls(property_id):
+    """Return all image URLs — cover first, then gallery ordered by ID."""
+    rows = db.session.execute(
+        sa_select(PropertyImage.id)
+        .where(PropertyImage.property_id == property_id)
+        .order_by(PropertyImage.is_cover.desc(), PropertyImage.id)
+    ).fetchall()
+    return [f"/api/admin/property-image/{r[0]}" for r in rows]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PROPERTY WITH IMAGES
+# ═════════════════════════════════════════════════════════════════════════════
+
 @admin_bp.route('/properties/with-images', methods=['POST'])
 @jwt_required()
 def create_property_with_images():
@@ -94,16 +132,20 @@ def create_property_with_images():
             if first:
                 first.is_cover = True
         db.session.commit()
-        p = Property.query.get(new_property.id)
+        all_urls  = _admin_all_image_urls(new_property.id)
+        cover_url = all_urls[0] if all_urls else None
         return jsonify({
-            'id': p.id, 'name': p.name, 'type': p.type,
-            'price': float(p.price) if p.price else 0, 'location': p.location,
-            'description': p.description, 'rooms': p.rooms, 'bathrooms': p.bathrooms,
-            'max_guests': p.max_guests, 'area': p.area, 'specs': p.specs,
-            'amenities': p.amenities, 'tags': p.tags, 'status': p.status,
-            'images': [f"/api/admin/property-image/{img.id}" for img in p.images],
-            'cover_image': p.get_cover_image_url(),
-            'created_at': p.created_at.isoformat() if p.created_at else None
+            'id': new_property.id, 'name': new_property.name, 'type': new_property.type,
+            'price': float(new_property.price) if new_property.price else 0,
+            'location': new_property.location,
+            'description': new_property.description,
+            'rooms': new_property.rooms, 'bathrooms': new_property.bathrooms,
+            'max_guests': new_property.max_guests, 'area': new_property.area,
+            'specs': new_property.specs, 'amenities': new_property.amenities,
+            'tags': new_property.tags, 'status': new_property.status,
+            'images': all_urls,
+            'cover_image': cover_url,
+            'created_at': new_property.created_at.isoformat() if new_property.created_at else None
         }), 201
     except Exception as e:
         db.session.rollback()
@@ -141,8 +183,15 @@ def add_property_images(property_id):
                 except Exception as e:
                     print(f"Error saving gallery image {i}: {e}")
         db.session.commit()
-        return jsonify({'success': True, 'message': f'Added {len(images_added)} image(s)',
-                        'images_added': images_added, 'total_images': len(prop.images)})
+        return jsonify({
+            'success': True,
+            'message': f'Added {len(images_added)} image(s)',
+            'images_added': images_added,
+            'total_images': db.session.execute(
+                sa_select(func.count(PropertyImage.id))
+                .where(PropertyImage.property_id == property_id)
+            ).scalar()
+        })
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'Failed to add images: {str(e)}'}), 500
@@ -233,16 +282,15 @@ def get_property_image(image_id):
         return jsonify({'error': 'Image not found'}), 404
     return Response(pi.image_data, mimetype=pi.mime_type)
 
+
 @admin_bp.route('/property-image/<int:image_id>', methods=['DELETE'])
 @jwt_required()
 def admin_delete_property_image(image_id):
     """Admin: Delete a property image"""
     require_admin()
-    
     image = PropertyImage.query.get(image_id)
     if not image:
         return jsonify({'error': 'Image not found'}), 404
-    
     try:
         db.session.delete(image)
         db.session.commit()
@@ -253,28 +301,69 @@ def admin_delete_property_image(image_id):
         logger.error(f"❌ Error deleting property image: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-# ========== PROPERTY MANAGEMENT ==========
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PROPERTY MANAGEMENT
+# ═════════════════════════════════════════════════════════════════════════════
+
 @admin_bp.route('/properties', methods=['GET'])
 @jwt_required()
 def admin_get_properties():
     require_admin()
+
+    properties = Property.query.order_by(Property.created_at.desc()).all()
+    if not properties:
+        return jsonify([])
+
+    # ── Single bulk query: fetch ALL image IDs for ALL properties at once ──────
+    # This replaces N separate per-property queries with 1 query total.
+    property_ids = [p.id for p in properties]
+    image_rows = db.session.execute(
+        sa_select(PropertyImage.id, PropertyImage.property_id, PropertyImage.is_cover)
+        .where(PropertyImage.property_id.in_(property_ids))
+        .order_by(PropertyImage.property_id, PropertyImage.is_cover.desc(), PropertyImage.id)
+    ).fetchall()
+
+    # Group into {property_id: [url, ...]} — cover is first due to ORDER BY
+    from collections import defaultdict
+    images_by_prop = defaultdict(list)
+    for img_id, prop_id, _ in image_rows:
+        images_by_prop[prop_id].append(f"/api/admin/property-image/{img_id}")
+
     result = []
-    for prop in Property.query.all():
+    for prop in properties:
+        all_urls  = images_by_prop.get(prop.id, [])
+        cover_url = all_urls[0] if all_urls else None
+
         result.append({
-            'id': prop.id, 'name': prop.name, 'title': prop.title or prop.name,
-            'description': prop.description, 'type': prop.type,
-            'price': float(prop.price) if prop.price else 0, 'location': prop.location,
-            'rooms': prop.rooms, 'bathrooms': prop.bathrooms, 'area': prop.area,
-            'max_guests': prop.max_guests,
-            'specs': prop.specs or {'guests': prop.max_guests, 'bedrooms': prop.rooms,
-                                     'beds': prop.rooms, 'bathrooms': prop.bathrooms},
-            'amenities': prop.amenities or [], 'images': prop.get_image_urls(),
-            'cover_image': prop.get_cover_image_url(), 'tags': prop.tags or [],
-            'status': prop.status, 'rating': float(prop.rating) if prop.rating else 0,
-            'review_count': prop.review_count, 'bookings': prop.bookings_count,
-            'is_featured': prop.is_featured,
-            'created_at': prop.created_at.isoformat() if prop.created_at else None,
-            'updated_at': prop.updated_at.isoformat() if prop.updated_at else None
+            'id':           prop.id,
+            'name':         prop.name,
+            'title':        prop.title or prop.name,
+            'description':  prop.description,
+            'type':         prop.type,
+            'price':        float(prop.price) if prop.price else 0,
+            'location':     prop.location,
+            'rooms':        prop.rooms,
+            'bathrooms':    prop.bathrooms,
+            'area':         prop.area,
+            'max_guests':   prop.max_guests,
+            'specs':        prop.specs or {
+                'guests':    prop.max_guests,
+                'bedrooms':  prop.rooms,
+                'beds':      prop.rooms,
+                'bathrooms': prop.bathrooms,
+            },
+            'amenities':    prop.amenities or [],
+            'images':       all_urls,   # cover at [0], gallery is rest
+            'cover_image':  cover_url,
+            'tags':         prop.tags or [],
+            'status':       prop.status,
+            'rating':       float(prop.rating) if prop.rating else 0,
+            'review_count': prop.review_count,
+            'bookings':     prop.bookings_count,
+            'is_featured':  prop.is_featured,
+            'created_at':   prop.created_at.isoformat() if prop.created_at else None,
+            'updated_at':   prop.updated_at.isoformat() if prop.updated_at else None,
         })
     return jsonify(result)
 
@@ -318,13 +407,15 @@ def admin_create_property():
                     PropertyImage.query.filter_by(property_id=new_property.id, is_cover=True).update({'is_cover': False})
                     pi.is_cover = True
     db.session.commit()
-    p = Property.query.get(new_property.id)
+    all_urls  = _admin_all_image_urls(new_property.id)
+    cover_url = all_urls[0] if all_urls else None
     return jsonify({
-        'id': p.id, 'name': p.name, 'type': p.type,
-        'price': float(p.price) if p.price else 0, 'location': p.location, 'status': p.status,
-        'images': [f"/api/admin/property-image/{img.id}" for img in p.images],
-        'cover_image': p.get_cover_image_url(),
-        'created_at': p.created_at.isoformat() if p.created_at else None
+        'id': new_property.id, 'name': new_property.name, 'type': new_property.type,
+        'price': float(new_property.price) if new_property.price else 0,
+        'location': new_property.location, 'status': new_property.status,
+        'images': all_urls,
+        'cover_image': cover_url,
+        'created_at': new_property.created_at.isoformat() if new_property.created_at else None
     }), 201
 
 
@@ -362,11 +453,14 @@ def admin_update_property(property_id):
                 pi.property_id = prop.id
                 if i == 0: pi.is_cover = True
     db.session.commit()
+    all_urls  = _admin_all_image_urls(prop.id)
+    cover_url = all_urls[0] if all_urls else None
     return jsonify({
         'id': prop.id, 'name': prop.name, 'type': prop.type,
         'price': float(prop.price) if prop.price else 0,
         'location': prop.location, 'status': prop.status,
-        'images': prop.get_image_urls(), 'cover_image': prop.get_cover_image_url(),
+        'images': all_urls,
+        'cover_image': cover_url,
         'updated_at': prop.updated_at.isoformat() if prop.updated_at else None
     })
 
@@ -385,7 +479,10 @@ def admin_delete_property(property_id):
     return jsonify({'message': 'Property and related bookings deleted successfully'})
 
 
-# ========== STATISTICS ==========
+# ═════════════════════════════════════════════════════════════════════════════
+# STATISTICS
+# ═════════════════════════════════════════════════════════════════════════════
+
 @admin_bp.route('/stats', methods=['GET'])
 @jwt_required()
 def admin_get_stats():
@@ -393,7 +490,6 @@ def admin_get_stats():
     total_properties = Property.query.filter_by(status='active').count()
     active_bookings = Booking.query.filter(Booking.status.in_(['upcoming', 'active'])).count()
     total_users = User.query.filter(User.role != 'admin').count()
-    # SUM includes negative refund rows so result is net revenue automatically
     completed_payments = Payment.query.filter_by(status='completed').all()
     total_revenue = sum(float(p.amount) for p in completed_payments) if completed_payments else 0
     return jsonify({
@@ -402,15 +498,13 @@ def admin_get_stats():
     })
 
 
-# ========== REVENUE STATISTICS ==========
+# ═════════════════════════════════════════════════════════════════════════════
+# REVENUE STATISTICS
+# ═════════════════════════════════════════════════════════════════════════════
+
 @admin_bp.route('/revenue', methods=['GET'])
 @jwt_required()
 def admin_get_revenue():
-    """
-    Full revenue statistics.
-    Optional query params: year (int), month (int).
-    Returns summary, by_method, by_month (12 rows), by_property (top 10), pending refunds.
-    """
     require_admin()
     year  = request.args.get('year',  type=int)
     month = request.args.get('month', type=int)
@@ -501,7 +595,10 @@ def admin_get_revenue():
     }), 200
 
 
-# ========== USER MANAGEMENT ==========
+# ═════════════════════════════════════════════════════════════════════════════
+# USER MANAGEMENT
+# ═════════════════════════════════════════════════════════════════════════════
+
 @admin_bp.route('/users', methods=['GET'])
 @jwt_required()
 def admin_get_users():
@@ -592,16 +689,56 @@ def admin_delete_user(user_id):
         return jsonify({'error': f'Failed to delete user: {str(e)}'}), 500
 
 
-# ========== ADMIN BOOKING MANAGEMENT ==========
+# ═════════════════════════════════════════════════════════════════════════════
+# ADMIN BOOKING MANAGEMENT
+# ═════════════════════════════════════════════════════════════════════════════
+
 @admin_bp.route('/bookings', methods=['GET'])
 @jwt_required()
 def admin_get_bookings():
     require_admin()
+
+    bookings = Booking.query.order_by(Booking.created_at.desc()).all()
+    if not bookings:
+        return jsonify([])
+
+    # ── Bulk-fetch payments for all bookings in one query ─────────────────────
+    booking_ids = [b.id for b in bookings]
+    all_payments = Payment.query.filter(Payment.booking_id.in_(booking_ids)).all()
+    from collections import defaultdict
+    payments_by_booking = defaultdict(list)
+    for p in all_payments:
+        payments_by_booking[p.booking_id].append(p)
+
+    # ── Bulk-fetch cover image IDs for all referenced properties ──────────────
+    prop_ids = list({b.property_id for b in bookings if b.property_id})
+    cover_rows = db.session.execute(
+        sa_select(PropertyImage.property_id, PropertyImage.id)
+        .where(PropertyImage.property_id.in_(prop_ids))
+        .where(PropertyImage.is_cover == True)
+    ).fetchall()
+    cover_by_prop = {row[0]: f"/api/admin/property-image/{row[1]}" for row in cover_rows}
+
+    # Fallback: for properties with no is_cover=True, grab first image by ID
+    covered = set(cover_by_prop.keys())
+    uncovered = [pid for pid in prop_ids if pid not in covered]
+    if uncovered:
+        fallback_rows = db.session.execute(
+            sa_select(
+                PropertyImage.property_id,
+                func.min(PropertyImage.id).label('min_id')
+            )
+            .where(PropertyImage.property_id.in_(uncovered))
+            .group_by(PropertyImage.property_id)
+        ).fetchall()
+        for prop_id, img_id in fallback_rows:
+            cover_by_prop[prop_id] = f"/api/admin/property-image/{img_id}"
+
     result = []
-    for booking in Booking.query.all():
-        payments = Payment.query.filter_by(booking_id=booking.id).all()
-        total_paid = sum(float(p.amount) for p in payments
-                         if p.status == 'completed' and p.method != 'refund') if payments else 0
+    for booking in bookings:
+        pmts = payments_by_booking.get(booking.id, [])
+        total_paid = sum(float(p.amount) for p in pmts
+                         if p.status == 'completed' and p.method != 'refund')
         result.append({
             'id': booking.id,
             'guest_name': booking.user.name if booking.user else 'Guest',
@@ -610,7 +747,7 @@ def admin_get_bookings():
             'property_id': booking.property_id,
             'property_name': booking.property.name if booking.property else '',
             'property_location': booking.property.location if booking.property else '',
-            'property_image': booking.property.get_cover_image_url() if booking.property else '',
+            'property_image': cover_by_prop.get(booking.property_id, ''),
             'check_in': booking.check_in.isoformat() if booking.check_in else None,
             'check_out': booking.check_out.isoformat() if booking.check_out else None,
             'nights': booking.nights,
@@ -684,7 +821,10 @@ def admin_update_booking_status(booking_id):
                     'message': f'Booking {new_status} successfully'}), 200
 
 
-# ========== PAYMENT MANAGEMENT ==========
+# ═════════════════════════════════════════════════════════════════════════════
+# PAYMENT MANAGEMENT
+# ═════════════════════════════════════════════════════════════════════════════
+
 @admin_bp.route('/payments', methods=['GET'])
 @jwt_required()
 def admin_get_payments():
@@ -705,7 +845,10 @@ def admin_get_payments():
     return jsonify(result)
 
 
-# ========== LEAD MANAGEMENT ==========
+# ═════════════════════════════════════════════════════════════════════════════
+# LEAD MANAGEMENT
+# ═════════════════════════════════════════════════════════════════════════════
+
 @admin_bp.route('/leads', methods=['GET'])
 @jwt_required()
 def admin_get_leads():
@@ -723,7 +866,10 @@ def admin_get_leads():
     return jsonify(result)
 
 
-# ========== HOMEPAGE CONTENT ==========
+# ═════════════════════════════════════════════════════════════════════════════
+# HOMEPAGE CONTENT
+# ═════════════════════════════════════════════════════════════════════════════
+
 @admin_bp.route('/homepage', methods=['GET'])
 @jwt_required()
 def admin_get_homepage():

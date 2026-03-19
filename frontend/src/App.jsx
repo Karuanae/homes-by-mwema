@@ -1,120 +1,136 @@
-// App.jsx - Main application component with Properties route
-import React, { useEffect } from "react";
+// App.jsx - with React.lazy() code splitting for faster initial bundle load
+import React, { useEffect, Suspense, lazy } from "react";
 import { Routes, Route, useNavigate, Link } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+
+// ── Always-eager imports (tiny, needed on every page) ──────────────────────
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminRoute from "./components/AdminRoute";
 import PublicRoute from "./components/PublicRoute";
 import Header from "./components/Navbar";
-import UserLayout from "./components/UserLayout";
-import ScrollToTop from "./components/ScrollToTop";
-import Home from "./pages/Home";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-import ForgotPassword from "./pages/ForgotPassword";
-import ResetPassword from "./pages/ResetPassword";
-import BookingPage from "./pages/BookingPage";
-import PaymentPage from "./pages/PaymentPage";
-import PaymentSuccess from "./pages/PaymentSuccess";
-import PaymentCancel from "./pages/PaymentCancel";
-import MyBookings from "./pages/MyBookings";
-import Chat from "./pages/Chat";
-import AdminDashboard from "./pages/AdminDashboard";
 import Footer from "./components/Footer";
-import Management from "./pages/Management";
-import ListingOptimization from "./pages/ListingOptimization";
-import PhotographyVideography from "./pages/PhotographyVideography";
-import AdminConsultations from "./pages/AdminConsultations";
-import Properties from "./pages/Properties";
-import MyConsultations from "./pages/MyConsultations";
-import NewConsultation from "./pages/NewConsultation";
-import ProfileSettings from "./pages/ProfileSettings";
-import HostComingSoon from "./pages/HostComingSoon";
+import ScrollToTop from "./components/ScrollToTop";
 
-// NEW SERVICE PAGE IMPORTS
-import TermsAndPolicy from "./pages/TermsAndPolicy";
-import SocialMediaMarketing from "./pages/SocialMediaMarketing";
-import CarHireServices from "./pages/CarHireServices";
-import FullyFurnishedUnitsOnSale from "./pages/FullyFurnishedUnitsOnSale";
-import SafariTours from "./pages/SafariTours";
-import AirportSGRTransfers from "./pages/AirportSGRTransfers";
-import ChefServices from "./pages/ChefServices";
+// ── Lazy-loaded pages (each becomes its own JS chunk) ──────────────────────
+// Core
+const Home                    = lazy(() => import("./pages/Home"));
+const Properties              = lazy(() => import("./pages/Properties"));
+const Login                   = lazy(() => import("./pages/Login"));
+const Register                = lazy(() => import("./pages/Register"));
+const ForgotPassword          = lazy(() => import("./pages/ForgotPassword"));
+const ResetPassword           = lazy(() => import("./pages/ResetPassword"));
 
-// AuthSync component to handle auth state synchronization
+// Booking & payment
+const BookingPage             = lazy(() => import("./pages/BookingPage"));
+const PaymentPage             = lazy(() => import("./pages/PaymentPage"));
+const PaymentSuccess          = lazy(() => import("./pages/PaymentSuccess"));
+const PaymentCancel           = lazy(() => import("./pages/PaymentCancel"));
+
+// User dashboard
+const UserLayout              = lazy(() => import("./components/UserLayout"));
+const MyBookings              = lazy(() => import("./pages/MyBookings"));
+const Chat                    = lazy(() => import("./pages/Chat"));
+const MyConsultations         = lazy(() => import("./pages/MyConsultations"));
+const NewConsultation         = lazy(() => import("./pages/NewConsultation"));
+const ProfileSettings         = lazy(() => import("./pages/ProfileSettings"));
+
+// Admin
+const AdminDashboard          = lazy(() => import("./pages/AdminDashboard"));
+const AdminConsultations      = lazy(() => import("./pages/AdminConsultations"));
+
+// Service pages
+const Management              = lazy(() => import("./pages/Management"));
+const ListingOptimization     = lazy(() => import("./pages/ListingOptimization"));
+const PhotographyVideography  = lazy(() => import("./pages/PhotographyVideography"));
+const SocialMediaMarketing    = lazy(() => import("./pages/SocialMediaMarketing"));
+const CarHireServices         = lazy(() => import("./pages/CarHireServices"));
+const FullyFurnishedUnitsOnSale = lazy(() => import("./pages/FullyFurnishedUnitsOnSale"));
+const SafariTours             = lazy(() => import("./pages/SafariTours"));
+const AirportSGRTransfers     = lazy(() => import("./pages/AirportSGRTransfers"));
+const ChefServices            = lazy(() => import("./pages/ChefServices"));
+const HostComingSoon          = lazy(() => import("./pages/HostComingSoon"));
+
+// Legal
+const TermsAndPolicy          = lazy(() => import("./pages/TermsAndPolicy"));
+
+// ── Page-level loading fallback ────────────────────────────────────────────
+// Minimal — just keeps the header visible so the nav doesn't flash away
+const PageLoader = () => (
+  <div className="min-h-[60vh] flex items-center justify-center bg-[#f5f2ee]">
+    <div className="flex flex-col items-center gap-3">
+      <div className="w-8 h-8 rounded-full border-2 border-[#093A3E] border-t-transparent animate-spin" />
+      <p className="text-xs uppercase tracking-widest text-stone-400">Loading</p>
+    </div>
+  </div>
+);
+
+// ── Auth sync (listens for storage events across tabs) ────────────────────
 const AuthSync = () => {
   const { refreshUserFromStorage } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Listen for storage events (changes from other tabs)
     const handleStorageChange = (e) => {
-      if (e.key === 'user' || e.key === 'token') {
-        console.log('🔄 Storage changed, refreshing auth context');
+      if (e.key === "user" || e.key === "token") {
         refreshUserFromStorage();
       }
     };
+    const handleAuthUpdate = () => refreshUserFromStorage();
 
-    // Listen for custom auth update events (from same tab)
-    const handleAuthUpdate = () => {
-      console.log('🔄 Auth update event received, refreshing auth context');
-      refreshUserFromStorage();
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('auth-update', handleAuthUpdate);
-
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("auth-update", handleAuthUpdate);
     return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('auth-update', handleAuthUpdate);
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("auth-update", handleAuthUpdate);
     };
   }, [refreshUserFromStorage, navigate]);
 
   return null;
 };
 
-// Wrapper component to use hooks that need Auth context
+// ── Thin wrapper: Suspense around every lazy page ─────────────────────────
+const Page = ({ children }) => (
+  <Suspense fallback={<PageLoader />}>{children}</Suspense>
+);
+
+// ── Route definitions ──────────────────────────────────────────────────────
 function AppContent() {
   return (
     <>
       <ScrollToTop />
       <AuthSync />
       <Routes>
+
+        {/* ── Public pages ── */}
         <Route path="/" element={
           <PublicRoute>
-            <>
-              <Header />
-              <Home />
-              <Footer />
-            </>
+            <Header />
+            <Page><Home /></Page>
+            <Footer />
           </PublicRoute>
         } />
-{/* Properties Route */}
-<Route path="/properties" element={
-  <PublicRoute>
-    <>
-      <Header />
-      <Properties />
-      <Footer />
-    </>
-  </PublicRoute>
-} />
 
-{/* NEW: Host Coming Soon Route */}
-<Route path="/host" element={
-  <PublicRoute>
-    <>
-      <Header />
-      <HostComingSoon />
-      <Footer />
-    </>
-  </PublicRoute>
-} />
+        <Route path="/properties" element={
+          <PublicRoute>
+            <Header />
+            <Page><Properties /></Page>
+            <Footer />
+          </PublicRoute>
+        } />
 
-        {/* Auth Routes */}
+        <Route path="/host" element={
+          <PublicRoute>
+            <Header />
+            <Page><HostComingSoon /></Page>
+            <Footer />
+          </PublicRoute>
+        } />
+
+        {/* ── Auth pages ── */}
         <Route path="/login" element={
           <>
             <Header />
-            <Login />
+            <Page><Login /></Page>
             <Footer />
           </>
         } />
@@ -122,16 +138,15 @@ function AppContent() {
         <Route path="/register" element={
           <>
             <Header />
-            <Register />
+            <Page><Register /></Page>
             <Footer />
           </>
         } />
 
-        {/* Forgot Password Routes */}
         <Route path="/forgot-password" element={
           <>
             <Header />
-            <ForgotPassword />
+            <Page><ForgotPassword /></Page>
             <Footer />
           </>
         } />
@@ -139,24 +154,25 @@ function AppContent() {
         <Route path="/reset-password" element={
           <>
             <Header />
-            <ResetPassword />
+            <Page><ResetPassword /></Page>
             <Footer />
           </>
         } />
 
-        {/* Booking Routes */}
+        {/* ── Booking — NO auth gate on view; auth enforced inside on "Book Now" ── */}
         <Route path="/booking/:id" element={
           <>
             <Header />
-            <BookingPage />
+            <Page><BookingPage /></Page>
             <Footer />
           </>
         } />
 
+        {/* ── Payment — auth required ── */}
         <Route path="/payment/:id" element={
           <ProtectedRoute>
             <Header />
-            <PaymentPage />
+            <Page><PaymentPage /></Page>
             <Footer />
           </ProtectedRoute>
         } />
@@ -164,7 +180,7 @@ function AppContent() {
         <Route path="/payment/success" element={
           <ProtectedRoute>
             <Header />
-            <PaymentSuccess />
+            <Page><PaymentSuccess /></Page>
             <Footer />
           </ProtectedRoute>
         } />
@@ -172,213 +188,109 @@ function AppContent() {
         <Route path="/payment/cancel" element={
           <>
             <Header />
-            <PaymentCancel />
+            <Page><PaymentCancel /></Page>
             <Footer />
           </>
         } />
 
-        {/* User Routes */}
+        {/* ── User dashboard ── */}
         <Route path="/my-bookings" element={
           <ProtectedRoute>
-            <UserLayout>
-              <MyBookings />
-            </UserLayout>
+            <Page>
+              <UserLayout><MyBookings /></UserLayout>
+            </Page>
           </ProtectedRoute>
         } />
 
         <Route path="/chat" element={
           <ProtectedRoute>
-            <UserLayout>
-              <Chat />
-            </UserLayout>
+            <Page>
+              <UserLayout><Chat /></UserLayout>
+            </Page>
           </ProtectedRoute>
         } />
 
-        {/* Consultation Routes */}
         <Route path="/consultation/new" element={
           <ProtectedRoute>
-            <UserLayout>
-              <NewConsultation />
-            </UserLayout>
+            <Page>
+              <UserLayout><NewConsultation /></UserLayout>
+            </Page>
           </ProtectedRoute>
         } />
 
         <Route path="/my-consultations" element={
           <ProtectedRoute>
-            <UserLayout>
-              <MyConsultations />
-            </UserLayout>
+            <Page>
+              <UserLayout><MyConsultations /></UserLayout>
+            </Page>
           </ProtectedRoute>
         } />
 
-        {/* Profile Settings Route - UPDATED */}
         <Route path="/profile" element={
           <ProtectedRoute>
-            <UserLayout>
-              <ProfileSettings />
-            </UserLayout>
+            <Page>
+              <UserLayout><ProfileSettings /></UserLayout>
+            </Page>
           </ProtectedRoute>
         } />
 
-        {/* Admin Routes */}
+        {/* ── Admin ── */}
         <Route path="/admin" element={
           <AdminRoute>
-            <AdminDashboard />
+            <Page><AdminDashboard /></Page>
           </AdminRoute>
         } />
-        
+
         <Route path="/admin/consultations" element={
           <AdminRoute>
-            <AdminConsultations />
+            <Page><AdminConsultations /></Page>
           </AdminRoute>
         } />
-        
-        {/* Service Pages */}
-        <Route path="/management" element={
-          <PublicRoute>
-            <>
-              <Header />
-              <Management />
-              <Footer />
-            </>
-          </PublicRoute>
-        } />
-        
-        <Route path="/photography-videography" element={
-          <PublicRoute>
-            <>
-              <Header />
-              <PhotographyVideography />
-              <Footer />
-            </>
-          </PublicRoute>
-        } />
-        
-        <Route path="/listing-optimization" element={
-          <PublicRoute>
-            <>
-              <Header />
-              <ListingOptimization />
-              <Footer />
-            </>
-          </PublicRoute>
-        } />
 
-        {/* Social Media Marketing */}
-        <Route path="/social-media-marketing" element={
-          <PublicRoute>
-            <>
+        {/* ── Service pages ── */}
+        {[
+          ["/management",            <Management />],
+          ["/photography-videography", <PhotographyVideography />],
+          ["/listing-optimization",  <ListingOptimization />],
+          ["/social-media-marketing",<SocialMediaMarketing />],
+          ["/car-hire",              <CarHireServices />],
+          ["/fully-furnished-units", <FullyFurnishedUnitsOnSale />],
+          ["/safari-tours",          <SafariTours />],
+          ["/airport-transfers",     <AirportSGRTransfers />],
+          ["/chef-services",         <ChefServices />],
+          ["/terms",                 <TermsAndPolicy />],
+          ["/privacy",               <TermsAndPolicy />],
+          ["/cookie-policy",         <TermsAndPolicy />],
+        ].map(([path, element]) => (
+          <Route key={path} path={path} element={
+            <PublicRoute>
               <Header />
-              <SocialMediaMarketing />
+              <Page>{element}</Page>
               <Footer />
-            </>
-          </PublicRoute>
-        } />
+            </PublicRoute>
+          } />
+        ))}
 
-        {/* Car Hire Services */}
-        <Route path="/car-hire" element={
-          <PublicRoute>
-            <>
-              <Header />
-              <CarHireServices />
-              <Footer />
-            </>
-          </PublicRoute>
-        } />
-
-        {/* Fully Furnished Units On Sale */}
-        <Route path="/fully-furnished-units" element={
-          <PublicRoute>
-            <>
-              <Header />
-              <FullyFurnishedUnitsOnSale />
-              <Footer />
-            </>
-          </PublicRoute>
-        } />
-
-        {/* Safari Tours */}
-        <Route path="/safari-tours" element={
-          <PublicRoute>
-            <>
-              <Header />
-              <SafariTours />
-              <Footer />
-            </>
-          </PublicRoute>
-        } />
-
-        {/* Airport & SGR Transfers */}
-        <Route path="/airport-transfers" element={
-          <PublicRoute>
-            <>
-              <Header />
-              <AirportSGRTransfers />
-              <Footer />
-            </>
-          </PublicRoute>
-        } />
-
-        {/* Chef Services */}
-        <Route path="/chef-services" element={
-          <PublicRoute>
-            <>
-              <Header />
-              <ChefServices />
-              <Footer />
-            </>
-          </PublicRoute>
-        } />
-
-        {/* Legal Pages */}
-        <Route path="/terms" element={
-          <PublicRoute>
-            <>
-              <Header />
-              <TermsAndPolicy />
-              <Footer />
-            </>
-          </PublicRoute>
-        } />
-
-        <Route path="/privacy" element={
-          <PublicRoute>
-            <>
-              <Header />
-              <TermsAndPolicy />
-              <Footer />
-            </>
-          </PublicRoute>
-        } />
-
-        <Route path="/cookie-policy" element={
-          <PublicRoute>
-            <>
-              <Header />
-              <TermsAndPolicy />
-              <Footer />
-            </>
-          </PublicRoute>
-        } />
-
-        {/* Catch-all for 404 */}
+        {/* ── 404 ── */}
         <Route path="*" element={
           <PublicRoute>
-            <>
-              <Header />
-              <div className="min-h-screen flex items-center justify-center bg-[#f5f2ee] px-6">
-                <div className="text-center">
-                  <h1 className="text-6xl font-serif text-[#093A3E] mb-4">404</h1>
-                  <p className="text-stone-600 mb-8">Page not found</p>
-                  <Link to="/" className="inline-block px-6 py-3 bg-[#ED9B40] text-[#093A3E] font-bold uppercase tracking-widest text-xs hover:bg-white transition-colors">
-                    Return Home
-                  </Link>
-                </div>
+            <Header />
+            <div className="min-h-screen flex items-center justify-center bg-[#f5f2ee] px-6">
+              <div className="text-center">
+                <h1 className="text-6xl font-serif text-[#093A3E] mb-4">404</h1>
+                <p className="text-stone-600 mb-8">Page not found</p>
+                <Link
+                  to="/"
+                  className="inline-block px-6 py-3 bg-[#ED9B40] text-[#093A3E] font-bold uppercase tracking-widest text-xs hover:bg-white transition-colors"
+                >
+                  Return Home
+                </Link>
               </div>
-              <Footer />
-            </>
+            </div>
+            <Footer />
           </PublicRoute>
         } />
+
       </Routes>
     </>
   );

@@ -56,7 +56,7 @@ export default function NewConsultation() {
   });
 
   const [selectedDate,  setSelectedDate]  = useState(null);
-  const [selectedSlot,  setSelectedSlot]  = useState(null); // { hour, minute, label }
+  const [selectedSlot,  setSelectedSlot]  = useState(null);
   const [calMonth,      setCalMonth]      = useState(new Date().getMonth());
   const [calYear,       setCalYear]       = useState(new Date().getFullYear());
   const [isLoading,     setIsLoading]     = useState(false);
@@ -74,7 +74,6 @@ export default function NewConsultation() {
   const firstWeekday  = new Date(calYear, calMonth, 1).getDay();
 
   const handlePrevMonth = () => {
-    // Don't go before current month
     if (calYear === today.getFullYear() && calMonth === today.getMonth()) return;
     if (calMonth === 0) { setCalMonth(11); setCalYear(y => y - 1); }
     else setCalMonth(m => m - 1);
@@ -87,8 +86,7 @@ export default function NewConsultation() {
   };
 
   const handleDateSelect = (d) => {
-    const date = new Date(calYear, calMonth, d);
-    setSelectedDate(date);
+    setSelectedDate(new Date(calYear, calMonth, d));
     setSelectedSlot(null);
   };
 
@@ -96,10 +94,32 @@ export default function NewConsultation() {
   const isDateSel   = (d) => selectedDate && new Date(calYear, calMonth, d).toDateString() === selectedDate.toDateString();
   const isDateToday = (d) => new Date(calYear, calMonth, d).toDateString() === today.toDateString();
 
+  // ── Resolve the topic label to send to the API ────────────────────────────
+  // formData.topic holds the preset ID (e.g. 'property-investment') or 'other'.
+  // We always send the human-readable label, never the ID, so it saves correctly.
+  const resolveTopicLabel = () => {
+    if (!formData.topic) return '';
+    if (formData.topic === 'other') {
+      return formData.otherTopic.trim();
+    }
+    const found = TOPICS.find(t => t.id === formData.topic);
+    // found?.label is the correct value; fall back to the ID only if find somehow fails
+    return found?.label || formData.topic;
+  };
+
   // ── Submit ────────────────────────────────────────────────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!selectedDate || !selectedSlot || !formData.topic) return;
+
+    const topicLabel = resolveTopicLabel();
+
+    // Guard: should never happen given canSubmit, but be safe
+    if (!topicLabel) {
+      setError('Please select or enter a consultation topic.');
+      return;
+    }
+
     setError('');
     setIsLoading(true);
 
@@ -107,16 +127,12 @@ export default function NewConsultation() {
       const dateTime = new Date(selectedDate);
       dateTime.setHours(selectedSlot.hour, selectedSlot.minute);
 
-      const topicLabel = formData.topic === 'other'
-        ? formData.otherTopic
-        : TOPICS.find(t => t.id === formData.topic)?.label;
-
       await api.consultations.create({
         date:   dateTime.toISOString(),
         hour:   selectedSlot.hour,
         minute: selectedSlot.minute,
-        topic:  topicLabel,
-        notes:  formData.notes || undefined,
+        topic:  topicLabel,               // always a non-empty label string
+        notes:  formData.notes.trim() || undefined,
         name:   formData.useAccountInfo ? user?.name  : formData.name  || undefined,
         email:  formData.useAccountInfo ? user?.email : formData.email || undefined,
         phone:  formData.useAccountInfo ? user?.phone : formData.phone || undefined,
@@ -164,13 +180,10 @@ export default function NewConsultation() {
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-serif text-[#1C1917] mb-3">
               Schedule a Consultation
             </h1>
-
-            {/* Fee callout */}
             <div className="inline-flex items-center gap-3 bg-[#1C1917] text-white px-5 py-2.5 rounded-full mb-3">
               <span className="text-[10px] uppercase tracking-widest text-stone-400">Consultation Fee</span>
               <span className="text-[#C1A173] font-bold text-lg">KSh 20,000</span>
             </div>
-
             <p className="text-stone-400 text-sm max-w-md mx-auto">
               Book a private one-on-one session with our estate experts. We'll confirm your slot within 24 hours.
             </p>
@@ -188,12 +201,8 @@ export default function NewConsultation() {
                   <FaCheckCircle className="text-green-500 text-3xl" />
                 </div>
                 <h3 className="font-serif text-2xl text-[#1C1917] mb-2">Request Submitted!</h3>
-                <p className="text-stone-500 text-sm mb-1">
-                  Your consultation request has been sent.
-                </p>
-                <p className="text-stone-400 text-sm">
-                  Redirecting to your dashboard…
-                </p>
+                <p className="text-stone-500 text-sm mb-1">Your consultation request has been sent.</p>
+                <p className="text-stone-400 text-sm">Redirecting to your dashboard…</p>
               </motion.div>
             )}
           </AnimatePresence>
@@ -218,9 +227,7 @@ export default function NewConsultation() {
                 />
                 <div>
                   <span className="text-sm font-medium text-stone-700">Use my account details</span>
-                  <p className="text-xs text-stone-400 mt-0.5">
-                    Pre-fill name, email and phone from your profile
-                  </p>
+                  <p className="text-xs text-stone-400 mt-0.5">Pre-fill name, email and phone from your profile</p>
                 </div>
               </label>
             </div>
@@ -301,9 +308,7 @@ export default function NewConsultation() {
                     <label
                       key={t.id}
                       className={`relative p-4 border-2 rounded-xl cursor-pointer transition-all ${
-                        active
-                          ? 'border-[#C1A173] bg-stone-50'
-                          : 'border-stone-200 hover:border-stone-300'
+                        active ? 'border-[#C1A173] bg-stone-50' : 'border-stone-200 hover:border-stone-300'
                       }`}
                     >
                       <input
@@ -326,6 +331,7 @@ export default function NewConsultation() {
                 })}
               </div>
 
+              {/* Custom topic input — shown when "Other" is selected */}
               <AnimatePresence>
                 {formData.topic === 'other' && (
                   <motion.div
@@ -341,10 +347,24 @@ export default function NewConsultation() {
                       className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:border-[#C1A173] focus:outline-none text-sm"
                       placeholder="Describe your topic…"
                       required={formData.topic === 'other'}
+                      autoFocus
                     />
+                    {/* Live preview of what will be saved */}
+                    {formData.otherTopic.trim() && (
+                      <p className="text-[11px] text-stone-400 mt-1.5 px-1">
+                        Will be saved as: <span className="text-[#C1A173] font-medium">"{formData.otherTopic.trim()}"</span>
+                      </p>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>
+
+              {/* Live preview for preset topics */}
+              {formData.topic && formData.topic !== 'other' && (
+                <p className="text-[11px] text-stone-400 mt-2 px-1">
+                  Topic: <span className="text-stone-600 font-medium">{TOPICS.find(t => t.id === formData.topic)?.label}</span>
+                </p>
+              )}
             </div>
 
             {/* ── Date picker ───────────────────────────────────────────────── */}
@@ -352,7 +372,6 @@ export default function NewConsultation() {
               <h3 className="font-serif text-lg text-[#1C1917] border-b border-stone-100 pb-2 mb-4">
                 Select a Date <span className="text-red-400 text-sm">*</span>
               </h3>
-
               <div className="bg-stone-50 border border-stone-100 rounded-xl p-4">
                 {/* Month nav */}
                 <div className="flex items-center justify-between mb-4">
@@ -424,7 +443,7 @@ export default function NewConsultation() {
               )}
             </div>
 
-            {/* ── Time slots — appear after date is chosen ──────────────────── */}
+            {/* ── Time slots ────────────────────────────────────────────────── */}
             <AnimatePresence>
               {selectedDate && (
                 <motion.div
@@ -474,7 +493,6 @@ export default function NewConsultation() {
 
             {/* ── Summary + Submit ─────────────────────────────────────────── */}
             <div className="pt-4 border-t border-stone-100 space-y-4">
-              {/* Booking summary */}
               {(selectedDate || selectedSlot || formData.topic) && (
                 <motion.div
                   initial={{ opacity: 0 }}
@@ -486,7 +504,8 @@ export default function NewConsultation() {
                     <div className="flex justify-between text-stone-600">
                       <span>Topic</span>
                       <span className="font-medium text-stone-800 text-right max-w-[60%] truncate">
-                        {formData.topic === 'other' ? formData.otherTopic || 'Other' : TOPICS.find(t => t.id === formData.topic)?.label}
+                        {/* Show the resolved label, not the internal ID */}
+                        {resolveTopicLabel() || '—'}
                       </span>
                     </div>
                   )}
