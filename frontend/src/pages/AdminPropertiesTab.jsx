@@ -11,7 +11,7 @@ import {
 } from "react-icons/fa";
 import { toast, Toaster } from 'react-hot-toast';
 import api, { API_BASE_URL } from "../services/api";
-import StepImages from './StepImages';
+import StepImages from '../components/StepImages';
 
 /* ─── image URL resolver ──────────────────────────────────────────────────────
    The backend returns image paths in two formats:

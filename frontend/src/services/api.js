@@ -136,6 +136,12 @@ export const propertiesAPI = {
     return response;
   },
 
+  // Public endpoint for categories (no auth required)
+  getCategories: async (propertyId) => {
+    const response = await api.get(`/properties/${propertyId}/categories`);
+    return response;
+  },
+
   // Admin methods
   create: async (propertyData) => {
     const response = await api.post('/admin/properties', propertyData);

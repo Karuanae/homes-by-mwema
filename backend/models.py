@@ -1,4 +1,4 @@
-# models.py - COMPLETE UPDATED VERSION
+# models.py - COMPLETE UPDATED VERSION (FIXED)
 from datetime import datetime, timedelta
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import MetaData
@@ -85,7 +85,7 @@ class PropertyImage(db.Model):
     filename = db.Column(db.String(255))
     mime_type = db.Column(db.String(50))
     is_cover = db.Column(db.Boolean, default=False)
-    category = db.Column(db.String(100), nullable=True, default=None)   # ← NEW
+    category = db.Column(db.String(100), nullable=True, default=None)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def to_dict(self):
@@ -95,7 +95,7 @@ class PropertyImage(db.Model):
             'filename': self.filename,
             'mime_type': self.mime_type,
             'is_cover': self.is_cover,
-            'category': self.category,                                   # ← NEW
+            'category': self.category,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'url': f"/api/admin/property-image/{self.id}"
         }
@@ -115,12 +115,13 @@ class ImageCategory(db.Model):
         nullable=False,
         index=True,
     )
-    name       = db.Column(db.String(100), nullable=False)   # display name, e.g. "Master Bedroom"
-    slug       = db.Column(db.String(100), nullable=False)   # url-safe key,  e.g. "master-bedroom"
+    name       = db.Column(db.String(100), nullable=False)
+    slug       = db.Column(db.String(100), nullable=False)
     sort_order = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    property = db.relationship('Property', backref=db.backref('image_categories', lazy=True, cascade='all, delete-orphan'))
+    # REMOVED: property = db.relationship('Property', backref=db.backref('image_categories', lazy=True, cascade='all, delete-orphan'))
+    # The relationship is now only defined in the Property model above
 
     __table_args__ = (
         db.UniqueConstraint('property_id', 'slug', name='uq_category_prop_slug'),
@@ -165,9 +166,9 @@ class Booking(db.Model):
     booking_metadata = db.Column(db.JSON, default={})
     
     # NEW CANCELLATION FIELDS
-    cancellation_policy = db.Column(db.String(20), default='moderate')  # 'flexible', 'moderate', 'strict'
-    cancellation_deadline_30 = db.Column(db.Date, nullable=True)  # 30-day free cancellation deadline
-    cancellation_deadline_14 = db.Column(db.Date, nullable=True)  # 14-day partial refund deadline
+    cancellation_policy = db.Column(db.String(20), default='moderate')
+    cancellation_deadline_30 = db.Column(db.Date, nullable=True)
+    cancellation_deadline_14 = db.Column(db.Date, nullable=True)
     cancelled_at = db.Column(db.DateTime, nullable=True)
     cancellation_fee = db.Column(db.Numeric(10, 2), default=0)
     refund_amount = db.Column(db.Numeric(10, 2), default=0)
@@ -180,16 +181,12 @@ class Booking(db.Model):
     payments = db.relationship('Payment', backref='booking', lazy=True)
     chat = db.relationship('Chat', backref='booking', uselist=False, lazy=True)
     
-    # NEW METHOD to calculate cancellation deadlines
     def calculate_cancellation_deadlines(self):
         """Calculate cancellation deadlines based on check-in date"""
         if self.check_in:
-            # 30 days before check-in
             self.cancellation_deadline_30 = self.check_in - timedelta(days=30)
-            # 14 days before check-in
             self.cancellation_deadline_14 = self.check_in - timedelta(days=14)
     
-    # NEW METHOD to calculate refund amount
     def calculate_refund_amount(self):
         """Calculate refund amount based on policy and current date"""
         if not self.check_in:
@@ -198,20 +195,16 @@ class Booking(db.Model):
         now = datetime.now().date()
         days_until_checkin = (self.check_in - now).days
         
-        # Default to full refund (0 fee)
         fee_amount = 0
         refund_amount = float(self.total_amount or 0)
         
         if days_until_checkin >= 30:
-            # Free cancellation - full refund
             fee_amount = 0
             refund_amount = float(self.total_amount or 0)
         elif days_until_checkin >= 14:
-            # 50% refund within 14-29 days
             fee_amount = float(self.total_amount or 0) * 0.5
             refund_amount = float(self.total_amount or 0) * 0.5
         else:
-            # No refund within 14 days
             fee_amount = float(self.total_amount or 0)
             refund_amount = 0
             
@@ -244,23 +237,19 @@ class Payment(db.Model):
     retry_count = db.Column(db.Integer, default=0)
     error_log = db.Column(db.Text)
 
-    # ── Refund tracking ──────────────────────────────────────────────────
-    # If this payment IS a refund, refund_payment_id points to the original
-    # payment that was refunded. Lets you query: "show me all refunds and
-    # which original payment each one corresponds to."
+    # Refund tracking
     refund_payment_id = db.Column(
         db.Integer, db.ForeignKey('payments.id'), nullable=True
     )
     refund_note = db.Column(db.Text, nullable=True)
 
-    # Self-referential relationship: original_payment.refunds → list of refund rows
+    # Self-referential relationship
     refunds = db.relationship(
         'Payment',
         backref=db.backref('original_payment', remote_side='Payment.id'),
         foreign_keys='Payment.refund_payment_id',
         lazy=True
     )
-    # ────────────────────────────────────────────────────────────────────
 
     payment_date = db.Column(db.DateTime, default=datetime.utcnow)
     completed_at = db.Column(db.DateTime)

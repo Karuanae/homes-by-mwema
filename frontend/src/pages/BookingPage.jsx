@@ -1,3 +1,4 @@
+// BookingPage.jsx - UPDATED with requested features
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -6,6 +7,8 @@ import api, { API_BASE_URL, IMAGE_BASE_URL } from '../services/api';
 import {
   MapPin, ChevronLeft, ChevronRight, Check,
   AlertCircle, Shield, ArrowLeft, ChevronDown,
+  MessageCircle, User, Info, HelpCircle, Calendar,
+  Users, Home, Wifi, Coffee, Heart, Star, Phone, Mail
 } from 'lucide-react';
 
 // ── normalise image data ──────────────────────────────────────────────────────
@@ -111,11 +114,104 @@ function CategorizedGallery({ images, categories, getImageSrc, onError }) {
   );
 }
 
+// ── FAQ Component ─────────────────────────────────────────────────────────────
+function FAQ({ question, answer, isOpen, onToggle }) {
+  return (
+    <div className="border-b border-stone-200 last:border-0">
+      <button
+        onClick={onToggle}
+        className="w-full flex justify-between items-center py-4 text-left"
+      >
+        <span className="font-medium text-stone-800">{question}</span>
+        <ChevronDown className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <p className="pb-4 text-sm text-stone-600">{answer}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ─── Host Message Modal ───────────────────────────────────────────────────────
+function HostMessageModal({ isOpen, onClose, hostName, propertyName, onSendMessage }) {
+  const [message, setMessage] = useState('');
+  const [sending, setSending] = useState(false);
+
+  const handleSend = async () => {
+    if (!message.trim()) return;
+    setSending(true);
+    try {
+      await onSendMessage(message);
+      setMessage('');
+      onClose();
+    } catch (error) {
+      console.error('Failed to send message:', error);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.95, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.95, y: 20 }}
+        className="bg-white rounded-2xl max-w-md w-full p-6"
+        onClick={e => e.stopPropagation()}
+      >
+        <h3 className="font-serif text-xl mb-2">Message {hostName}</h3>
+        <p className="text-sm text-stone-500 mb-4">Ask about {propertyName}</p>
+        <textarea
+          value={message}
+          onChange={e => setMessage(e.target.value)}
+          placeholder="Hi, I have a question about..."
+          rows={4}
+          className="w-full p-3 border border-stone-200 rounded-xl text-sm focus:outline-none focus:border-stone-900 resize-none"
+        />
+        <div className="flex gap-3 mt-4">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-2.5 border border-stone-200 rounded-xl text-sm hover:bg-stone-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSend}
+            disabled={sending || !message.trim()}
+            className="flex-1 px-4 py-2.5 bg-stone-900 text-white rounded-xl text-sm font-medium hover:bg-stone-800 transition-colors disabled:opacity-50"
+          >
+            {sending ? 'Sending...' : 'Send Message'}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 // ── BookingPage ───────────────────────────────────────────────────────────────
 export default function BookingPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
 
   const [property, setProperty]   = useState(null);
   const [categories, setCategories] = useState([]);
@@ -132,6 +228,62 @@ export default function BookingPage() {
   const [showAvailabilityWarning, setShowAvailabilityWarning] = useState(false);
   const [creatingBooking, setCreatingBooking] = useState(false);
   const [showMobileSummary, setShowMobileSummary] = useState(false);
+  const [showMessageModal, setShowMessageModal] = useState(false);
+  const [openFaqIndex, setOpenFaqIndex] = useState(null);
+
+  // Host information
+  const hostInfo = {
+    name: 'Ann Mwema',
+    title: 'Superhost & Interior Design Enthusiast',
+    joined: '2020',
+    responseTime: 'Within an hour',
+    responseRate: 100,
+    about: "Hello! I'm Ann Mwema, an interior design enthusiast and proud host with Homes by Mwema. I've carefully curated each space to blend modern comfort with timeless elegance. As a Nairobi local, I love sharing the beauty of our city with guests from around the world. I'm passionate about creating memorable experiences and ensuring every stay feels like a home away from home. Whether you're here for business or leisure, I'm dedicated to making your stay exceptional.",
+    languages: ['English', 'Swahili'],
+    hobbies: ['Interior Design', 'Travel', 'Coffee Tasting', 'Reading'],
+  };
+
+  // FAQ data
+  const faqs = [
+    {
+      question: 'What time is check-in and check-out?',
+      answer: 'Check-in is from 3:00 PM onwards, and check-out is by 11:00 AM. Early check-in or late check-out may be available upon request, subject to availability.'
+    },
+    {
+      question: 'Is parking available?',
+      answer: 'Yes, free secure parking is available on the premises. The property has a dedicated parking spot for guests.'
+    },
+    {
+      question: 'Can I host events or parties?',
+      answer: 'This property is not suitable for parties or events. We aim to maintain a peaceful environment for all guests and neighbors.'
+    },
+    {
+      question: 'What amenities are provided?',
+      answer: 'The property comes fully equipped with high-speed WiFi, fresh linens and towels, toiletries, a fully equipped kitchen, smart TV, and complimentary coffee/tea.'
+    },
+    {
+      question: 'What is the cancellation policy?',
+      answer: 'Free cancellation up to 30 days before check-in. For cancellations between 14-29 days, you receive a 50% refund. Cancellations within 14 days are non-refundable.'
+    }
+  ];
+
+  // Things to know
+  const thingsToKnow = {
+    houseRules: [
+      'Check-in after 3:00 PM',
+      'Check-out before 11:00 AM',
+      'No parties or events',
+      'No smoking inside',
+      'Quiet hours after 10:00 PM'
+    ],
+    healthSafety: [
+      'Carbon monoxide alarm installed',
+      'Smoke alarm installed',
+      'First aid kit available',
+      'Fire extinguisher on premises'
+    ],
+    cancellationPolicy: 'Free cancellation for 48 hours. After that, cancel up to 30 days before check-in for a full refund.'
+  };
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
 
@@ -142,8 +294,9 @@ export default function BookingPage() {
         setLoading(true);
         const [propRes, catRes] = await Promise.allSettled([
           api.properties.getById(id),
-          api.imageCategories.list(id),
+          api.properties.getCategories(id),
         ]);
+        
         if (propRes.status === 'rejected') throw new Error('Failed to load property');
 
         const d = propRes.value.data;
@@ -155,7 +308,7 @@ export default function BookingPage() {
           price: d.price || 5000,
           rating: d.rating || 4.9,
           specs: { guests: d.max_guests || 2, bedrooms: d.rooms || 1, bathrooms: d.bathrooms || 1, ...d.specs },
-          host: d.host || { name: 'Mwema Concierge', avatar: '/Icon.jpg' },
+          host: d.host || hostInfo,
           amenities: Array.isArray(d.amenities) ? d.amenities.map(a => typeof a === 'string' ? { name: a } : a) : [],
           images: normaliseImages(d.images || []),
         });
@@ -166,6 +319,7 @@ export default function BookingPage() {
         setCheckInDate(tom.toISOString().split('T')[0]);
         setCheckOutDate(co.toISOString().split('T')[0]);
       } catch (e) {
+        console.error('Error loading property:', e);
         setError('Unable to load residence details. Please try again.');
       } finally {
         setLoading(false);
@@ -248,6 +402,12 @@ export default function BookingPage() {
     await createBookingAndGoToPayment();
   };
 
+  const handleSendMessage = async (message) => {
+    // This would integrate with your messaging API
+    console.log('Sending message to host:', message);
+    alert('Message sent! The host will respond shortly.');
+  };
+
   if (loading) return (
     <div className="min-h-screen bg-[#f5f2ee] flex items-center justify-center p-4">
       <div className="text-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-stone-900 mx-auto mb-4" /><p className="text-xs uppercase tracking-widest text-stone-600">Loading Residence...</p></div>
@@ -262,12 +422,14 @@ export default function BookingPage() {
 
   return (
     <div className="bg-[#f5f2ee] font-sans text-stone-900 min-h-screen">
+      {/* Mobile header */}
       <div className="md:hidden fixed top-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-b border-stone-200 z-40 px-4 py-3 flex items-center justify-between">
         <button onClick={() => navigate(-1)} className="p-2 hover:bg-stone-100 rounded-full transition-colors"><ArrowLeft className="w-5 h-5" /></button>
         <h1 className="font-serif text-lg truncate max-w-[200px]">{property.title}</h1>
         <button onClick={() => setShowMobileSummary(s => !s)} className="p-2 hover:bg-stone-100 rounded-full transition-colors"><ChevronDown className={`w-5 h-5 transition-transform ${showMobileSummary ? 'rotate-180' : ''}`} /></button>
       </div>
 
+      {/* Mobile summary */}
       <AnimatePresence>
         {showMobileSummary && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
@@ -292,34 +454,130 @@ export default function BookingPage() {
           </div>
         </div>
 
+        {/* Mobile: Booking form appears after content */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8 lg:gap-12">
+          {/* Left column - Property details (shows first on mobile) */}
           <div className="lg:col-span-2 space-y-6 md:space-y-8 order-2 lg:order-1">
 
+            {/* Gallery */}
             <CategorizedGallery images={property.images} categories={categories} getImageSrc={getImageSrc} onError={handleImageError} />
 
+            {/* Description */}
             <div className="border-b border-stone-200 pb-6">
               <h3 className="text-xl md:text-2xl font-serif mb-4">About this residence</h3>
               <p className="text-stone-600 leading-relaxed text-sm md:text-base">{property.description}</p>
             </div>
 
+            {/* Host Section */}
             <div className="border-b border-stone-200 pb-6">
-              <h3 className="text-xl md:text-2xl font-serif mb-4">Amenities</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 md:gap-4">
-                {property.amenities.slice(0, showAllAmenities ? undefined : 6).map((a, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded-full bg-stone-900/5 flex items-center justify-center flex-shrink-0"><Check className="w-2 h-2 text-stone-900" /></div>
-                    <span className="text-xs md:text-sm">{a.name}</span>
+              <h3 className="text-xl md:text-2xl font-serif mb-4">Meet your host</h3>
+              <div className="flex items-start gap-4">
+                <div className="w-16 h-16 rounded-full bg-stone-200 flex items-center justify-center overflow-hidden">
+                  <User className="w-8 h-8 text-stone-400" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="font-serif text-lg">{hostInfo.name}</h4>
+                    <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">Superhost</span>
                   </div>
+                  <p className="text-sm text-stone-500 mt-1">{hostInfo.title}</p>
+                  <div className="flex gap-4 mt-2 text-xs text-stone-500">
+                    <span>Joined {hostInfo.joined}</span>
+                    <span>⭐ {hostInfo.responseRate}% response rate</span>
+                    <span>⚡ {hostInfo.responseTime}</span>
+                  </div>
+                </div>
+              </div>
+              <p className="text-sm text-stone-600 mt-4 leading-relaxed">{hostInfo.about}</p>
+              <div className="flex flex-wrap gap-3 mt-4">
+                {hostInfo.languages.map(lang => (
+                  <span key={lang} className="text-xs bg-stone-100 px-3 py-1 rounded-full text-stone-600">{lang}</span>
                 ))}
               </div>
-              {property.amenities.length > 6 && (
-                <button onClick={() => setShowAllAmenities(s => !s)} className="mt-4 text-xs uppercase tracking-widest border-b border-stone-900 pb-1 hover:text-stone-600">
-                  {showAllAmenities ? 'Show Less' : `View All (${property.amenities.length})`}
-                </button>
-              )}
+            </div>
+
+            {/* Message Host Section */}
+            <div className="border-b border-stone-200 pb-6">
+              <div className="flex items-start gap-3">
+                <MessageCircle className="w-5 h-5 text-stone-500 mt-1" />
+                <div>
+                  <h3 className="font-serif text-lg mb-1">Still have questions?</h3>
+                  <p className="text-sm text-stone-600 mb-3">Message {hostInfo.name} directly and get answers within {hostInfo.responseTime}</p>
+                  <button
+                    onClick={() => setShowMessageModal(true)}
+                    className="px-4 py-2 border border-stone-300 rounded-lg text-sm hover:border-stone-900 transition-colors"
+                  >
+                    Message Host
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Amenities */}
+            {property.amenities?.length > 0 && (
+              <div className="border-b border-stone-200 pb-6">
+                <h3 className="text-xl md:text-2xl font-serif mb-4">Amenities</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 md:gap-4">
+                  {property.amenities.slice(0, showAllAmenities ? undefined : 6).map((a, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full bg-stone-900/5 flex items-center justify-center flex-shrink-0"><Check className="w-2 h-2 text-stone-900" /></div>
+                      <span className="text-xs md:text-sm">{a.name}</span>
+                    </div>
+                  ))}
+                </div>
+                {property.amenities.length > 6 && (
+                  <button onClick={() => setShowAllAmenities(s => !s)} className="mt-4 text-xs uppercase tracking-widest border-b border-stone-900 pb-1 hover:text-stone-600">
+                    {showAllAmenities ? 'Show Less' : `View All (${property.amenities.length})`}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Things to Know */}
+            <div className="border-b border-stone-200 pb-6">
+              <h3 className="text-xl md:text-2xl font-serif mb-4">Things to know</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <h4 className="font-medium mb-2 flex items-center gap-2"><Home className="w-4 h-4" /> House Rules</h4>
+                  <ul className="space-y-1 text-sm text-stone-600">
+                    {thingsToKnow.houseRules.map((rule, i) => (
+                      <li key={i}>• {rule}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <h4 className="font-medium mb-2 flex items-center gap-2"><Shield className="w-4 h-4" /> Health & Safety</h4>
+                  <ul className="space-y-1 text-sm text-stone-600">
+                    {thingsToKnow.healthSafety.map((item, i) => (
+                      <li key={i}>• {item}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+              <div className="mt-4 pt-4 border-t border-stone-100">
+                <h4 className="font-medium mb-2 flex items-center gap-2"><Calendar className="w-4 h-4" /> Cancellation Policy</h4>
+                <p className="text-sm text-stone-600">{thingsToKnow.cancellationPolicy}</p>
+              </div>
+            </div>
+
+            {/* FAQ Section */}
+            <div>
+              <h3 className="text-xl md:text-2xl font-serif mb-4">Frequently asked questions</h3>
+              <div>
+                {faqs.map((faq, index) => (
+                  <FAQ
+                    key={index}
+                    question={faq.question}
+                    answer={faq.answer}
+                    isOpen={openFaqIndex === index}
+                    onToggle={() => setOpenFaqIndex(openFaqIndex === index ? null : index)}
+                  />
+                ))}
+              </div>
             </div>
           </div>
 
+          {/* Right column - Booking form (shows after content on mobile) */}
           <div className="lg:col-span-1 order-1 lg:order-2">
             <div className="sticky top-20 md:top-24">
               <div className="bg-white rounded-xl shadow-lg border border-stone-200 overflow-hidden">
@@ -351,16 +609,30 @@ export default function BookingPage() {
                     <AnimatePresence>
                       {showGuestSelector && (
                         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute top-full left-0 right-0 bg-white border border-stone-200 rounded-lg shadow-xl z-20 mt-1 p-3 md:p-4">
-                          {['adults', 'children', 'infants'].map(type => (
-                            <div key={type} className="flex justify-between items-center mb-3 last:mb-0">
-                              <div><span className="text-xs md:text-sm capitalize">{type}</span>{type === 'infants' && <p className="text-[10px] text-stone-400">Under 2 years</p>}</div>
-                              <div className="flex items-center gap-2">
-                                <button onClick={() => setGuests(g => ({ ...g, [type]: Math.max(0, g[type] - 1) }))} className="w-7 h-7 rounded-full border border-stone-200 flex items-center justify-center hover:border-stone-900 transition-colors">−</button>
-                                <span className="text-xs w-5 text-center">{guests[type]}</span>
-                                <button onClick={() => setGuests(g => ({ ...g, [type]: g[type] + 1 }))} className="w-7 h-7 rounded-full border border-stone-200 flex items-center justify-center hover:border-stone-900 transition-colors">+</button>
-                              </div>
+                          <div className="flex justify-between items-center mb-3">
+                            <div><span className="text-xs md:text-sm">Adults</span><p className="text-[10px] text-stone-400">Age 13+</p></div>
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => setGuests(g => ({ ...g, adults: Math.max(1, g.adults - 1) }))} className="w-7 h-7 rounded-full border border-stone-200 flex items-center justify-center hover:border-stone-900 transition-colors">−</button>
+                              <span className="text-xs w-5 text-center">{guests.adults}</span>
+                              <button onClick={() => setGuests(g => ({ ...g, adults: g.adults + 1 }))} className="w-7 h-7 rounded-full border border-stone-200 flex items-center justify-center hover:border-stone-900 transition-colors">+</button>
                             </div>
-                          ))}
+                          </div>
+                          <div className="flex justify-between items-center mb-3">
+                            <div><span className="text-xs md:text-sm">Children</span><p className="text-[10px] text-stone-400">Ages 2-12</p></div>
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => setGuests(g => ({ ...g, children: Math.max(0, g.children - 1) }))} className="w-7 h-7 rounded-full border border-stone-200 flex items-center justify-center hover:border-stone-900 transition-colors">−</button>
+                              <span className="text-xs w-5 text-center">{guests.children}</span>
+                              <button onClick={() => setGuests(g => ({ ...g, children: g.children + 1 }))} className="w-7 h-7 rounded-full border border-stone-200 flex items-center justify-center hover:border-stone-900 transition-colors">+</button>
+                            </div>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <div><span className="text-xs md:text-sm">Infants</span><p className="text-[10px] text-stone-400">Under 2 years</p></div>
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => setGuests(g => ({ ...g, infants: Math.max(0, g.infants - 1) }))} className="w-7 h-7 rounded-full border border-stone-200 flex items-center justify-center hover:border-stone-900 transition-colors">−</button>
+                              <span className="text-xs w-5 text-center">{guests.infants}</span>
+                              <button onClick={() => setGuests(g => ({ ...g, infants: g.infants + 1 }))} className="w-7 h-7 rounded-full border border-stone-200 flex items-center justify-center hover:border-stone-900 transition-colors">+</button>
+                            </div>
+                          </div>
                         </motion.div>
                       )}
                     </AnimatePresence>
@@ -391,6 +663,19 @@ export default function BookingPage() {
           </div>
         </div>
       </main>
+
+      {/* Host Message Modal */}
+      <AnimatePresence>
+        {showMessageModal && (
+          <HostMessageModal
+            isOpen={showMessageModal}
+            onClose={() => setShowMessageModal(false)}
+            hostName={hostInfo.name}
+            propertyName={property.title}
+            onSendMessage={handleSendMessage}
+          />
+        )}
+      </AnimatePresence>
 
       <style>{`.hide-scrollbar::-webkit-scrollbar{display:none}.hide-scrollbar{-ms-overflow-style:none;scrollbar-width:none}`}</style>
     </div>

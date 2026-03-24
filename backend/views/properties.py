@@ -46,7 +46,7 @@ def _all_image_dicts(property_id):
             'id':       r[0],
             'url':      f"/api/admin/property-image/{r[0]}",
             'is_cover': r[1],
-            'category': r[2],
+            'category': r[2] if r[2] else None,
         }
         for r in rows
     ]
@@ -144,22 +144,32 @@ def _prop_detail_dict(prop):
 @properties_bp.route('', methods=['GET'])
 def get_all_properties():
     """Get all active properties (public) — list view, cover image only."""
-    properties = (
-        Property.query
-        .filter_by(status='active')
-        .order_by(Property.created_at.desc())
-        .all()
-    )
-    return jsonify([_prop_list_dict(p) for p in properties])
+    try:
+        properties = (
+            Property.query
+            .filter_by(status='active')
+            .order_by(Property.created_at.desc())
+            .all()
+        )
+        return jsonify([_prop_list_dict(p) for p in properties])
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 
 @properties_bp.route('/<int:property_id>', methods=['GET'])
 def get_property(property_id):
     """Get single property by ID (public) — full detail with all images and categories."""
-    prop = Property.query.get(property_id)
-    if not prop or prop.status != 'active':
-        return jsonify({'error': 'Property not found'}), 404
-    return jsonify(_prop_detail_dict(prop))
+    try:
+        prop = Property.query.get(property_id)
+        if not prop or prop.status != 'active':
+            return jsonify({'error': 'Property not found'}), 404
+        return jsonify(_prop_detail_dict(prop))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 
 @properties_bp.route('/featured', methods=['GET'])
@@ -223,3 +233,26 @@ def check_availability(property_id):
         'check_out': check_out,
         'message': 'Property is available for these dates',
     })
+
+
+# ── PUBLIC CATEGORIES ENDPOINT (no auth required) ────────────────────────────
+
+@properties_bp.route('/<int:property_id>/categories', methods=['GET'])
+def get_property_categories(property_id):
+    """Public endpoint to get categories for a property (no auth required)"""
+    try:
+        prop = Property.query.get(property_id)
+        if not prop or prop.status != 'active':
+            return jsonify({'error': 'Property not found'}), 404
+        
+        cats = (
+            ImageCategory.query
+            .filter_by(property_id=property_id)
+            .order_by(ImageCategory.sort_order, ImageCategory.id)
+            .all()
+        )
+        return jsonify([c.to_dict() for c in cats])
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
