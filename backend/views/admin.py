@@ -1,7 +1,7 @@
 # admin.py - COMPLETE UPDATED VERSION
 from flask import Blueprint, request, jsonify, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import db, User, Property, Booking, Payment, Lead, HomepageContent, AdminStats, PropertyImage, Chat, ChatMessage
+from models import db, User, Property, Booking, Payment, Lead, HomepageContent, AdminStats, PropertyImage, Chat, ChatMessage, ImageCategory
 from werkzeug.exceptions import Forbidden
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -12,6 +12,7 @@ import uuid
 import base64
 import json
 import logging
+import re as _re
 
 admin_bp = Blueprint('admin', __name__)
 logger = logging.getLogger(__name__)
@@ -27,6 +28,13 @@ def require_admin():
     user = User.query.get(user_id)
     if not user or user.role != 'admin':
         raise Forbidden('Admin access required')
+
+def _slugify(text: str) -> str:
+    """Convert display name → url-safe slug."""
+    slug = text.strip().lower()
+    slug = _re.sub(r'[^a-z0-9]+', '-', slug)
+    slug = slug.strip('-')
+    return slug or 'category'
 
 
 # ── ID-only image helpers ─────────────────────────────────────────────────────
@@ -61,6 +69,27 @@ def _admin_all_image_urls(property_id):
         .order_by(PropertyImage.is_cover.desc(), PropertyImage.id)
     ).fetchall()
     return [f"/api/admin/property-image/{r[0]}" for r in rows]
+
+
+def _admin_image_dicts(property_id):
+    """
+    Return list of {id, url, is_cover, category} for a property.
+    No binary data loaded.
+    """
+    rows = db.session.execute(
+        sa_select(PropertyImage.id, PropertyImage.is_cover, PropertyImage.category)
+        .where(PropertyImage.property_id == property_id)
+        .order_by(PropertyImage.is_cover.desc(), PropertyImage.id)
+    ).fetchall()
+    return [
+        {
+            'id':       r[0],
+            'url':      f"/api/admin/property-image/{r[0]}",
+            'is_cover': r[1],
+            'category': r[2],
+        }
+        for r in rows
+    ]
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -132,7 +161,8 @@ def create_property_with_images():
             if first:
                 first.is_cover = True
         db.session.commit()
-        all_urls  = _admin_all_image_urls(new_property.id)
+        all_dicts = _admin_image_dicts(new_property.id)
+        all_urls = [img['url'] for img in all_dicts]
         cover_url = all_urls[0] if all_urls else None
         return jsonify({
             'id': new_property.id, 'name': new_property.name, 'type': new_property.type,
@@ -319,20 +349,26 @@ def admin_get_properties():
     # This replaces N separate per-property queries with 1 query total.
     property_ids = [p.id for p in properties]
     image_rows = db.session.execute(
-        sa_select(PropertyImage.id, PropertyImage.property_id, PropertyImage.is_cover)
+        sa_select(PropertyImage.id, PropertyImage.property_id, PropertyImage.is_cover, PropertyImage.category)
         .where(PropertyImage.property_id.in_(property_ids))
         .order_by(PropertyImage.property_id, PropertyImage.is_cover.desc(), PropertyImage.id)
     ).fetchall()
 
-    # Group into {property_id: [url, ...]} — cover is first due to ORDER BY
+    # Group into {property_id: [{id, url, is_cover, category}, ...]}
     from collections import defaultdict
     images_by_prop = defaultdict(list)
-    for img_id, prop_id, _ in image_rows:
-        images_by_prop[prop_id].append(f"/api/admin/property-image/{img_id}")
+    for img_id, prop_id, is_cover, category in image_rows:
+        images_by_prop[prop_id].append({
+            'id': img_id,
+            'url': f"/api/admin/property-image/{img_id}",
+            'is_cover': is_cover,
+            'category': category,
+        })
 
     result = []
     for prop in properties:
-        all_urls  = images_by_prop.get(prop.id, [])
+        images = images_by_prop.get(prop.id, [])
+        all_urls = [img['url'] for img in images]
         cover_url = all_urls[0] if all_urls else None
 
         result.append({
@@ -354,7 +390,8 @@ def admin_get_properties():
                 'bathrooms': prop.bathrooms,
             },
             'amenities':    prop.amenities or [],
-            'images':       all_urls,   # cover at [0], gallery is rest
+            'images':       all_urls,
+            'image_details': images,  # includes category field
             'cover_image':  cover_url,
             'tags':         prop.tags or [],
             'status':       prop.status,
@@ -407,13 +444,15 @@ def admin_create_property():
                     PropertyImage.query.filter_by(property_id=new_property.id, is_cover=True).update({'is_cover': False})
                     pi.is_cover = True
     db.session.commit()
-    all_urls  = _admin_all_image_urls(new_property.id)
+    all_dicts = _admin_image_dicts(new_property.id)
+    all_urls = [img['url'] for img in all_dicts]
     cover_url = all_urls[0] if all_urls else None
     return jsonify({
         'id': new_property.id, 'name': new_property.name, 'type': new_property.type,
         'price': float(new_property.price) if new_property.price else 0,
         'location': new_property.location, 'status': new_property.status,
         'images': all_urls,
+        'image_details': all_dicts,
         'cover_image': cover_url,
         'created_at': new_property.created_at.isoformat() if new_property.created_at else None
     }), 201
@@ -453,13 +492,15 @@ def admin_update_property(property_id):
                 pi.property_id = prop.id
                 if i == 0: pi.is_cover = True
     db.session.commit()
-    all_urls  = _admin_all_image_urls(prop.id)
+    all_dicts = _admin_image_dicts(prop.id)
+    all_urls = [img['url'] for img in all_dicts]
     cover_url = all_urls[0] if all_urls else None
     return jsonify({
         'id': prop.id, 'name': prop.name, 'type': prop.type,
         'price': float(prop.price) if prop.price else 0,
         'location': prop.location, 'status': prop.status,
         'images': all_urls,
+        'image_details': all_dicts,
         'cover_image': cover_url,
         'updated_at': prop.updated_at.isoformat() if prop.updated_at else None
     })
@@ -477,6 +518,177 @@ def admin_delete_property(property_id):
     db.session.delete(prop)
     db.session.commit()
     return jsonify({'message': 'Property and related bookings deleted successfully'})
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# IMAGE CATEGORY ROUTES
+# ═════════════════════════════════════════════════════════════════════════════
+
+@admin_bp.route('/properties/<int:property_id>/categories', methods=['GET'])
+@jwt_required()
+def list_image_categories(property_id):
+    require_admin()
+    prop = Property.query.get(property_id)
+    if not prop:
+        return jsonify({'error': 'Property not found'}), 404
+
+    cats = (
+        ImageCategory.query
+        .filter_by(property_id=property_id)
+        .order_by(ImageCategory.sort_order, ImageCategory.id)
+        .all()
+    )
+    return jsonify([c.to_dict() for c in cats])
+
+
+@admin_bp.route('/properties/<int:property_id>/categories', methods=['POST'])
+@jwt_required()
+def create_image_category(property_id):
+    require_admin()
+    prop = Property.query.get(property_id)
+    if not prop:
+        return jsonify({'error': 'Property not found'}), 404
+
+    data = request.json or {}
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'error': 'name is required'}), 400
+
+    slug = _slugify(data.get('slug') or name)
+
+    # Ensure slug is unique within property
+    existing = ImageCategory.query.filter_by(property_id=property_id, slug=slug).first()
+    if existing:
+        return jsonify({'error': f"Category slug '{slug}' already exists for this property"}), 409
+
+    max_order = db.session.query(db.func.max(ImageCategory.sort_order)).filter_by(property_id=property_id).scalar() or 0
+    cat = ImageCategory(
+        property_id=property_id,
+        name=name,
+        slug=slug,
+        sort_order=max_order + 1,
+    )
+    db.session.add(cat)
+    db.session.commit()
+    return jsonify(cat.to_dict()), 201
+
+
+@admin_bp.route('/properties/<int:property_id>/categories/<int:cat_id>', methods=['PUT', 'PATCH'])
+@jwt_required()
+def update_image_category(property_id, cat_id):
+    require_admin()
+    cat = ImageCategory.query.filter_by(id=cat_id, property_id=property_id).first()
+    if not cat:
+        return jsonify({'error': 'Category not found'}), 404
+
+    data = request.json or {}
+    if 'name' in data:
+        cat.name = data['name'].strip()
+    if 'slug' in data:
+        new_slug = _slugify(data['slug'])
+        conflict = ImageCategory.query.filter(
+            ImageCategory.property_id == property_id,
+            ImageCategory.slug == new_slug,
+            ImageCategory.id != cat_id,
+        ).first()
+        if conflict:
+            return jsonify({'error': f"Slug '{new_slug}' already in use"}), 409
+        cat.slug = new_slug
+    if 'sort_order' in data:
+        cat.sort_order = int(data['sort_order'])
+
+    db.session.commit()
+    return jsonify(cat.to_dict())
+
+
+@admin_bp.route('/properties/<int:property_id>/categories/<int:cat_id>', methods=['DELETE'])
+@jwt_required()
+def delete_image_category(property_id, cat_id):
+    require_admin()
+    cat = ImageCategory.query.filter_by(id=cat_id, property_id=property_id).first()
+    if not cat:
+        return jsonify({'error': 'Category not found'}), 404
+
+    # Unassign images that belonged to this category
+    PropertyImage.query.filter_by(
+        property_id=property_id,
+        category=cat.slug,
+    ).update({'category': None})
+
+    db.session.delete(cat)
+    db.session.commit()
+    return jsonify({'success': True, 'message': f"Category '{cat.name}' deleted"})
+
+
+@admin_bp.route('/property-image/<int:image_id>/category', methods=['PUT', 'PATCH'])
+@jwt_required()
+def set_image_category(image_id):
+    require_admin()
+    image = PropertyImage.query.get(image_id)
+    if not image:
+        return jsonify({'error': 'Image not found'}), 404
+
+    data = request.json or {}
+    slug = data.get('category')   # pass null / empty string to un-assign
+
+    if slug:
+        slug = slug.strip()
+        # Validate the category exists for this property
+        if image.property_id:
+            valid = ImageCategory.query.filter_by(
+                property_id=image.property_id,
+                slug=slug,
+            ).first()
+            if not valid:
+                return jsonify({'error': f"Category '{slug}' does not exist for this property"}), 404
+        image.category = slug
+    else:
+        image.category = None
+
+    db.session.commit()
+    return jsonify({'success': True, 'image_id': image_id, 'category': image.category})
+
+
+@admin_bp.route('/properties/<int:property_id>/images/bulk-categorize', methods=['POST'])
+@jwt_required()
+def bulk_categorize_images(property_id):
+    """
+    Body: { "assignments": [{"image_id": 1, "category": "bedroom"}, ...] }
+    Pass category: null to un-assign.
+    """
+    require_admin()
+    prop = Property.query.get(property_id)
+    if not prop:
+        return jsonify({'error': 'Property not found'}), 404
+
+    data = request.json or {}
+    assignments = data.get('assignments', [])
+    if not isinstance(assignments, list):
+        return jsonify({'error': 'assignments must be an array'}), 400
+
+    # Build valid slug set once
+    valid_slugs = {
+        c.slug for c in ImageCategory.query.filter_by(property_id=property_id).all()
+    }
+
+    updated, errors = 0, []
+    for item in assignments:
+        img_id = item.get('image_id')
+        slug   = item.get('category')
+        if not img_id:
+            continue
+        img = PropertyImage.query.filter_by(id=img_id, property_id=property_id).first()
+        if not img:
+            errors.append(f"Image {img_id} not found")
+            continue
+        if slug and slug not in valid_slugs:
+            errors.append(f"Category '{slug}' not found for image {img_id}")
+            continue
+        img.category = slug or None
+        updated += 1
+
+    db.session.commit()
+    return jsonify({'success': True, 'updated': updated, 'errors': errors})
 
 
 # ═════════════════════════════════════════════════════════════════════════════

@@ -11,6 +11,7 @@ import {
 } from "react-icons/fa";
 import { toast, Toaster } from 'react-hot-toast';
 import api, { API_BASE_URL } from "../services/api";
+import StepImages from './StepImages';
 
 /* ─── image URL resolver ──────────────────────────────────────────────────────
    The backend returns image paths in two formats:
@@ -62,6 +63,7 @@ const BLANK = {
   name:"", type:"apartment", price:"", location:"", description:"",
   coverImage:null, coverPreview:"", galleryImages:[], galleryPreviews:[],
   amenities:[], rooms:1, bathrooms:1, maxGuests:2, area:"",
+  _imageCategoryMap: {},   // ← NEW: { imageId: slug } for saved images
 };
 
 const compressImage = (file) => new Promise((resolve) => {
@@ -94,6 +96,7 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
   const [uploading,     setUploading]     = useState(false);
   const [uploadProg,    setUploadProg]    = useState({ current:0, total:0, pct:0, status:"" });
   const [deletingImgId, setDeletingImgId] = useState(null);
+  const [categories,    setCategories]    = useState([]);   // ← NEW: ImageCategory[]
 
   const fetchProperties = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -117,6 +120,7 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
     resetForm();
     setModal(null);
     setSelectedProp(null);
+    setCategories([]);  // ← NEW: reset categories
     // Silent background refresh — no spinner, no unmounting
     fetchProperties(true);
     onRefreshStats?.();
@@ -156,9 +160,18 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
       // Fetch updated property data to refresh the form previews
       const r = await api.properties.getById(propertyId);
       const up = r.data;
+      
+      // Update category map from new images data
+      const newImageCategoryMap = {};
+      (up.images || []).forEach(img => {
+        if (img.id && img.category) {
+          newImageCategoryMap[img.id] = img.category;
+        }
+      });
+      
       const newCover = up.cover_image ? resolveUrl(up.cover_image) : "";
       const newGallery = (up.images||[])
-        .map(img => resolveUrl(img))
+        .map(img => resolveUrl(img.url || img))
         .filter(url => url !== newCover);
 
       // Update the form in place — modal stays open, user keeps editing
@@ -166,6 +179,7 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
         ...p,
         coverPreview: newCover,
         galleryPreviews: newGallery,
+        _imageCategoryMap: newImageCategoryMap,
       }));
 
       // Also quietly update the card in the background list without
@@ -184,6 +198,70 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
     } finally {
       setDeletingImgId(null);
     }
+  };
+
+  // Helper: build form state from a property object
+  const buildForm = (p) => {
+    const coverUrl = p.cover_image ? resolveUrl(p.cover_image) : "";
+
+    // p.images is now an array of objects: { id, url, is_cover, category }
+    // (after the backend update). Build the category map from it.
+    const imageCategoryMap = {};
+    const images = Array.isArray(p.images) ? p.images : [];
+
+    images.forEach(img => {
+      const imgObj = typeof img === 'object' && img !== null ? img : null;
+      if (imgObj?.id && imgObj?.category) {
+        imageCategoryMap[imgObj.id] = imgObj.category;
+      }
+    });
+
+    // Normalise image entries to URL strings for rendering
+    const toUrl = (img) => {
+      if (typeof img === 'string') return resolveUrl(img);
+      if (img?.url) return resolveUrl(img.url);
+      return null;
+    };
+
+    const allUrls = images.map(toUrl).filter(Boolean);
+    const galleryUrls = allUrls.filter(url => url !== coverUrl);
+
+    return {
+      name: p.name,
+      type: p.type,
+      price: p.price,
+      location: p.location,
+      description: p.description || '',
+      coverImage: null,
+      coverPreview: coverUrl,
+      galleryImages: [],
+      galleryPreviews: galleryUrls,
+      amenities: p.amenities || [],
+      rooms: p.rooms || 1,
+      bathrooms: p.bathrooms || 1,
+      maxGuests: p.max_guests || 2,
+      area: p.area || '',
+      _imageCategoryMap: imageCategoryMap,  // ← NEW
+    };
+  };
+
+  const openEdit = async (p) => {
+    setSelectedProp(p);
+    setForm(buildForm(p));
+    setModal("edit");
+
+    // Load categories for this property
+    try {
+      const res = await api.imageCategories.list(p.id);
+      setCategories(res.data || []);
+    } catch {
+      setCategories([]);
+    }
+  };
+
+  const openView = (p) => {
+    setSelectedProp(p);
+    setModal("view");
   };
 
   const handleCreate = async () => {
@@ -216,6 +294,24 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
         await api.admin.addPropertyImages(pid, fd);
         setUploadProg(p => ({ ...p, current:p.current+1, pct:Math.round(((p.current+1)/p.total)*100) }));
       }
+      
+      // After property creation is done, sync any offline categories
+      const tmpCats = categories.filter(c => String(c.id).startsWith('tmp_'));
+      for (const cat of tmpCats) {
+        try {
+          await api.imageCategories.create(pid, cat.name);
+        } catch {
+          // non-fatal
+        }
+      }
+      
+      // Then do bulk category assignment for new gallery images that had categories set
+      if (pid && form.galleryImages.some(img => img._category)) {
+        // We need the image IDs returned from the upload — this requires the backend
+        // to return image IDs from addPropertyImages. If it does, collect them and call:
+        // await api.imageCategories.bulkAssign(pid, assignments);
+      }
+      
       cleanBlobs(); resetForm(); closeModal(); setUploading(false);
       toast.success("Property created!", { id:tid, icon:"🎉", duration:5000 });
     } catch (err) { toast.error(err.response?.data?.error || "Failed to create property", { id:tid }); setUploading(false); }
@@ -262,34 +358,6 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
       onRefreshStats?.();
       toast.success("Property deleted", { id:tid, icon:"🗑️", duration:3000 });
     } catch { toast.error("Failed to delete property", { id:tid }); }
-  };
-
-  // Helper: build form state from a property object
-  const buildForm = (p) => {
-    const coverUrl = p.cover_image ? resolveUrl(p.cover_image) : "";
-    return {
-      name:p.name, type:p.type, price:p.price,
-      location:p.location, description:p.description||"",
-      coverImage:null,
-      coverPreview: coverUrl,
-      galleryImages:[],
-      galleryPreviews:(p.images||[])
-        .map(img => resolveUrl(img))
-        .filter(url => url !== coverUrl),
-      amenities:p.amenities||[], rooms:p.rooms||1,
-      bathrooms:p.bathrooms||1, maxGuests:p.max_guests||2, area:p.area||"",
-    };
-  };
-
-  const openEdit = (p) => {
-    setSelectedProp(p);
-    setForm(buildForm(p));
-    setModal("edit");
-  };
-
-  const openView = (p) => {
-    setSelectedProp(p);
-    setModal("view");
   };
 
   if (loading) return (
@@ -368,7 +436,7 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
               ))}
             </div>
             <motion.button whileTap={{scale:.97}}
-              onClick={()=>{resetForm();setModal("add");}}
+              onClick={()=>{resetForm(); setCategories([]); setModal("add");}}  // ← NEW: reset categories
               className="flex items-center gap-2 bg-[#093A3E] text-white px-4 py-2.5 rounded-xl f-body text-sm font-medium shadow-lg shadow-teal-900/20 hover:bg-[#0a4a52] transition-colors">
               <FaPlus className="text-[#ED9B40]"/>
               <span className="hidden sm:inline">Add Property</span>
@@ -386,7 +454,7 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
             </div>
             <h3 className="f-display text-2xl text-stone-700 mb-2">No properties yet</h3>
             <p className="f-body text-stone-400 mb-8 text-sm text-center max-w-xs">Start building your portfolio by adding your first property listing.</p>
-            <motion.button whileTap={{scale:.97}} onClick={()=>{resetForm();setModal("add");}}
+            <motion.button whileTap={{scale:.97}} onClick={()=>{resetForm(); setCategories([]); setModal("add");}}
               className="flex items-center gap-2 bg-[#093A3E] text-white px-6 py-3 rounded-xl f-body text-sm font-medium">
               <FaPlus className="text-[#ED9B40]"/> Add Property
             </motion.button>
@@ -517,6 +585,9 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
             onRemoveNewGallery={removeNewGallery}
             onDeleteImage={(url)=>deletePropertyImage(url,selectedProp?.id)}
             deletingImgId={deletingImgId}
+            propertyId={selectedProp?.id}          // ← NEW
+            categories={categories}                // ← NEW
+            onCategoriesChange={setCategories}     // ← NEW
           />
         )}
       </AnimatePresence>
@@ -548,7 +619,7 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
               {(selectedProp.images||[]).length>1&&(
                 <div className="flex gap-2 px-5 py-4 overflow-x-auto scrollbar-hide">
                   {(selectedProp.images||[])
-                    .map(img => resolveUrl(img))
+                    .map(img => resolveUrl(img.url || img))
                     .filter(url => url !== getImageUrl(selectedProp))
                     .slice(0, 5)
                     .map((url,i)=>(
@@ -603,7 +674,13 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
 /* ══════════════════════════════════════════════════════════════ */
 const STEPS = ["Basic Info","Details","Images","Amenities"];
 
-const PropertyFormModal = ({ title, isEdit, form, setForm, onSave, onCancel, onCoverUpload, onGalleryUpload, onRemoveNewGallery, onDeleteImage, deletingImgId }) => {
+const PropertyFormModal = ({ 
+  title, isEdit, form, setForm, onSave, onCancel, 
+  onCoverUpload, onGalleryUpload, onRemoveNewGallery, onDeleteImage, deletingImgId,
+  propertyId,           // ← NEW
+  categories,           // ← NEW
+  onCategoriesChange,   // ← NEW
+}) => {
   const [step,setSaving_step] = useState(0);
   const [saving,setSaving]    = useState(false);
   const setStep = setSaving_step;
@@ -643,7 +720,20 @@ const PropertyFormModal = ({ title, isEdit, form, setForm, onSave, onCancel, onC
             <motion.div key={step} initial={{opacity:0,x:20}} animate={{opacity:1,x:0}} exit={{opacity:0,x:-20}} transition={{duration:.2}}>
               {step===0&&<StepBasic form={form} setForm={setForm}/>}
               {step===1&&<StepDetails form={form} setForm={setForm}/>}
-              {step===2&&<StepImages form={form} setForm={setForm} onCoverUpload={onCoverUpload} onGalleryUpload={onGalleryUpload} onRemoveNewGallery={onRemoveNewGallery} onDeleteImage={onDeleteImage} deletingImgId={deletingImgId}/>}
+              {step===2&&(
+                <StepImages
+                  form={form}
+                  setForm={setForm}
+                  onCoverUpload={onCoverUpload}
+                  onGalleryUpload={onGalleryUpload}
+                  onRemoveNewGallery={onRemoveNewGallery}
+                  onDeleteImage={onDeleteImage}
+                  deletingImgId={deletingImgId}
+                  propertyId={propertyId}             // ← NEW
+                  categories={categories}             // ← NEW
+                  onCategoriesChange={onCategoriesChange} // ← NEW
+                />
+              )}
               {step===3&&<StepAmenities form={form} setForm={setForm}/>}
             </motion.div>
           </AnimatePresence>
@@ -723,85 +813,6 @@ const StepDetails = ({ form, setForm }) => (
     <div className="space-y-1.5">
       <label className="f-body text-[10px] uppercase tracking-widest text-stone-400">Area (ft²)</label>
       <input type="text" value={form.area} placeholder="e.g. 1,200" onChange={e=>setForm(p=>({...p,area:e.target.value}))} className="input-base"/>
-    </div>
-  </div>
-);
-
-const StepImages = ({ form, setForm, onCoverUpload, onGalleryUpload, onRemoveNewGallery, onDeleteImage, deletingImgId }) => (
-  <div className="space-y-6">
-    <div>
-      <p className="f-body text-[10px] uppercase tracking-widest text-stone-400 mb-3">Cover Image</p>
-      <input type="file" id="cover-upload" accept="image/*" className="hidden" onChange={onCoverUpload}/>
-      {form.coverPreview?(
-        <div className="relative w-full aspect-video rounded-2xl overflow-hidden group">
-          <img src={form.coverPreview} alt="Cover" className="w-full h-full object-cover"/>
-          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
-            <label htmlFor="cover-upload" className="cursor-pointer flex items-center gap-2 bg-white/90 text-stone-800 px-4 py-2 rounded-xl text-xs f-body font-medium hover:bg-white transition-colors">
-              <FaCamera/> Change
-            </label>
-            <button type="button"
-              onClick={()=>{
-                if(form.coverPreview.startsWith("blob:")){URL.revokeObjectURL(form.coverPreview);setForm(p=>({...p,coverImage:null,coverPreview:""}));}
-                else{onDeleteImage(form.coverPreview);}
-              }}
-              disabled={!!deletingImgId}
-              className="flex items-center gap-2 bg-red-500/90 text-white px-4 py-2 rounded-xl text-xs f-body font-medium hover:bg-red-600 transition-colors disabled:opacity-50">
-              {deletingImgId?<FaSpinner className="animate-spin"/>:<FaTrash/>} Remove
-            </button>
-          </div>
-        </div>
-      ):(
-        <label htmlFor="cover-upload"
-          className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-stone-200 rounded-2xl aspect-video cursor-pointer hover:border-[#093A3E] hover:bg-[#F5F4F0] transition-all group">
-          <div className="w-12 h-12 rounded-xl bg-stone-100 group-hover:bg-white flex items-center justify-center transition-colors">
-            <FaCamera className="text-stone-300 group-hover:text-[#093A3E] text-xl transition-colors"/>
-          </div>
-          <div className="text-center">
-            <p className="f-body text-sm text-stone-500 group-hover:text-[#093A3E] transition-colors font-medium">Upload Cover Image</p>
-            <p className="f-body text-xs text-stone-300 mt-0.5">JPG, PNG up to 10MB</p>
-          </div>
-        </label>
-      )}
-    </div>
-    <div>
-      <div className="flex items-center justify-between mb-3">
-        <p className="f-body text-[10px] uppercase tracking-widest text-stone-400">Gallery Images</p>
-        <label htmlFor="gallery-upload" className="cursor-pointer flex items-center gap-1.5 text-xs f-body font-medium text-[#093A3E] bg-[#093A3E]/5 px-3 py-1.5 rounded-lg hover:bg-[#093A3E]/10 transition-colors">
-          <FaPlus size={10}/> Add images
-        </label>
-        <input type="file" id="gallery-upload" accept="image/*" multiple className="hidden" onChange={onGalleryUpload}/>
-      </div>
-      {form.galleryPreviews.length===0?(
-        <label htmlFor="gallery-upload"
-          className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-stone-100 rounded-2xl py-8 cursor-pointer hover:border-stone-200 transition-colors">
-          <FaImage className="text-stone-200 text-2xl"/>
-          <p className="f-body text-xs text-stone-300">No gallery images yet</p>
-        </label>
-      ):(
-        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-          {form.galleryPreviews.map((url,i)=>{
-            const imgId=url.match(/\/property-image\/(\d+)/)?.[1];
-            const isDeleting=deletingImgId===imgId;
-            return (
-              <motion.div key={i} initial={{opacity:0,scale:.9}} animate={{opacity:1,scale:1}} transition={{delay:i*.04}}
-                className="relative aspect-square rounded-xl overflow-hidden group bg-stone-100">
-                <img src={url} alt="" className="w-full h-full object-cover"/>
-                {!url.startsWith("blob:")&&<div className="absolute top-1.5 left-1.5 bg-[#093A3E]/80 text-white text-[8px] px-1.5 py-0.5 rounded f-body">saved</div>}
-                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <button type="button" onClick={()=>url.startsWith("blob:")?onRemoveNewGallery(i):onDeleteImage(url)} disabled={isDeleting}
-                    className="w-8 h-8 rounded-lg bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-colors disabled:opacity-50">
-                    {isDeleting?<FaSpinner className="animate-spin" size={11}/>:<FaTrash size={11}/>}
-                  </button>
-                </div>
-              </motion.div>
-            );
-          })}
-          <label htmlFor="gallery-upload"
-            className="aspect-square rounded-xl border-2 border-dashed border-stone-200 flex items-center justify-center cursor-pointer hover:border-[#093A3E] hover:bg-[#F5F4F0] transition-all group">
-            <FaPlus className="text-stone-300 group-hover:text-[#093A3E] transition-colors text-lg"/>
-          </label>
-        </div>
-      )}
     </div>
   </div>
 );

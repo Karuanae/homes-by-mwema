@@ -153,6 +153,60 @@ export const propertiesAPI = {
   },
 };
 
+// ==================== IMAGE CATEGORIES API ====================
+export const imageCategoriesAPI = {
+  // List all categories for a property
+  list: (propertyId) =>
+    api.get(`/admin/properties/${propertyId}/categories`),
+
+  // Create a new category
+  create: (propertyId, name) =>
+    api.post(`/admin/properties/${propertyId}/categories`, { name }),
+
+  // Rename / reorder a category
+  update: (propertyId, catId, data) =>
+    api.put(`/admin/properties/${propertyId}/categories/${catId}`, data),
+
+  // Delete a category (un-assigns its images automatically)
+  delete: (propertyId, catId) =>
+    api.delete(`/admin/properties/${propertyId}/categories/${catId}`),
+
+  // Assign a single image to a category (pass null to un-assign)
+  assignImage: (imageId, categorySlug) =>
+    api.put(`/admin/property-image/${imageId}/category`, { category: categorySlug }),
+
+  // Bulk assign multiple images at once
+  bulkAssign: (propertyId, assignments) =>
+    api.post(`/admin/properties/${propertyId}/images/bulk-categorize`, { assignments }),
+};
+
+// ==================== PUBLIC HELPER ====================
+// Call this from the booking page / property detail page (no auth needed
+// because the data is derived from the public property endpoint).
+// The public properties API already returns images as an array of objects
+// with { id, url, is_cover, category } after the backend update.
+// This helper normalises the shape for components that just want the tabs.
+
+export const getPropertyCategoryTabs = (images = [], categories = []) => {
+  // Build a set of slugs that actually have images
+  const usedSlugs = new Set(images.map(img => img.category).filter(Boolean));
+
+  const tabs = [
+    { slug: 'all', name: 'All Photos', count: images.length },
+    ...categories
+      .filter(cat => usedSlugs.has(cat.slug))
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map(cat => ({
+        slug:  cat.slug,
+        name:  cat.name,
+        count: images.filter(img => img.category === cat.slug).length,
+      })),
+  ];
+
+  // If no categories are configured yet, just return the "All" tab
+  return tabs;
+};
+
 // ==================== BOOKINGS API - ENHANCED ====================
 export const bookingsAPI = {
   // Create a new booking with 15-minute hold
@@ -887,11 +941,13 @@ export default {
   upload: uploadAPI,
   socket: socketAPI,
   consultations: consultationsAPI,
+  imageCategories: imageCategoriesAPI,  // ← NEW
 
   isAuthenticated,
   getCurrentUser,
   getAuthToken,
   getPropertyImageUrl,
+  getPropertyCategoryTabs,  // ← NEW
 
   initiateMpesaPayment,
   checkPaymentStatus,

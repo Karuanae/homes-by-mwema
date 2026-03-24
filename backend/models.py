@@ -64,6 +64,7 @@ class Property(db.Model):
     payments = db.relationship('Payment', backref='property', lazy=True)
     chats = db.relationship('Chat', backref='property', lazy=True)
     images = db.relationship('PropertyImage', backref='property', lazy=True, cascade='all, delete-orphan')
+    image_categories = db.relationship('ImageCategory', backref='property', lazy=True, cascade='all, delete-orphan')
     
     def get_image_urls(self):
         return [f"/api/admin/property-image/{img.id}" for img in self.images]
@@ -74,6 +75,7 @@ class Property(db.Model):
             return f"/api/admin/property-image/{cover_image.id}"
         return None
 
+
 class PropertyImage(db.Model):
     __tablename__ = 'property_images'
     
@@ -83,6 +85,7 @@ class PropertyImage(db.Model):
     filename = db.Column(db.String(255))
     mime_type = db.Column(db.String(50))
     is_cover = db.Column(db.Boolean, default=False)
+    category = db.Column(db.String(100), nullable=True, default=None)   # ← NEW
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def to_dict(self):
@@ -92,9 +95,49 @@ class PropertyImage(db.Model):
             'filename': self.filename,
             'mime_type': self.mime_type,
             'is_cover': self.is_cover,
+            'category': self.category,                                   # ← NEW
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'url': f"/api/admin/property-image/{self.id}"
         }
+
+
+class ImageCategory(db.Model):
+    """
+    Custom image categories per property.
+    Admins create/rename/delete these; images reference them by slug.
+    """
+    __tablename__ = 'image_categories'
+
+    id          = db.Column(db.Integer, primary_key=True)
+    property_id = db.Column(
+        db.Integer,
+        db.ForeignKey('properties.id', ondelete='CASCADE'),
+        nullable=False,
+        index=True,
+    )
+    name       = db.Column(db.String(100), nullable=False)   # display name, e.g. "Master Bedroom"
+    slug       = db.Column(db.String(100), nullable=False)   # url-safe key,  e.g. "master-bedroom"
+    sort_order = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    property = db.relationship('Property', backref=db.backref('image_categories', lazy=True, cascade='all, delete-orphan'))
+
+    __table_args__ = (
+        db.UniqueConstraint('property_id', 'slug', name='uq_category_prop_slug'),
+    )
+
+    def to_dict(self):
+        return {
+            'id':         self.id,
+            'property_id': self.property_id,
+            'name':       self.name,
+            'slug':       self.slug,
+            'sort_order': self.sort_order,
+        }
+
+    def __repr__(self):
+        return f'<ImageCategory {self.property_id}:{self.slug}>'
+
 
 class Booking(db.Model):
     __tablename__ = 'bookings'

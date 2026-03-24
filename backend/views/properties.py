@@ -1,54 +1,55 @@
 from flask import Blueprint, request, jsonify
-from models import db, Property, PropertyImage
-from sqlalchemy import select
+from models import db, Property, PropertyImage, ImageCategory
+from sqlalchemy import select, func
 from datetime import datetime
+from collections import defaultdict
 
 properties_bp = Blueprint('properties', __name__)
 
 
-# ── tiny helpers ────────────────────────────────────────────────────────────
+# ── image helpers ─────────────────────────────────────────────────────────────
 
 def _cover_url(property_id):
-    """
-    Return the cover image URL for a property using an ID-only query.
-    We load ONLY the `id` and `is_cover` columns — never `image_data`.
-    """
-    row = (
-        db.session.execute(
-            select(PropertyImage.id)
-            .where(PropertyImage.property_id == property_id)
-            .where(PropertyImage.is_cover == True)
-            .limit(1)
-        )
-        .first()
-    )
+    """Return the cover image URL for a property using an ID-only query."""
+    row = db.session.execute(
+        select(PropertyImage.id)
+        .where(PropertyImage.property_id == property_id)
+        .where(PropertyImage.is_cover == True)
+        .limit(1)
+    ).first()
     if row:
         return f"/api/admin/property-image/{row[0]}"
-
+    
     # Fall back to the first image if no cover is flagged
-    first = (
-        db.session.execute(
-            select(PropertyImage.id)
-            .where(PropertyImage.property_id == property_id)
-            .order_by(PropertyImage.id)
-            .limit(1)
-        )
-        .first()
-    )
+    first = db.session.execute(
+        select(PropertyImage.id)
+        .where(PropertyImage.property_id == property_id)
+        .order_by(PropertyImage.id)
+        .limit(1)
+    ).first()
     return f"/api/admin/property-image/{first[0]}" if first else None
 
 
-def _all_image_urls(property_id):
+def _all_image_dicts(property_id):
     """
-    Return all image URLs for a property using an ID-only query.
-    Binary data is NEVER loaded here.
+    Return list of image dicts including category.
+    Cover image is first (is_cover=True).
+    No binary data loaded.
     """
     rows = db.session.execute(
-        select(PropertyImage.id)
+        select(PropertyImage.id, PropertyImage.is_cover, PropertyImage.category)
         .where(PropertyImage.property_id == property_id)
         .order_by(PropertyImage.is_cover.desc(), PropertyImage.id)
     ).fetchall()
-    return [f"/api/admin/property-image/{r[0]}" for r in rows]
+    return [
+        {
+            'id':       r[0],
+            'url':      f"/api/admin/property-image/{r[0]}",
+            'is_cover': r[1],
+            'category': r[2],
+        }
+        for r in rows
+    ]
 
 
 def _host_dict(host):
@@ -65,10 +66,7 @@ def _host_dict(host):
 
 
 def _prop_list_dict(prop):
-    """
-    Lightweight serialiser for list views (homepage / properties page).
-    Only fetches the cover image URL — one tiny query per property.
-    """
+    """Lightweight serialiser for list views (homepage / properties page)."""
     cover = _cover_url(prop.id)
     return {
         'id': prop.id,
@@ -82,9 +80,9 @@ def _prop_list_dict(prop):
         'area': prop.area,
         'max_guests': prop.max_guests,
         'amenities': prop.amenities or [],
-        # Only the cover for list cards — gallery not needed
         'cover_image': cover,
-        'images': [cover] if cover else [],
+        # images list for cards: just the cover, as an object for shape consistency
+        'images': [{'id': None, 'url': cover, 'is_cover': True, 'category': None}] if cover else [],
         'tags': prop.tags or [],
         'status': prop.status,
         'rating': float(prop.rating) if prop.rating else 0,
@@ -96,12 +94,18 @@ def _prop_list_dict(prop):
 
 
 def _prop_detail_dict(prop):
-    """
-    Full serialiser for the single-property detail view.
-    Fetches all image IDs (still no binary data).
-    """
-    image_urls = _all_image_urls(prop.id)
-    cover = next((u for u in image_urls), None)
+    """Full serialiser for single-property detail view with categories."""
+    image_dicts = _all_image_dicts(prop.id)
+    cover = image_dicts[0]['url'] if image_dicts else None
+
+    # Include categories so the frontend can build tabs without a second request
+    cats = (
+        ImageCategory.query
+        .filter_by(property_id=prop.id)
+        .order_by(ImageCategory.sort_order, ImageCategory.id)
+        .all()
+    )
+
     return {
         'id': prop.id,
         'name': prop.name,
@@ -121,8 +125,9 @@ def _prop_detail_dict(prop):
             'bathrooms': prop.bathrooms,
         },
         'amenities': prop.amenities or [],
-        'images': image_urls,
+        'images': image_dicts,   # now objects with {id, url, is_cover, category}
         'cover_image': cover,
+        'image_categories': [c.to_dict() for c in cats],  # bundled for convenience
         'tags': prop.tags or [],
         'status': prop.status,
         'rating': float(prop.rating) if prop.rating else 0,
@@ -139,8 +144,6 @@ def _prop_detail_dict(prop):
 @properties_bp.route('', methods=['GET'])
 def get_all_properties():
     """Get all active properties (public) — list view, cover image only."""
-    # Load property rows without touching PropertyImage.image_data at all.
-    # The `images` relationship is lazy by default so it won't be touched here.
     properties = (
         Property.query
         .filter_by(status='active')
@@ -152,7 +155,7 @@ def get_all_properties():
 
 @properties_bp.route('/<int:property_id>', methods=['GET'])
 def get_property(property_id):
-    """Get single property by ID (public) — full detail with all images."""
+    """Get single property by ID (public) — full detail with all images and categories."""
     prop = Property.query.get(property_id)
     if not prop or prop.status != 'active':
         return jsonify({'error': 'Property not found'}), 404
