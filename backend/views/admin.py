@@ -1,4 +1,3 @@
-# admin.py - COMPLETE UPDATED VERSION
 from flask import Blueprint, request, jsonify, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import db, User, Property, Booking, Payment, Lead, HomepageContent, AdminStats, PropertyImage, Chat, ChatMessage, ImageCategory
@@ -111,12 +110,20 @@ def create_property_with_images():
         if not all([name, ptype, price, location]):
             return jsonify({'error': 'Missing required fields: name, type, price, location'}), 400
         description = request.form.get('description', '')
+        
+        # NEW: Get coordinates from form data
+        latitude = request.form.get('latitude')
+        longitude = request.form.get('longitude')
+        formatted_address = request.form.get('formatted_address')
+        place_id = request.form.get('place_id')
+        
         try:
             amenities = json.loads(request.form.get('amenities', '[]'))
             specs = json.loads(request.form.get('specs', '{}'))
             tags = json.loads(request.form.get('tags', '[]'))
         except json.JSONDecodeError:
             amenities, specs, tags = [], {}, []
+            
         new_property = Property(
             name=name, title=request.form.get('title', name), type=ptype,
             price=Decimal(str(price)), location=location, description=description,
@@ -130,7 +137,12 @@ def create_property_with_images():
                 'beds': int(request.form.get('rooms', 1)),
                 'bathrooms': int(request.form.get('bathrooms', 1))
             },
-            amenities=amenities, tags=tags, status='active'
+            amenities=amenities, tags=tags, status='active',
+            # NEW: Set coordinates
+            latitude=Decimal(str(latitude)) if latitude else None,
+            longitude=Decimal(str(longitude)) if longitude else None,
+            formatted_address=formatted_address,
+            place_id=place_id,
         )
         db.session.add(new_property)
         db.session.flush()
@@ -175,7 +187,12 @@ def create_property_with_images():
             'tags': new_property.tags, 'status': new_property.status,
             'images': all_urls,
             'cover_image': cover_url,
-            'created_at': new_property.created_at.isoformat() if new_property.created_at else None
+            'created_at': new_property.created_at.isoformat() if new_property.created_at else None,
+            # NEW: Return coordinates
+            'coordinates': {
+                'lat': float(new_property.latitude) if new_property.latitude else None,
+                'lng': float(new_property.longitude) if new_property.longitude else None,
+            } if new_property.latitude and new_property.longitude else None,
         }), 201
     except Exception as e:
         db.session.rollback()
@@ -401,6 +418,13 @@ def admin_get_properties():
             'is_featured':  prop.is_featured,
             'created_at':   prop.created_at.isoformat() if prop.created_at else None,
             'updated_at':   prop.updated_at.isoformat() if prop.updated_at else None,
+            # NEW: Add coordinates
+            'coordinates': {
+                'lat': float(prop.latitude) if prop.latitude else None,
+                'lng': float(prop.longitude) if prop.longitude else None,
+            } if prop.latitude and prop.longitude else None,
+            'formatted_address': prop.formatted_address,
+            'place_id': prop.place_id,
         })
     return jsonify(result)
 
@@ -419,6 +443,13 @@ def admin_create_property():
         amenities = [amenities]
     elif not isinstance(amenities, list):
         amenities = []
+    
+    # NEW: Get coordinates
+    latitude = data.get('latitude')
+    longitude = data.get('longitude')
+    formatted_address = data.get('formatted_address')
+    place_id = data.get('place_id')
+    
     new_property = Property(
         name=data['name'], title=data.get('title', data['name']), type=data['type'],
         price=Decimal(str(data['price'])), location=data['location'],
@@ -431,7 +462,12 @@ def admin_create_property():
             'bedrooms': data.get('rooms', 1), 'beds': data.get('rooms', 1),
             'bathrooms': data.get('bathrooms', 1)
         }),
-        amenities=amenities, tags=data.get('tags', []), status='active'
+        amenities=amenities, tags=data.get('tags', []), status='active',
+        # NEW: Set coordinates
+        latitude=Decimal(str(latitude)) if latitude else None,
+        longitude=Decimal(str(longitude)) if longitude else None,
+        formatted_address=formatted_address,
+        place_id=place_id,
     )
     db.session.add(new_property)
     db.session.flush()
@@ -454,7 +490,12 @@ def admin_create_property():
         'images': all_urls,
         'image_details': all_dicts,
         'cover_image': cover_url,
-        'created_at': new_property.created_at.isoformat() if new_property.created_at else None
+        'created_at': new_property.created_at.isoformat() if new_property.created_at else None,
+        # NEW: Return coordinates
+        'coordinates': {
+            'lat': float(new_property.latitude) if new_property.latitude else None,
+            'lng': float(new_property.longitude) if new_property.longitude else None,
+        } if new_property.latitude and new_property.longitude else None,
     }), 201
 
 
@@ -484,6 +525,17 @@ def admin_update_property(property_id):
     if 'status' in data: prop.status = data['status']
     if 'rating' in data: prop.rating = Decimal(str(data['rating'])) if data['rating'] else 0
     if 'is_featured' in data: prop.is_featured = data['is_featured']
+    
+    # NEW: Update coordinates
+    if 'latitude' in data:
+        prop.latitude = Decimal(str(data['latitude'])) if data['latitude'] else None
+    if 'longitude' in data:
+        prop.longitude = Decimal(str(data['longitude'])) if data['longitude'] else None
+    if 'formatted_address' in data:
+        prop.formatted_address = data['formatted_address']
+    if 'place_id' in data:
+        prop.place_id = data['place_id']
+    
     if 'image_ids' in data and isinstance(data['image_ids'], list):
         PropertyImage.query.filter_by(property_id=prop.id).update({'property_id': None, 'is_cover': False})
         for i, image_id in enumerate(data['image_ids']):
@@ -502,7 +554,12 @@ def admin_update_property(property_id):
         'images': all_urls,
         'image_details': all_dicts,
         'cover_image': cover_url,
-        'updated_at': prop.updated_at.isoformat() if prop.updated_at else None
+        'updated_at': prop.updated_at.isoformat() if prop.updated_at else None,
+        # NEW: Return coordinates
+        'coordinates': {
+            'lat': float(prop.latitude) if prop.latitude else None,
+            'lng': float(prop.longitude) if prop.longitude else None,
+        } if prop.latitude and prop.longitude else None,
     })
 
 

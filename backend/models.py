@@ -1,4 +1,3 @@
-# models.py - COMPLETE UPDATED VERSION (FIXED)
 from datetime import datetime, timedelta
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import MetaData
@@ -56,6 +55,13 @@ class Property(db.Model):
     review_count = db.Column(db.Integer, default=0)
     bookings_count = db.Column(db.Integer, default=0)
     is_featured = db.Column(db.Boolean, default=False)
+    
+    # NEW: Google Maps coordinates fields
+    latitude = db.Column(db.Numeric(10, 8), nullable=True)   # e.g., -1.286389
+    longitude = db.Column(db.Numeric(11, 8), nullable=True)  # e.g., 36.817223
+    formatted_address = db.Column(db.String(500), nullable=True)
+    place_id = db.Column(db.String(255), nullable=True)
+    
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -119,9 +125,6 @@ class ImageCategory(db.Model):
     slug       = db.Column(db.String(100), nullable=False)
     sort_order = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    # REMOVED: property = db.relationship('Property', backref=db.backref('image_categories', lazy=True, cascade='all, delete-orphan'))
-    # The relationship is now only defined in the Property model above
 
     __table_args__ = (
         db.UniqueConstraint('property_id', 'slug', name='uq_category_prop_slug'),

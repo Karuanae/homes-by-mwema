@@ -12,19 +12,9 @@ import {
 import { toast, Toaster } from 'react-hot-toast';
 import api, { API_BASE_URL } from "../services/api";
 import StepImages from '../components/StepImages';
+import LocationAutocomplete from '../components/LocationAutocomplete'; // NEW import
 
-/* ─── image URL resolver ──────────────────────────────────────────────────────
-   The backend returns image paths in two formats:
-   · "/api/admin/property-image/123"  → served by Flask, needs the API host
-   · "https://..."                    → already absolute
-   · "blob:..."                       → local object URL (new upload preview)
-
-   We derive the API host from API_BASE_URL (always defined) rather than
-   IMAGE_BASE_URL which can be undefined or wrong in some environments.
-
-   API_BASE_URL  = "https://host.railway.app/api"
-   API host      = "https://host.railway.app"          (strip /api suffix)
-────────────────────────────────────────────────────────────────────────────── */
+/* ─── image URL resolver ──────────────────────────────────────────────────────*/
 const API_HOST = API_BASE_URL
   ? API_BASE_URL.replace(/\/api\/?$/, "").replace(/\/$/, "")
   : "";
@@ -32,7 +22,6 @@ const API_HOST = API_BASE_URL
 const resolveUrl = (url) => {
   if (!url) return "/default-property.jpg";
   if (url.startsWith("http") || url.startsWith("blob:")) return url;
-  // Relative path from backend e.g. "/api/admin/property-image/123"
   const path = url.startsWith("/") ? url : `/${url}`;
   return `${API_HOST}${path}`;
 };
@@ -63,7 +52,12 @@ const BLANK = {
   name:"", type:"apartment", price:"", location:"", description:"",
   coverImage:null, coverPreview:"", galleryImages:[], galleryPreviews:[],
   amenities:[], rooms:1, bathrooms:1, maxGuests:2, area:"",
-  _imageCategoryMap: {},   // ← NEW: { imageId: slug } for saved images
+  _imageCategoryMap: {},
+  // NEW: coordinates fields
+  latitude: null,
+  longitude: null,
+  formatted_address: "",
+  place_id: "",
 };
 
 const compressImage = (file) => new Promise((resolve) => {
@@ -96,7 +90,7 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
   const [uploading,     setUploading]     = useState(false);
   const [uploadProg,    setUploadProg]    = useState({ current:0, total:0, pct:0, status:"" });
   const [deletingImgId, setDeletingImgId] = useState(null);
-  const [categories,    setCategories]    = useState([]);   // ← NEW: ImageCategory[]
+  const [categories,    setCategories]    = useState([]);
 
   const fetchProperties = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -120,8 +114,7 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
     resetForm();
     setModal(null);
     setSelectedProp(null);
-    setCategories([]);  // ← NEW: reset categories
-    // Silent background refresh — no spinner, no unmounting
+    setCategories([]);
     fetchProperties(true);
     onRefreshStats?.();
   };
@@ -157,11 +150,9 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
       await api.admin.deletePropertyImage(imageId);
       toast.dismiss(tid); toast.success("Image deleted", { icon:"🗑️", duration:3000 });
 
-      // Fetch updated property data to refresh the form previews
       const r = await api.properties.getById(propertyId);
       const up = r.data;
       
-      // Update category map from new images data
       const newImageCategoryMap = {};
       (up.images || []).forEach(img => {
         if (img.id && img.category) {
@@ -174,7 +165,6 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
         .map(img => resolveUrl(img.url || img))
         .filter(url => url !== newCover);
 
-      // Update the form in place — modal stays open, user keeps editing
       setForm(p => ({
         ...p,
         coverPreview: newCover,
@@ -182,16 +172,12 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
         _imageCategoryMap: newImageCategoryMap,
       }));
 
-      // Also quietly update the card in the background list without
-      // triggering setLoading (which would unmount the modal)
       setProperties(prev => prev.map(prop =>
         prop.id === propertyId
           ? { ...prop, cover_image: up.cover_image, images: up.images }
           : prop
       ));
 
-      // Defer stats refresh to after the modal closes — don't call it here
-      // so the parent doesn't re-render and kick us out of the edit modal
     } catch (err) {
       toast.dismiss(tid);
       toast.error(err.response?.data?.error || "Failed to delete image");
@@ -204,8 +190,6 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
   const buildForm = (p) => {
     const coverUrl = p.cover_image ? resolveUrl(p.cover_image) : "";
 
-    // p.images is now an array of objects: { id, url, is_cover, category }
-    // (after the backend update). Build the category map from it.
     const imageCategoryMap = {};
     const images = Array.isArray(p.images) ? p.images : [];
 
@@ -216,7 +200,6 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
       }
     });
 
-    // Normalise image entries to URL strings for rendering
     const toUrl = (img) => {
       if (typeof img === 'string') return resolveUrl(img);
       if (img?.url) return resolveUrl(img.url);
@@ -241,7 +224,12 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
       bathrooms: p.bathrooms || 1,
       maxGuests: p.max_guests || 2,
       area: p.area || '',
-      _imageCategoryMap: imageCategoryMap,  // ← NEW
+      _imageCategoryMap: imageCategoryMap,
+      // NEW: coordinates fields
+      latitude: p.latitude || null,
+      longitude: p.longitude || null,
+      formatted_address: p.formatted_address || p.location || '',
+      place_id: p.place_id || '',
     };
   };
 
@@ -250,7 +238,6 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
     setForm(buildForm(p));
     setModal("edit");
 
-    // Load categories for this property
     try {
       const res = await api.imageCategories.list(p.id);
       setCategories(res.data || []);
@@ -271,11 +258,18 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
       setUploading(true);
       const total = 1 + (form.coverImage?1:0) + form.galleryImages.length;
       setUploadProg({ current:0, total, pct:0, status:"Creating property…" });
+      
+      // NEW: Include coordinates in property data
       const r = await api.admin.createProperty({
         name:form.name, type:form.type, price:parseFloat(form.price),
         location:form.location, description:form.description,
         rooms:form.rooms, bathrooms:form.bathrooms, max_guests:form.maxGuests,
         area:form.area, amenities:form.amenities,
+        // NEW coordinates
+        latitude: form.latitude,
+        longitude: form.longitude,
+        formatted_address: form.formatted_address,
+        place_id: form.place_id,
         specs:{ guests:form.maxGuests, bedrooms:form.rooms, beds:form.rooms, bathrooms:form.bathrooms },
         status:"active",
       });
@@ -295,7 +289,6 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
         setUploadProg(p => ({ ...p, current:p.current+1, pct:Math.round(((p.current+1)/p.total)*100) }));
       }
       
-      // After property creation is done, sync any offline categories
       const tmpCats = categories.filter(c => String(c.id).startsWith('tmp_'));
       for (const cat of tmpCats) {
         try {
@@ -303,13 +296,6 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
         } catch {
           // non-fatal
         }
-      }
-      
-      // Then do bulk category assignment for new gallery images that had categories set
-      if (pid && form.galleryImages.some(img => img._category)) {
-        // We need the image IDs returned from the upload — this requires the backend
-        // to return image IDs from addPropertyImages. If it does, collect them and call:
-        // await api.imageCategories.bulkAssign(pid, assignments);
       }
       
       cleanBlobs(); resetForm(); closeModal(); setUploading(false);
@@ -323,12 +309,20 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
       setUploading(true);
       const total = 1 + (form.coverImage?1:0) + form.galleryImages.length;
       setUploadProg({ current:0, total, pct:0, status:"Updating property…" });
+      
+      // NEW: Include coordinates in update
       await api.admin.updateProperty(selectedProp.id, {
         name:form.name, type:form.type, price:parseFloat(form.price),
         location:form.location, description:form.description,
         rooms:form.rooms, bathrooms:form.bathrooms, max_guests:form.maxGuests,
         area:form.area, amenities:form.amenities,
+        // NEW coordinates
+        latitude: form.latitude,
+        longitude: form.longitude,
+        formatted_address: form.formatted_address,
+        place_id: form.place_id,
       });
+      
       toast.loading("Uploading new images…", { id:tid });
       setUploadProg(p => ({ ...p, current:1, pct:Math.round((1/total)*100), status:"Uploading new images…" }));
       if (form.coverImage) {
@@ -352,12 +346,23 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
     const tid = toast.loading("Deleting…");
     try {
       await api.admin.deleteProperty(id);
-      // Remove immediately from local state — no need to re-fetch the full list
       setProperties(prev => prev.filter(p => p.id !== id));
       setDeleteTarget(null);
       onRefreshStats?.();
       toast.success("Property deleted", { id:tid, icon:"🗑️", duration:3000 });
     } catch { toast.error("Failed to delete property", { id:tid }); }
+  };
+
+  // NEW: Handle location selection from autocomplete
+  const handleLocationSelect = (locationData) => {
+    setForm(prev => ({
+      ...prev,
+      location: locationData.address,
+      latitude: locationData.coordinates.lat,
+      longitude: locationData.coordinates.lng,
+      place_id: locationData.placeId,
+      formatted_address: locationData.address,
+    }));
   };
 
   if (loading) return (
@@ -436,7 +441,7 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
               ))}
             </div>
             <motion.button whileTap={{scale:.97}}
-              onClick={()=>{resetForm(); setCategories([]); setModal("add");}}  // ← NEW: reset categories
+              onClick={()=>{resetForm(); setCategories([]); setModal("add");}}
               className="flex items-center gap-2 bg-[#093A3E] text-white px-4 py-2.5 rounded-xl f-body text-sm font-medium shadow-lg shadow-teal-900/20 hover:bg-[#0a4a52] transition-colors">
               <FaPlus className="text-[#ED9B40]"/>
               <span className="hidden sm:inline">Add Property</span>
@@ -585,9 +590,10 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
             onRemoveNewGallery={removeNewGallery}
             onDeleteImage={(url)=>deletePropertyImage(url,selectedProp?.id)}
             deletingImgId={deletingImgId}
-            propertyId={selectedProp?.id}          // ← NEW
-            categories={categories}                // ← NEW
-            onCategoriesChange={setCategories}     // ← NEW
+            propertyId={selectedProp?.id}
+            categories={categories}
+            onCategoriesChange={setCategories}
+            onLocationSelect={handleLocationSelect} // NEW prop
           />
         )}
       </AnimatePresence>
@@ -677,9 +683,8 @@ const STEPS = ["Basic Info","Details","Images","Amenities"];
 const PropertyFormModal = ({ 
   title, isEdit, form, setForm, onSave, onCancel, 
   onCoverUpload, onGalleryUpload, onRemoveNewGallery, onDeleteImage, deletingImgId,
-  propertyId,           // ← NEW
-  categories,           // ← NEW
-  onCategoriesChange,   // ← NEW
+  propertyId, categories, onCategoriesChange,
+  onLocationSelect, // NEW prop
 }) => {
   const [step,setSaving_step] = useState(0);
   const [saving,setSaving]    = useState(false);
@@ -718,7 +723,7 @@ const PropertyFormModal = ({
         <div className="overflow-y-auto scrollbar-hide flex-1 px-6 py-4">
           <AnimatePresence mode="wait">
             <motion.div key={step} initial={{opacity:0,x:20}} animate={{opacity:1,x:0}} exit={{opacity:0,x:-20}} transition={{duration:.2}}>
-              {step===0&&<StepBasic form={form} setForm={setForm}/>}
+              {step===0&&<StepBasic form={form} setForm={setForm} onLocationSelect={onLocationSelect} />}
               {step===1&&<StepDetails form={form} setForm={setForm}/>}
               {step===2&&(
                 <StepImages
@@ -729,9 +734,9 @@ const PropertyFormModal = ({
                   onRemoveNewGallery={onRemoveNewGallery}
                   onDeleteImage={onDeleteImage}
                   deletingImgId={deletingImgId}
-                  propertyId={propertyId}             // ← NEW
-                  categories={categories}             // ← NEW
-                  onCategoriesChange={onCategoriesChange} // ← NEW
+                  propertyId={propertyId}
+                  categories={categories}
+                  onCategoriesChange={onCategoriesChange}
                 />
               )}
               {step===3&&<StepAmenities form={form} setForm={setForm}/>}
@@ -764,7 +769,8 @@ const PropertyFormModal = ({
   );
 };
 
-const StepBasic = ({ form, setForm }) => (
+// StepBasic - UPDATED with LocationAutocomplete
+const StepBasic = ({ form, setForm, onLocationSelect }) => (
   <div className="space-y-5">
     <div className="space-y-1.5">
       <label className="f-body text-[10px] uppercase tracking-widest text-stone-400">Property Name *</label>
@@ -784,7 +790,16 @@ const StepBasic = ({ form, setForm }) => (
     </div>
     <div className="space-y-1.5">
       <label className="f-body text-[10px] uppercase tracking-widest text-stone-400">Location *</label>
-      <input type="text" value={form.location} placeholder="District, City" onChange={e=>setForm(p=>({...p,location:e.target.value}))} className="input-base"/>
+      <LocationAutocomplete
+        onSelect={onLocationSelect}
+        initialValue={form.location}
+        placeholder="Search for property location..."
+      />
+      {form.latitude && form.longitude && (
+        <p className="text-[10px] text-green-600 mt-1 flex items-center gap-1">
+          <FaCheck size={10} /> Coordinates set: {form.latitude.toFixed(4)}, {form.longitude.toFixed(4)}
+        </p>
+      )}
     </div>
     <div className="space-y-1.5">
       <label className="f-body text-[10px] uppercase tracking-widest text-stone-400">Description</label>
@@ -840,12 +855,10 @@ const StepAmenities = ({ form, setForm }) => {
 
   const removeAmenity = (v) => setForm(p => ({ ...p, amenities: p.amenities.filter(a => a !== v) }));
 
-  // custom amenities = those not in the preset list
   const customAmenities = form.amenities.filter(a => !presetValues.includes(a));
 
   return (
     <div className="space-y-6">
-      {/* Preset toggles */}
       <div>
         <p className="f-body text-[10px] uppercase tracking-widest text-stone-400 mb-3">Quick select</p>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -863,7 +876,6 @@ const StepAmenities = ({ form, setForm }) => {
         </div>
       </div>
 
-      {/* Custom amenity input */}
       <div>
         <p className="f-body text-[10px] uppercase tracking-widest text-stone-400 mb-3">Add custom amenity</p>
         <div className="flex gap-2">
@@ -887,7 +899,6 @@ const StepAmenities = ({ form, setForm }) => {
         <p className="f-body text-[10px] text-stone-300 mt-1.5">Press Enter or click Add to include a custom amenity</p>
       </div>
 
-      {/* Custom amenity chips */}
       <AnimatePresence>
         {customAmenities.length > 0 && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}>
@@ -910,7 +921,6 @@ const StepAmenities = ({ form, setForm }) => {
         )}
       </AnimatePresence>
 
-      {/* Summary */}
       {form.amenities.length > 0 && (
         <p className="f-body text-xs text-stone-400 text-center">
           {form.amenities.length} amenit{form.amenities.length === 1 ? "y" : "ies"} selected

@@ -90,6 +90,11 @@ def _prop_list_dict(prop):
         'bookings_count': prop.bookings_count,
         'is_featured': prop.is_featured,
         'created_at': prop.created_at.isoformat() if prop.created_at else None,
+        # NEW: Add coordinates to list view
+        'coordinates': {
+            'lat': float(prop.latitude) if prop.latitude else None,
+            'lng': float(prop.longitude) if prop.longitude else None,
+        } if prop.latitude and prop.longitude else None,
     }
 
 
@@ -136,6 +141,13 @@ def _prop_detail_dict(prop):
         'is_featured': prop.is_featured,
         'host': _host_dict(prop.host),
         'created_at': prop.created_at.isoformat() if prop.created_at else None,
+        # NEW: Add Google Maps coordinates
+        'coordinates': {
+            'lat': float(prop.latitude) if prop.latitude else None,
+            'lng': float(prop.longitude) if prop.longitude else None,
+        } if prop.latitude and prop.longitude else None,
+        'formatted_address': prop.formatted_address,
+        'place_id': prop.place_id,
     }
 
 

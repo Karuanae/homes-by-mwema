@@ -1,9 +1,9 @@
-// BookingPage.jsx — Rebuilt with premium design
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api, { API_BASE_URL, IMAGE_BASE_URL } from '../services/api';
+import GoogleMap from '../components/GoogleMap';  // ← ADD THIS LINE
 import {
   MapPin, ChevronLeft, ChevronRight, Check, AlertCircle,
   Shield, ArrowLeft, ChevronDown, MessageCircle, User, Calendar,
@@ -1168,11 +1168,19 @@ export default function BookingPage() {
             </section>
 
             {/* Map */}
-            <section className="border-t border-stone-200 pt-10">
-              <h2 className="text-2xl md:text-3xl text-stone-900 mb-2">Where you'll be</h2>
-              <p className="text-sm text-stone-500 mb-5" style={{ fontFamily: 'system-ui' }}>{property.location}</p>
-              <MapPlaceholder location={property.location} />
-            </section>
+<section className="border-t border-stone-200 pt-10">
+  <h2 className="text-2xl md:text-3xl text-stone-900 mb-2">Where you'll be</h2>
+  <p className="text-sm text-stone-500 mb-5" style={{ fontFamily: 'system-ui' }}>
+    {property.location}
+  </p>
+  <div className="relative h-64 md:h-80 rounded-2xl overflow-hidden border border-stone-200">
+    <GoogleMap
+      location={property.location}
+      propertyTitle={property.title}
+      coordinates={property.coordinates}
+    />
+  </div>
+</section>
 
             {/* Host */}
             <section className="border-t border-stone-200 pt-10">
