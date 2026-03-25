@@ -52,7 +52,7 @@ export default function Login() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-stone-900" />
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#093A3E]" />
       </div>
     );
   }
@@ -236,11 +236,11 @@ export default function Login() {
         transition={{ duration: 0.8, ease: 'easeOut' }}
         className="w-full max-w-md bg-white border border-stone-200 shadow-2xl shadow-stone-200/50 p-12 relative"
       >
-        <div className="absolute top-0 left-0 right-0 h-1 bg-stone-900" />
+        <div className="absolute top-0 left-0 right-0 h-1 bg-[#093A3E]" />
 
         <div className="text-center mb-12">
           <p className="text-xs uppercase tracking-widest text-stone-400">Homes By Mwema</p>
-          <h2 className="text-3xl font-serif italic text-stone-900 mb-3">Login</h2>
+          <h2 className="text-3xl font-serif italic text-[#093A3E] mb-3">Login</h2>
         </div>
 
         {error && (
@@ -284,7 +284,7 @@ export default function Login() {
               <button
                 type="button"
                 tabIndex={-1}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-900"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-[#093A3E]"
                 onClick={() => setShowPassword((v) => !v)}
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
               >
@@ -294,7 +294,7 @@ export default function Login() {
              <div className="flex justify-end mt-2">
     <Link
       to="/forgot-password"
-      className="text-xs text-stone-500 hover:text-stone-900 transition-colors"
+      className="text-xs text-stone-500 hover:text-[#093A3E] transition-colors"
     >
       Forgot password?
     </Link>
@@ -306,7 +306,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-3 bg-stone-900 text-white uppercase tracking-widest text-xs font-bold rounded hover:bg-stone-800 transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
+            className="w-full py-3 bg-[#093A3E] text-white uppercase tracking-widest text-xs font-bold rounded hover:bg-[#0c4e52] transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
           >
             {isLoading ? <FaSpinner className="animate-spin" /> : 'Sign In'}
           </button>
@@ -326,7 +326,7 @@ export default function Login() {
             Not a member?{' '}
             <Link
               to="/register"
-              className="text-stone-900 italic border-b border-stone-300 hover:border-stone-900 transition-all"
+              className="text-[#093A3E] italic border-b border-stone-300 hover:border-[#093A3E] transition-all"
             >
               Register
             </Link>

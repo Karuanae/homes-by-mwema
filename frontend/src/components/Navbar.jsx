@@ -228,9 +228,9 @@ const Navbar = () => {
               <div className="flex-shrink-0 flex items-center">
                 <Link to="/" aria-label="Go to homepage">
                   <img
-                    src="/Logo2.png"
+                    src="/Logo3.png"
                     alt="Homes by Mwema"
-                    className="w-28 h-16 object-contain drop-shadow-2xl cursor-pointer"
+                    className="w-32 h-20 object-contain drop-shadow-2xl cursor-pointer"
                   />
                 </Link>
               </div>

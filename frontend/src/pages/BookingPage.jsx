@@ -271,7 +271,7 @@ function PhotoTour({ images, categories, getImageSrc, onError, onClose, initialI
           <button key={tab.slug} onClick={() => scrollToSection(tab.slug)}
             className="flex-shrink-0 px-4 py-2 rounded-full text-xs font-medium transition-all"
             style={{
-              background: activeSlug === tab.slug ? '#1c1917' : '#f5f5f4',
+              background: activeSlug === tab.slug ? '#093A3E' : '#f5f5f4',
               color: activeSlug === tab.slug ? '#fff' : '#57534e',
             }}>
             {tab.name}
@@ -491,7 +491,7 @@ function ReviewCard({ review }) {
       className="p-5 rounded-2xl border border-stone-100 bg-white space-y-3"
     >
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-stone-900 text-white flex items-center justify-center text-xs font-bold flex-shrink-0"
+        <div className="w-10 h-10 rounded-full bg-[#093A3E] text-white flex items-center justify-center text-xs font-bold flex-shrink-0"
           style={{ fontFamily: 'system-ui' }}>
           {review.avatar}
         </div>
@@ -539,10 +539,10 @@ function MapPlaceholder({ location }) {
       {/* Pin */}
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="relative">
-          <div className="w-12 h-12 rounded-full bg-stone-900 flex items-center justify-center shadow-2xl">
+          <div className="w-12 h-12 rounded-full bg-[#093A3E] flex items-center justify-center shadow-2xl">
             <MapPin className="w-5 h-5 text-white" />
           </div>
-          <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-stone-900 rotate-45" />
+          <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-[#093A3E] rotate-45" />
           <div className="absolute -top-2 -right-2 w-4 h-4 rounded-full bg-amber-400 animate-ping opacity-60" />
         </div>
       </div>
@@ -553,7 +553,7 @@ function MapPlaceholder({ location }) {
           <MapPin className="w-3.5 h-3.5 text-stone-500" />
           <span className="text-xs font-medium text-stone-900" style={{ fontFamily: 'system-ui' }}>{location}</span>
         </div>
-        <button className="bg-stone-900 text-white text-xs px-3 py-2 rounded-xl shadow-lg flex items-center gap-1.5 hover:bg-stone-700 transition-colors"
+        <button className="bg-[#093A3E] text-white text-xs px-3 py-2 rounded-xl shadow-lg flex items-center gap-1.5 hover:bg-[#0c4e52] transition-colors"
           style={{ fontFamily: 'system-ui' }}>
           Open map
         </button>
@@ -617,10 +617,10 @@ function HostMessageModal({ isOpen, onClose, hostName, propertyName, onSendMessa
               <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-stone-100 transition-colors"><X className="w-4 h-4" /></button>
             </div>
             <textarea value={message} onChange={e => setMessage(e.target.value)} placeholder="Hi, I have a question about..." rows={4}
-              className="w-full p-3 border border-stone-200 rounded-xl text-sm focus:outline-none focus:border-stone-900 resize-none transition-colors" />
+              className="w-full p-3 border border-stone-200 rounded-xl text-sm focus:outline-none focus:border-[#093A3E] resize-none transition-colors" />
             <div className="flex gap-3 mt-4">
               <button onClick={onClose} className="flex-1 px-4 py-2.5 border border-stone-200 rounded-xl text-sm hover:bg-stone-50 transition-colors">Cancel</button>
-              <button onClick={handleSend} disabled={sending || !message.trim()} className="flex-1 px-4 py-2.5 bg-stone-900 text-white rounded-xl text-sm font-medium hover:bg-stone-800 disabled:opacity-50 transition-colors">
+              <button onClick={handleSend} disabled={sending || !message.trim()} className="flex-1 px-4 py-2.5 bg-[#093A3E] text-white rounded-xl text-sm font-medium hover:bg-[#0c4e52] disabled:opacity-50 transition-colors">
                 {sending ? 'Sending…' : 'Send'}
               </button>
             </div>
@@ -640,7 +640,7 @@ function Toast({ message, isVisible }) {
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 20, opacity: 0 }}
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-stone-900 text-white px-4 py-2.5 rounded-full text-sm shadow-xl"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-[#093A3E] text-white px-4 py-2.5 rounded-full text-sm shadow-xl"
           style={{ fontFamily: 'system-ui' }}
         >
           {message}
@@ -763,7 +763,7 @@ function BookingSidebar({ property, checkInDate, setCheckInDate, checkOutDate, s
           className="w-full py-4 rounded-xl font-bold text-sm uppercase tracking-widest transition-all"
           style={{
             fontFamily: 'system-ui',
-            background: creatingBooking || !isAvailable ? '#d6d3d1' : 'linear-gradient(135deg, #1c1917 0%, #44403c 100%)',
+            background: creatingBooking || !isAvailable ? '#d6d3d1' : 'linear-gradient(135deg, #093A3E 0%, #0c4e52 100%)',
             color: '#fff',
             cursor: creatingBooking || !isAvailable ? 'not-allowed' : 'pointer',
           }}
@@ -959,7 +959,7 @@ export default function BookingPage() {
   if (loading) return (
     <div className="min-h-screen bg-[#f7f5f2] flex items-center justify-center" style={{ fontFamily: "'Cormorant Garamond', serif" }}>
       <div className="text-center">
-        <div className="w-10 h-10 border-2 border-stone-900 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+        <div className="w-10 h-10 border-2 border-[#093A3E] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
         <p className="text-stone-400 text-sm uppercase tracking-widest" style={{ fontFamily: 'system-ui' }}>Loading…</p>
       </div>
     </div>
@@ -1148,7 +1148,7 @@ export default function BookingPage() {
                   <div key={label} className="flex items-center gap-3" style={{ fontFamily: 'system-ui' }}>
                     <span className="text-xs text-stone-500 w-28 flex-shrink-0">{label}</span>
                     <div className="flex-1 h-1 rounded-full bg-stone-200 overflow-hidden">
-                      <div className="h-full rounded-full bg-stone-900" style={{ width: `${(score / 5) * 100}%` }} />
+                      <div className="h-full rounded-full bg-[#093A3E]" style={{ width: `${(score / 5) * 100}%` }} />
                     </div>
                     <span className="text-xs font-medium text-stone-900 w-6">{score}</span>
                   </div>
@@ -1187,7 +1187,7 @@ export default function BookingPage() {
               <h2 className="text-2xl md:text-3xl text-stone-900 mb-6">Meet your host</h2>
               <div className="bg-white rounded-2xl p-6 border border-stone-100">
                 <div className="flex items-start gap-5 mb-4">
-                  <div className="w-16 h-16 rounded-full bg-stone-900 flex items-center justify-center flex-shrink-0 text-white text-xl font-light">
+                  <div className="w-16 h-16 rounded-full bg-[#093A3E] flex items-center justify-center flex-shrink-0 text-white text-xl font-light">
                     AM
                   </div>
                   <div>
@@ -1212,7 +1212,7 @@ export default function BookingPage() {
                   ))}
                 </div>
                 <button onClick={() => setShowMessageModal(true)}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-stone-900 text-white rounded-xl text-sm font-medium hover:bg-stone-800 transition-colors"
+                  className="flex items-center gap-2 px-5 py-2.5 bg-[#093A3E] text-white rounded-xl text-sm font-medium hover:bg-[#0c4e52] transition-colors"
                   style={{ fontFamily: 'system-ui' }}>
                   <MessageCircle className="w-4 h-4" />
                   Message {hostInfo.name}
@@ -1286,7 +1286,7 @@ export default function BookingPage() {
         <button
           onClick={() => setShowMobileBooking(true)}
           className="px-6 py-3 rounded-xl text-sm font-bold uppercase tracking-widest text-white transition-all"
-          style={{ fontFamily: 'system-ui', background: 'linear-gradient(135deg, #1c1917 0%, #44403c 100%)' }}
+          style={{ fontFamily: 'system-ui', background: 'linear-gradient(135deg, #093A3E 0%, #0c4e52 100%)' }}
         >
           Reserve
         </button>
