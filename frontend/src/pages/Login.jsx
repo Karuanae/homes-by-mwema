@@ -76,6 +76,14 @@ export default function Login() {
       }
     }
     
+    // Check for chat intent (from booking page message button)
+    const chatIntent = localStorage.getItem('chatIntent');
+    if (chatIntent) {
+      console.log('💬 Found chat intent, redirecting to:', chatIntent);
+      navigate(chatIntent);
+      return;
+    }
+    
     // Check for consultation intent
     const consultIntent = localStorage.getItem('consultationIntent');
     if (consultIntent) {
@@ -164,6 +172,14 @@ export default function Login() {
             console.error('Error parsing pending data:', e);
             localStorage.removeItem('pendingBookingData');
           }
+        }
+        
+        // Check for chat intent
+        const chatIntent = localStorage.getItem('chatIntent');
+        if (chatIntent) {
+          console.log('💬 Found chat intent, redirecting to:', chatIntent);
+          setTimeout(() => navigate(chatIntent), 50);
+          return;
         }
         
         // Check for consultation intent

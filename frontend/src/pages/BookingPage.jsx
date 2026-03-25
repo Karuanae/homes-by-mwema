@@ -8,7 +8,7 @@ import {
   MapPin, ChevronLeft, ChevronRight, Check, AlertCircle,
   Shield, ArrowLeft, ChevronDown, MessageCircle, User, Calendar,
   Star, Heart, Share2, X, Grid3X3, ZoomIn, Wifi, Coffee,
-  Home, Phone, Mail, Flag, ChevronUp, Camera
+  Home, Phone, Mail, Flag, ChevronUp, Camera, Send, CheckCheck
 } from 'lucide-react';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -587,45 +587,168 @@ function FAQ({ question, answer, isOpen, onToggle }) {
   );
 }
 
-// ─── Host Message Modal ───────────────────────────────────────────────────────
-function HostMessageModal({ isOpen, onClose, hostName, propertyName, onSendMessage }) {
-  const [message, setMessage] = useState('');
+// ─── Chat Drawer (same as PaymentPage concierge) ─────────────────────────────
+function ChatDrawer({ isOpen, onClose, user, propertyName }) {
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [chat, setChat] = useState(null);
+  const messagesEndRef = useRef(null);
   const [sending, setSending] = useState(false);
 
-  const handleSend = async () => {
-    if (!message.trim()) return;
+  useEffect(() => {
+    if (!isOpen || !user?.id) return;
+    const initChat = async () => {
+      setLoading(true);
+      try {
+        let chatId = localStorage.getItem('bookingChatId');
+        if (!chatId) {
+          const response = await api.chats.startChat(user.id, null, null);
+          chatId = response.data.chat.id;
+          localStorage.setItem('bookingChatId', chatId);
+        }
+        setChat({ id: chatId });
+        const messagesRes = await api.chats.getMessages(chatId);
+        setMessages(messagesRes.data || []);
+      } catch (error) {
+        console.error('Error initializing chat:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    initChat();
+  }, [isOpen, user?.id]);
+
+  useEffect(() => {
+    setTimeout(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, 100);
+  }, [messages]);
+
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!newMessage.trim() || !chat?.id || sending) return;
+    const tempId = Date.now();
+    const optimisticMessage = {
+      id: tempId, content: newMessage, sender_id: user.id,
+      sender_name: user.name || 'Guest', is_host: false,
+      timestamp: new Date().toISOString(), is_read: false, is_temp: true,
+    };
+    setMessages(prev => [...prev, optimisticMessage]);
+    setNewMessage('');
     setSending(true);
-    try { await onSendMessage(message); setMessage(''); onClose(); }
-    catch (e) { console.error(e); }
-    finally { setSending(false); }
+    try {
+      const response = await api.chats.sendMessage(chat.id, {
+        content: newMessage, sender_id: user.id,
+        sender_name: user.name || 'Guest', is_host: false,
+      });
+      setMessages(prev => prev.map(msg => msg.id === tempId ? { ...response.data, is_temp: false } : msg));
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      setMessages(prev => prev.filter(msg => msg.id !== tempId));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const formatTime = (timestamp) => {
+    if (!timestamp) return '';
+    try { return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+    catch { return ''; }
   };
 
   return (
     <AnimatePresence>
       {isOpen && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-4"
-          onClick={onClose}>
-          <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }}
-            className="bg-white rounded-2xl max-w-md w-full p-6"
-            onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="font-semibold text-stone-900">Message {hostName}</h3>
-                <p className="text-xs text-stone-400 mt-0.5">{propertyName}</p>
+        <>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50" onClick={onClose} />
+          <motion.div
+            initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="fixed bottom-0 left-0 right-0 h-[80vh] bg-white rounded-t-2xl shadow-2xl z-50 flex flex-col"
+          >
+            {/* Header */}
+            <div className="px-4 py-3 border-b border-stone-200 flex items-center justify-between bg-[#093A3E] text-white rounded-t-2xl">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-[#ED9B40] flex items-center justify-center">
+                  <MessageCircle size={16} className="text-[#093A3E]" />
+                </div>
+                <div>
+                  <h3 className="font-serif text-base">Message Ann Mwema</h3>
+                  <p className="text-[10px] text-white/60">{propertyName || 'Typically replies in minutes'}</p>
+                </div>
               </div>
-              <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-stone-100 transition-colors"><X className="w-4 h-4" /></button>
-            </div>
-            <textarea value={message} onChange={e => setMessage(e.target.value)} placeholder="Hi, I have a question about..." rows={4}
-              className="w-full p-3 border border-stone-200 rounded-xl text-sm focus:outline-none focus:border-[#093A3E] resize-none transition-colors" />
-            <div className="flex gap-3 mt-4">
-              <button onClick={onClose} className="flex-1 px-4 py-2.5 border border-stone-200 rounded-xl text-sm hover:bg-stone-50 transition-colors">Cancel</button>
-              <button onClick={handleSend} disabled={sending || !message.trim()} className="flex-1 px-4 py-2.5 bg-[#093A3E] text-white rounded-xl text-sm font-medium hover:bg-[#0c4e52] disabled:opacity-50 transition-colors">
-                {sending ? 'Sending…' : 'Send'}
+              <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                <X size={20} />
               </button>
             </div>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto p-4 bg-stone-50">
+              {loading ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="w-6 h-6 border-2 border-stone-300 border-t-[#093A3E] rounded-full animate-spin" />
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-center">
+                  <MessageCircle size={40} className="text-stone-300 mb-3" />
+                  <p className="text-stone-500 text-sm">Have a question about this property?</p>
+                  <p className="text-stone-400 text-xs mt-1">Send a message and we'll reply shortly</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {messages.map((msg) => {
+                    const isOwn = msg.sender_id === user?.id;
+                    return (
+                      <div key={msg.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[80%] ${isOwn ? 'order-2' : 'order-1'}`}>
+                          <div className={`relative px-4 py-2 rounded-2xl ${
+                            isOwn ? 'bg-[#093A3E] text-white rounded-br-none' : 'bg-white text-stone-900 rounded-bl-none shadow-sm'
+                          }`}>
+                            <p className="text-sm pr-12">{msg.content}</p>
+                            <div className={`absolute bottom-1 right-2 flex items-center gap-1 text-[10px] ${
+                              isOwn ? 'text-white/60' : 'text-stone-400'
+                            }`}>
+                              <span>{formatTime(msg.timestamp)}</span>
+                              {isOwn && (
+                                <span>
+                                  {msg.is_temp ? (
+                                    <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                  ) : msg.is_read ? (
+                                    <CheckCheck size={12} className="text-blue-400" />
+                                  ) : (
+                                    <Check size={12} />
+                                  )}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div ref={messagesEndRef} />
+                </div>
+              )}
+            </div>
+
+            {/* Input */}
+            <div className="p-4 border-t border-stone-200 bg-white">
+              <form onSubmit={handleSendMessage} className="flex items-center gap-2">
+                <input
+                  type="text" value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  placeholder="Type your message..."
+                  className="flex-1 bg-stone-50 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#093A3E]"
+                  style={{ minHeight: '44px' }}
+                />
+                <button type="submit" disabled={!newMessage.trim() || sending}
+                  className="bg-[#093A3E] text-white p-3 rounded-full hover:bg-[#0c4e52] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                  <Send size={18} />
+                </button>
+              </form>
+            </div>
           </motion.div>
-        </motion.div>
+        </>
       )}
     </AnimatePresence>
   );
@@ -792,7 +915,7 @@ function BookingSidebar({ property, checkInDate, setCheckInDate, checkOutDate, s
 export default function BookingPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
 
   const [property, setProperty] = useState(null);
   const [categories, setCategories] = useState([]);
@@ -813,7 +936,7 @@ export default function BookingPage() {
   const [availabilityMessage, setAvailabilityMessage] = useState('');
   const [showAvailabilityWarning, setShowAvailabilityWarning] = useState(false);
   const [creatingBooking, setCreatingBooking] = useState(false);
-  const [showMessageModal, setShowMessageModal] = useState(false);
+  const [showChat, setShowChat] = useState(false);
   const [openFaqIndex, setOpenFaqIndex] = useState(null);
   const [showMobileBooking, setShowMobileBooking] = useState(false);
 
@@ -846,6 +969,17 @@ export default function BookingPage() {
   };
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
+
+  // Auto-open chat if returning from login with chatIntent
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      const chatIntent = localStorage.getItem('chatIntent');
+      if (chatIntent) {
+        localStorage.removeItem('chatIntent');
+        setShowChat(true);
+      }
+    }
+  }, [isAuthenticated, user]);
 
   useEffect(() => {
     if (!id) return;
@@ -996,14 +1130,15 @@ export default function BookingPage() {
       {/* Toast */}
       <Toast message={toast.message} isVisible={toast.visible} />
 
-      {/* Host Message Modal */}
-      <HostMessageModal
-        isOpen={showMessageModal}
-        onClose={() => setShowMessageModal(false)}
-        hostName={hostInfo.name}
-        propertyName={property.title}
-        onSendMessage={async (msg) => { console.log('Message:', msg); showToast('Message sent!'); }}
-      />
+      {/* Chat Drawer */}
+      {isAuthenticated && (
+        <ChatDrawer
+          isOpen={showChat}
+          onClose={() => setShowChat(false)}
+          user={user}
+          propertyName={property.title}
+        />
+      )}
 
       {/* Mobile booking sheet */}
       <AnimatePresence>
@@ -1211,7 +1346,14 @@ export default function BookingPage() {
                     <span key={l} className="text-xs px-3 py-1 bg-stone-100 rounded-full text-stone-600" style={{ fontFamily: 'system-ui' }}>{l}</span>
                   ))}
                 </div>
-                <button onClick={() => setShowMessageModal(true)}
+                <button onClick={() => {
+                  if (!isAuthenticated) {
+                    localStorage.setItem('chatIntent', `/booking/${id}`);
+                    navigate('/login', { state: { from: `/booking/${id}` } });
+                    return;
+                  }
+                  setShowChat(true);
+                }}
                   className="flex items-center gap-2 px-5 py-2.5 bg-[#093A3E] text-white rounded-xl text-sm font-medium hover:bg-[#0c4e52] transition-colors"
                   style={{ fontFamily: 'system-ui' }}>
                   <MessageCircle className="w-4 h-4" />

@@ -50,6 +50,14 @@ export default function Register() {
   const redirectAfterAuth = (userData) => {
     console.log('🔄 Redirecting after auth:', userData);
     
+    // Check for chat intent (from booking page message button)
+    const chatIntent = localStorage.getItem('chatIntent');
+    if (chatIntent) {
+      console.log('💬 Found chat intent, redirecting to:', chatIntent);
+      setTimeout(() => navigate(chatIntent), 1200);
+      return;
+    }
+    
     // Check for consultation intent
     const consultIntent = localStorage.getItem('consultationIntent');
     if (consultIntent) {
@@ -137,6 +145,14 @@ export default function Register() {
       
       if (refreshed) {
         console.log('✅ AuthContext refreshed, redirecting...');
+        
+        // Check for chat intent
+        const chatIntent = localStorage.getItem('chatIntent');
+        if (chatIntent) {
+          console.log('💬 Found chat intent, redirecting to:', chatIntent);
+          setTimeout(() => navigate(chatIntent), 50);
+          return;
+        }
         
         // Check for consultation intent
         const consultIntent = localStorage.getItem('consultationIntent');
