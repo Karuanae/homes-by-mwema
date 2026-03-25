@@ -7,7 +7,7 @@ import {
   FaEye, FaSave, FaWifi,
   FaParking, FaSwimmingPool, FaDumbbell, FaUtensils,
   FaTv, FaSnowflake, FaFire, FaCoffee, FaLock,
-  FaList, FaCheck, FaImage, FaArrowLeft, FaThLarge
+  FaList, FaCheck, FaImage, FaArrowLeft, FaThLarge  // <-- FaCheck is here
 } from "react-icons/fa";
 import { toast, Toaster } from 'react-hot-toast';
 import api, { API_BASE_URL } from "../services/api";
@@ -769,44 +769,166 @@ const PropertyFormModal = ({
   );
 };
 
-// StepBasic - UPDATED with LocationAutocomplete
-const StepBasic = ({ form, setForm, onLocationSelect }) => (
-  <div className="space-y-5">
-    <div className="space-y-1.5">
-      <label className="f-body text-[10px] uppercase tracking-widest text-stone-400">Property Name *</label>
-      <input type="text" value={form.name} placeholder="e.g. The Kensington Suite" onChange={e=>setForm(p=>({...p,name:e.target.value}))} className="input-base"/>
-    </div>
-    <div className="grid grid-cols-2 gap-4">
+// StepBasic - UPDATED with manual coordinate entry toggle
+const StepBasic = ({ form, setForm, onLocationSelect }) => {
+  const [useManualCoordinates, setUseManualCoordinates] = useState(false);
+  const [tempLat, setTempLat] = useState(form.latitude || '');
+  const [tempLng, setTempLng] = useState(form.longitude || '');
+
+  // Handle manual coordinate submission
+  const handleManualCoordinates = () => {
+    const lat = parseFloat(tempLat);
+    const lng = parseFloat(tempLng);
+    
+    if (isNaN(lat) || isNaN(lng)) {
+      toast.error("Please enter valid latitude and longitude numbers");
+      return;
+    }
+    
+    if (lat < -90 || lat > 90) {
+      toast.error("Latitude must be between -90 and 90");
+      return;
+    }
+    
+    if (lng < -180 || lng > 180) {
+      toast.error("Longitude must be between -180 and 180");
+      return;
+    }
+    
+    setForm(prev => ({
+      ...prev,
+      latitude: lat,
+      longitude: lng,
+      formatted_address: prev.location || "Manual location",
+    }));
+    
+    toast.success("Coordinates set manually!");
+    setUseManualCoordinates(false);
+  };
+
+  return (
+    <div className="space-y-5">
       <div className="space-y-1.5">
-        <label className="f-body text-[10px] uppercase tracking-widest text-stone-400">Type</label>
-        <select value={form.type} onChange={e=>setForm(p=>({...p,type:e.target.value}))} className="input-base">
-          {PROPERTY_TYPES.map(t=><option key={t} value={t}>{t.charAt(0).toUpperCase()+t.slice(1)}</option>)}
-        </select>
+        <label className="f-body text-[10px] uppercase tracking-widest text-stone-400">Property Name *</label>
+        <input 
+          type="text" 
+          value={form.name} 
+          placeholder="e.g. The Kensington Suite" 
+          onChange={e => setForm(p => ({ ...p, name: e.target.value }))} 
+          className="input-base"
+        />
       </div>
+      
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+          <label className="f-body text-[10px] uppercase tracking-widest text-stone-400">Type</label>
+          <select value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))} className="input-base">
+            {PROPERTY_TYPES.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <label className="f-body text-[10px] uppercase tracking-widest text-stone-400">Price / Night (Ksh) *</label>
+          <input 
+            type="number" 
+            value={form.price} 
+            placeholder="0" 
+            onChange={e => setForm(p => ({ ...p, price: e.target.value }))} 
+            className="input-base"
+          />
+        </div>
+      </div>
+      
       <div className="space-y-1.5">
-        <label className="f-body text-[10px] uppercase tracking-widest text-stone-400">Price / Night (Ksh) *</label>
-        <input type="number" value={form.price} placeholder="0" onChange={e=>setForm(p=>({...p,price:e.target.value}))} className="input-base"/>
+        <div className="flex items-center justify-between">
+          <label className="f-body text-[10px] uppercase tracking-widest text-stone-400">Location *</label>
+          <button
+            type="button"
+            onClick={() => setUseManualCoordinates(!useManualCoordinates)}
+            className="text-[10px] text-stone-500 hover:text-stone-900 underline transition-colors"
+          >
+            {useManualCoordinates ? "← Use Google Search" : "Can't find location? Enter coordinates →"}
+          </button>
+        </div>
+        
+        {!useManualCoordinates ? (
+          <>
+            <LocationAutocomplete
+              onSelect={onLocationSelect}
+              initialValue={form.location}
+              placeholder="Search for property location..."
+            />
+            {form.latitude && form.longitude && (
+              <p className="text-[10px] text-green-600 mt-1 flex items-center gap-1">
+                <FaCheck size={10} /> Coordinates set: {Number(form.latitude).toFixed(6)}, {Number(form.longitude).toFixed(6)}
+              </p>
+            )}
+          </>
+        ) : (
+          <div className="space-y-3 p-4 bg-stone-50 rounded-xl border border-stone-200">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] uppercase tracking-widest text-stone-400 block mb-1">Latitude</label>
+                <input
+                  type="text"
+                  value={tempLat}
+                  onChange={(e) => setTempLat(e.target.value)}
+                  placeholder="e.g., -1.286389"
+                  className="input-base text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] uppercase tracking-widest text-stone-400 block mb-1">Longitude</label>
+                <input
+                  type="text"
+                  value={tempLng}
+                  onChange={(e) => setTempLng(e.target.value)}
+                  placeholder="e.g., 36.817223"
+                  className="input-base text-sm"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <label className="text-[10px] uppercase tracking-widest text-stone-400 block mb-1">Display Address</label>
+              <input
+                type="text"
+                value={form.location}
+                onChange={(e) => setForm(p => ({ ...p, location: e.target.value }))}
+                placeholder="e.g., Small Village, Kenya"
+                className="input-base text-sm"
+              />
+            </div>
+            
+            <button
+              type="button"
+              onClick={handleManualCoordinates}
+              className="w-full py-2 bg-[#093A3E] text-white rounded-lg text-sm font-medium hover:bg-[#0a4a52] transition-colors"
+            >
+              Set Coordinates
+            </button>
+            
+            {form.latitude && form.longitude && (
+              <p className="text-[10px] text-green-600 text-center mt-1">
+                ✓ Current: {Number(form.latitude).toFixed(6)}, {Number(form.longitude).toFixed(6)}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+      
+      <div className="space-y-1.5">
+        <label className="f-body text-[10px] uppercase tracking-widest text-stone-400">Description</label>
+        <textarea 
+          value={form.description} 
+          rows={4} 
+          placeholder="Tell guests what makes this place special…" 
+          onChange={e => setForm(p => ({ ...p, description: e.target.value }))} 
+          className="input-base resize-none"
+        />
       </div>
     </div>
-    <div className="space-y-1.5">
-      <label className="f-body text-[10px] uppercase tracking-widest text-stone-400">Location *</label>
-      <LocationAutocomplete
-        onSelect={onLocationSelect}
-        initialValue={form.location}
-        placeholder="Search for property location..."
-      />
-      {form.latitude && form.longitude && (
-        <p className="text-[10px] text-green-600 mt-1 flex items-center gap-1">
-          <FaCheck size={10} /> Coordinates set: {form.latitude.toFixed(4)}, {form.longitude.toFixed(4)}
-        </p>
-      )}
-    </div>
-    <div className="space-y-1.5">
-      <label className="f-body text-[10px] uppercase tracking-widest text-stone-400">Description</label>
-      <textarea value={form.description} rows={4} placeholder="Tell guests what makes this place special…" onChange={e=>setForm(p=>({...p,description:e.target.value}))} className="input-base resize-none"/>
-    </div>
-  </div>
-);
+  );
+};
 
 const StepDetails = ({ form, setForm }) => (
   <div className="space-y-5">
