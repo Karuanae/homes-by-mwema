@@ -23,6 +23,7 @@ export default function MyBookings() {
   const [showFilters, setShowFilters] = useState(false);
   const [filterStatus, setFilterStatus] = useState("all");
   const [selectedBooking, setSelectedBooking] = useState(null);
+  const [cancelBooking, setCancelBooking] = useState(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelCalculation, setCancelCalculation] = useState(null);
@@ -145,7 +146,7 @@ export default function MyBookings() {
 
   const handleCancelClick = (booking, e) => {
     e.stopPropagation();
-    setSelectedBooking(booking);
+    setCancelBooking(booking);
     
     const today = new Date();
     const checkIn = new Date(booking.checkIn);
@@ -170,16 +171,18 @@ export default function MyBookings() {
   };
 
   const confirmCancellation = async () => {
-    if (!selectedBooking) return;
+    if (!cancelBooking) return;
     setCancelling(true);
     try {
-      const response = await api.bookings.cancel(selectedBooking.id);
+      const response = await api.bookings.cancel(cancelBooking.id);
       alert(response.data.message || 'Booking cancelled successfully');
       window.location.reload();
     } catch (error) {
       alert(error.response?.data?.error || 'Failed to cancel booking');
     } finally {
       setCancelling(false);
+      setShowCancelModal(false);
+      setCancelBooking(null);
     }
   };
 
@@ -543,13 +546,13 @@ export default function MyBookings() {
 
       {/* Cancel Modal */}
       <AnimatePresence>
-        {showCancelModal && selectedBooking && (
+        {showCancelModal && cancelBooking && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-            onClick={() => setShowCancelModal(false)}
+            onClick={() => { setShowCancelModal(false); setCancelBooking(null); }}
           >
             <motion.div
               initial={{ scale: 0.95, y: 20 }}
@@ -563,28 +566,28 @@ export default function MyBookings() {
                   <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
                     <FaExclamationTriangle className="text-red-600 text-xl" />
                   </div>
-                  <button onClick={() => setShowCancelModal(false)} className="p-2 hover:bg-stone-100 rounded-full">
+                  <button onClick={() => { setShowCancelModal(false); setCancelBooking(null); }} className="p-2 hover:bg-stone-100 rounded-full">
                     <FaTimes />
                   </button>
                 </div>
 
                 <h3 className="font-serif text-xl mb-2">Cancel Booking?</h3>
                 <p className="text-stone-500 text-sm mb-6">
-                  Are you sure you want to cancel your stay at <span className="font-medium text-stone-900">{selectedBooking?.propertyName}</span>?
+                  Are you sure you want to cancel your stay at <span className="font-medium text-stone-900">{cancelBooking?.propertyName}</span>?
                 </p>
 
                 <div className="bg-stone-50 p-4 rounded-lg mb-6 space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-stone-600">Check-in</span>
-                    <span className="font-medium">{formatDate(selectedBooking?.checkIn)}</span>
+                    <span className="font-medium">{formatDate(cancelBooking?.checkIn)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-stone-600">Check-out</span>
-                    <span className="font-medium">{formatDate(selectedBooking?.checkOut)}</span>
+                    <span className="font-medium">{formatDate(cancelBooking?.checkOut)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-stone-600">Total paid</span>
-                    <span className="font-medium">{formatCurrency(selectedBooking?.totalAmount)}</span>
+                    <span className="font-medium">{formatCurrency(cancelBooking?.totalAmount)}</span>
                   </div>
                 </div>
 
@@ -602,7 +605,7 @@ export default function MyBookings() {
 
                 <div className="flex gap-3">
                   <button
-                    onClick={() => setShowCancelModal(false)}
+                    onClick={() => { setShowCancelModal(false); setCancelBooking(null); }}
                     className="flex-1 px-4 py-3 border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors text-sm"
                   >
                     Keep Booking
@@ -623,7 +626,7 @@ export default function MyBookings() {
 
       {/* Details Modal */}
       <AnimatePresence>
-        {selectedBooking && !showCancelModal && (
+        {selectedBooking && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
