@@ -362,6 +362,55 @@ class EmailService:
             html    = _base("Consultation Request Update", body),
         )
 
+    def send_welcome_back(self, user, popular_properties=None) -> Dict[str, Any]:
+        """
+        Send a welcome-back email when a user logs in.
+        popular_properties: list of dicts with keys: name, location, price, id
+        """
+        name = user.name or "there"
+        props = popular_properties or []
+
+        # Build property cards
+        if props:
+            prop_rows = ""
+            for p in props[:3]:
+                prop_rows += (
+                    f"<tr><td style='padding:10px 0;border-bottom:1px solid #f0ece6'>"
+                    f"<strong style='font-size:15px'>{p['name']}</strong><br>"
+                    f"<span style='font-size:13px;color:#78716c'>{p['location']}</span><br>"
+                    f"<span style='font-size:13px;color:#093A3E;font-weight:600'>KES {float(p['price']):,.0f} / night</span>"
+                    f"</td></tr>"
+                )
+            properties_block = (
+                f"<h2 style='margin-top:28px'>Most popular properties</h2>"
+                f"<table width='100%' cellspacing='0' cellpadding='0'>"
+                f"{prop_rows}"
+                f"</table>"
+            )
+        else:
+            properties_block = ""
+
+        body = (
+            f"<h2>Welcome back, {name}!</h2>"
+            f"<p>We're glad to see you again at Homes by Mwema. "
+            f"Whether you're planning your next getaway or just browsing, "
+            f"we have some beautiful properties waiting for you.</p>"
+            + properties_block
+            + f"<div style='text-align:center;margin:28px 0'>"
+            f"<a href='https://homesbymwema.com/properties' class='btn'>Browse All Properties</a>"
+            f"</div>"
+            f"<p>Have questions? Reach out to us at "
+            f"<a href='mailto:info@homesbymwema.com'>info@homesbymwema.com</a> "
+            f"— we're always happy to help.</p>"
+            f"<p>Warm regards,<br><strong>The Homes by Mwema Team</strong></p>"
+        )
+
+        return self._send(
+            to      = user.email,
+            subject = "Welcome Back — Homes by Mwema",
+            html    = _base("Welcome Back", body),
+        )
+
 
 # ─── singleton ──────────────────────────────────────────────────────────────────
 # Initialised without a mail instance here.

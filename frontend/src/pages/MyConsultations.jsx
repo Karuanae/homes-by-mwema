@@ -410,7 +410,7 @@ export default function MyConsultations() {
             <p className="text-stone-400 text-sm">Track and manage your consultation requests</p>
           </div>
           <button
-            onClick={() => navigate('/consultation/new')}
+            onClick={() => navigate('/dashboard?tab=new-consultation')}
             className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 bg-[#1C1917] text-white text-[11px] uppercase tracking-widest hover:bg-stone-800 active:scale-95 transition-all rounded-xl"
           >
             <FaPlus size={10} />
@@ -476,7 +476,7 @@ export default function MyConsultations() {
             </p>
             <p className="text-[#C1A173] font-semibold text-sm mb-6">KSh 20,000 / session</p>
             <button
-              onClick={() => navigate('/consultation/new')}
+              onClick={() => navigate('/dashboard?tab=new-consultation')}
               className="px-6 py-3 bg-[#1C1917] text-white text-[11px] uppercase tracking-widest rounded-xl hover:bg-stone-800 transition-colors"
             >
               Book a Consultation
@@ -516,7 +516,7 @@ export default function MyConsultations() {
         {consultations.length > 0 && (
           <div className="mt-6 sm:hidden">
             <button
-              onClick={() => navigate('/consultation/new')}
+              onClick={() => navigate('/dashboard?tab=new-consultation')}
               className="w-full py-4 bg-[#1C1917] text-white text-[11px] uppercase tracking-widest rounded-xl hover:bg-stone-800 active:scale-95 transition-all"
             >
               + Book New Consultation

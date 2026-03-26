@@ -139,7 +139,7 @@ export default function NewConsultation() {
       });
 
       setSuccess(true);
-      setTimeout(() => navigate('/my-consultations'), 2200);
+      setTimeout(() => navigate('/dashboard?tab=consultations'), 2200);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to submit. Please try again.');
     } finally {

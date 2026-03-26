@@ -1,12 +1,13 @@
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
-from models import db, User, PasswordResetToken
+from models import db, User, PasswordResetToken, Property
 from werkzeug.exceptions import BadRequest
 from datetime import datetime, timedelta
 import re
 import logging
 import secrets
 import os
+from views.email_service import email_service
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -177,7 +178,24 @@ def login():
             'avatar_url': user.avatar_url,
             'created_at': user.created_at.isoformat() if user.created_at else None
         }
-        
+
+        # Send welcome-back email with popular properties
+        try:
+            popular = (
+                Property.query
+                .filter_by(status='active')
+                .order_by(Property.bookings_count.desc())
+                .limit(3)
+                .all()
+            )
+            props = [
+                {'id': p.id, 'name': p.name, 'location': p.location, 'price': p.price}
+                for p in popular
+            ]
+            email_service.send_welcome_back(user, popular_properties=props)
+        except Exception as mail_err:
+            logger.warning(f"Welcome-back email failed for {email}: {mail_err}")
+
         return jsonify({
             'message': 'Login successful',
             'user': user_data,

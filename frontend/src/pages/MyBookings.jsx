@@ -51,8 +51,6 @@ export default function MyBookings() {
           guests: booking.guests || { adults: 1, children: 0 },
           totalAmount: booking.total_amount || booking.totalAmount || 0,
           baseAmount: booking.base_amount || booking.baseAmount || 0,
-          cleaningFee: booking.cleaning_fee || booking.cleaningFee || 0,
-          serviceFee: booking.service_fee || booking.serviceFee || 0,
           pendingAmount: booking.pending_amount || booking.pendingAmount || 0,
           paidAmount: (booking.total_amount || 0) - (booking.pending_amount || 0),
           status: booking.status || 'pending',
@@ -696,14 +694,6 @@ export default function MyBookings() {
                       <span className="text-stone-600">Base amount ({selectedBooking.nights} nights)</span>
                       <span>{formatCurrency(selectedBooking.baseAmount)}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-stone-600">Cleaning fee</span>
-                      <span>{formatCurrency(selectedBooking.cleaningFee)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-stone-600">Service fee</span>
-                      <span>{formatCurrency(selectedBooking.serviceFee)}</span>
-                    </div>
                     <div className="flex justify-between pt-2 border-t font-bold">
                       <span>Total</span>
                       <span>{formatCurrency(selectedBooking.totalAmount)}</span>
@@ -739,7 +729,7 @@ export default function MyBookings() {
         )}
       </AnimatePresence>
 
-      {/* Concierge Section */}
+      {/* Chat Section */}
       <div className="max-w-7xl mx-auto px-6 mt-12">
         <div className="bg-gradient-to-r from-[#093A3E] to-[#0a4a52] text-white rounded-xl p-6 md:p-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
@@ -750,7 +740,7 @@ export default function MyBookings() {
               <div>
                 <h3 className="font-serif text-xl md:text-2xl">Need assistance with your stay?</h3>
                 <p className="text-white/80 text-sm mt-1">
-                  Our concierge team is here 24/7 to help with special requests or questions
+                  Our chat support team is here 24/7 to help with special requests or questions
                 </p>
               </div>
             </div>
@@ -758,7 +748,7 @@ export default function MyBookings() {
               to="/contact"
               className="px-6 py-2.5 bg-[#ED9B40] text-[#093A3E] rounded-lg hover:bg-white transition-colors font-medium text-sm"
             >
-              Contact Concierge
+              Chat With Us
             </Link>
           </div>
         </div>

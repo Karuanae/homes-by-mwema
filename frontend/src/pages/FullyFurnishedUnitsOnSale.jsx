@@ -246,7 +246,7 @@ const FullyFurnishedUnitsOnSale = () => {
         { icon: FaParking, name: "2 Parking Slots" },
         { icon: MdOutlineBalcony, name: "Private Terrace" },
         { icon: FaWifi, name: "Smart Home Ready" },
-        { icon: MdOutlineSecurity, name: "Concierge Service" }
+        { icon: MdOutlineSecurity, name: "Chat Support" }
       ],
       furnishing: [
         "Contemporary African art collection",
@@ -470,7 +470,7 @@ const FullyFurnishedUnitsOnSale = () => {
               Discover Nairobi's finest collection of turnkey properties. Each home comes complete with premium furnishings, ready for you to move in or start generating rental income immediately.
             </p>
             <div className="flex flex-wrap gap-4">
-              <Link to="/consultation/new" className="px-8 py-4 bg-[#ED9B40] text-[#093A3E] font-bold uppercase tracking-widest text-xs hover:bg-white transition-colors">
+              <Link to="/dashboard?tab=new-consultation" className="px-8 py-4 bg-[#ED9B40] text-[#093A3E] font-bold uppercase tracking-widest text-xs hover:bg-white transition-colors">
                 Schedule a Viewing
               </Link>
               <button 
@@ -832,7 +832,7 @@ const FullyFurnishedUnitsOnSale = () => {
           </p>
           <div className="flex flex-wrap gap-4 justify-center">
             <Link
-              to="/consultation/new"
+              to="/dashboard?tab=new-consultation"
               className="inline-flex items-center gap-2 px-8 py-4 bg-[#ED9B40] text-[#093A3E] font-bold uppercase tracking-widest text-xs hover:bg-white transition-colors"
             >
               Schedule a Viewing <FaArrowRight />

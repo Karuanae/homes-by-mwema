@@ -27,13 +27,7 @@ const PaymentSuccess          = lazy(() => import("./pages/PaymentSuccess"));
 const PaymentCancel           = lazy(() => import("./pages/PaymentCancel"));
 
 // User dashboard
-const UserLayout              = lazy(() => import("./components/UserLayout"));
-const MyBookings              = lazy(() => import("./pages/MyBookings"));
-const Chat                    = lazy(() => import("./pages/Chat"));
-const MyConsultations         = lazy(() => import("./pages/MyConsultations"));
-const NewConsultation         = lazy(() => import("./pages/NewConsultation"));
-const ProfileSettings         = lazy(() => import("./pages/ProfileSettings"));
-const SavedProperties         = lazy(() => import("./pages/SavedProperties"));
+const UserDashboard           = lazy(() => import("./pages/UserDashboard"));
 
 // Admin
 const AdminDashboard          = lazy(() => import("./pages/AdminDashboard"));
@@ -194,51 +188,9 @@ function AppContent() {
         } />
 
         {/* ── User dashboard ── */}
-        <Route path="/my-bookings" element={
+        <Route path="/dashboard" element={
           <ProtectedRoute>
-            <Page>
-              <UserLayout><MyBookings /></UserLayout>
-            </Page>
-          </ProtectedRoute>
-        } />
-
-        <Route path="/chat" element={
-          <ProtectedRoute>
-            <Page>
-              <UserLayout><Chat /></UserLayout>
-            </Page>
-          </ProtectedRoute>
-        } />
-
-        <Route path="/consultation/new" element={
-          <ProtectedRoute>
-            <Page>
-              <UserLayout><NewConsultation /></UserLayout>
-            </Page>
-          </ProtectedRoute>
-        } />
-
-        <Route path="/my-consultations" element={
-          <ProtectedRoute>
-            <Page>
-              <UserLayout><MyConsultations /></UserLayout>
-            </Page>
-          </ProtectedRoute>
-        } />
-
-        <Route path="/profile" element={
-          <ProtectedRoute>
-            <Page>
-              <UserLayout><ProfileSettings /></UserLayout>
-            </Page>
-          </ProtectedRoute>
-        } />
-
-        <Route path="/saved" element={
-          <ProtectedRoute>
-            <Page>
-              <UserLayout><SavedProperties /></UserLayout>
-            </Page>
+            <Page><UserDashboard /></Page>
           </ProtectedRoute>
         } />
 

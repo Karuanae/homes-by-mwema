@@ -585,8 +585,6 @@ const AdminBookingsTab = () => {
                   <div className="space-y-2 text-sm">
                     {[
                       [`Base (${selectedBooking.nights} nights)`, selectedBooking.base_amount],
-                      ["Cleaning fee", selectedBooking.cleaning_fee],
-                      ["Service fee",  selectedBooking.service_fee],
                     ].map(([lbl, val]) => (
                       <div key={lbl} className="flex justify-between text-stone-600">
                         <span>{lbl}</span><span>{fmt(val)}</span>

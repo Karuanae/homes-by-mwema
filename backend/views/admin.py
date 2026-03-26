@@ -793,10 +793,7 @@ def admin_get_revenue():
     if month: cancel_q = cancel_q.filter(extract('month', Booking.cancelled_at) == month)
     total_cancellation_fees = float(cancel_q.scalar() or 0)
 
-    service_q = db.session.query(func.sum(Booking.service_fee)).filter(Booking.payment_status == 'completed')
-    if year:  service_q = service_q.filter(extract('year',  Booking.created_at) == year)
-    if month: service_q = service_q.filter(extract('month', Booking.created_at) == month)
-    total_service_fees = float(service_q.scalar() or 0)
+    total_service_fees = 0
 
     by_method = {}
     for p in all_completed:
@@ -1023,8 +1020,8 @@ def admin_get_bookings():
             'guests': booking.guests or {'adults': 1, 'children': 0, 'infants': 0},
             'total_amount': float(booking.total_amount) if booking.total_amount else 0,
             'base_amount': float(booking.base_amount) if booking.base_amount else 0,
-            'cleaning_fee': float(booking.cleaning_fee) if booking.cleaning_fee else 0,
-            'service_fee': float(booking.service_fee) if booking.service_fee else 0,
+            'cleaning_fee': 0,
+            'service_fee': 0,
             'pending_amount': float(booking.total_amount) - total_paid if booking.total_amount else 0,
             'paid_amount': total_paid,
             'payment_method': booking.payment_method,

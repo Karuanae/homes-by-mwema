@@ -37,7 +37,7 @@ export default function Login() {
       const consultIntent = localStorage.getItem('consultationIntent');
       if (consultIntent) {
         localStorage.removeItem('consultationIntent');
-        navigate('/my-consultations');
+        navigate('/dashboard?tab=consultations');
         return;
       }
       
@@ -95,8 +95,8 @@ export default function Login() {
     const consultIntent = localStorage.getItem('consultationIntent');
     if (consultIntent) {
       localStorage.removeItem('consultationIntent');
-      console.log('📅 Found consultation intent, redirecting to my-consultations');
-      navigate('/my-consultations');
+      console.log('📅 Found consultation intent, redirecting to dashboard consultations');
+      navigate('/dashboard?tab=consultations');
       return;
     }
     
@@ -200,8 +200,8 @@ export default function Login() {
         const consultIntent = localStorage.getItem('consultationIntent');
         if (consultIntent) {
           localStorage.removeItem('consultationIntent');
-          console.log('📅 Found consultation intent, redirecting to my-consultations');
-          setTimeout(() => navigate('/my-consultations'), 50);
+          console.log('📅 Found consultation intent, redirecting to dashboard consultations');
+          setTimeout(() => navigate('/dashboard?tab=consultations'), 50);
           return;
         }
         

@@ -32,7 +32,7 @@ export default function PaymentSuccess() {
     
     // Auto redirect to bookings after 10 seconds
     const timer = setTimeout(() => {
-      navigate('/my-bookings');
+      navigate('/dashboard?tab=bookings');
     }, 10000);
     
     return () => clearTimeout(timer);
@@ -262,7 +262,7 @@ export default function PaymentSuccess() {
                   <Phone className="w-3 h-3 text-stone-600" />
                 </div>
                 <p className="text-xs text-stone-600">
-                  Our concierge is available 24/7 for any questions
+                  Our chat support is available 24/7 for any questions
                 </p>
               </div>
             </div>
@@ -271,7 +271,7 @@ export default function PaymentSuccess() {
           {/* Action Buttons */}
           <div className="p-6 bg-stone-50 border-t border-stone-100 flex flex-col sm:flex-row gap-3">
             <Link
-              to="/my-bookings"
+              to="/dashboard?tab=bookings"
               className="flex-1 bg-stone-900 text-white py-3 rounded-lg text-xs uppercase tracking-widest font-medium hover:bg-stone-800 transition-colors text-center"
             >
               View My Bookings
@@ -297,7 +297,7 @@ export default function PaymentSuccess() {
           <p className="text-xs text-stone-500">
             Need assistance?{' '}
             <button className="text-stone-900 underline font-medium">
-              Contact Concierge
+              Chat With Us
             </button>
           </p>
         </div>

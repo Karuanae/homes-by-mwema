@@ -187,9 +187,9 @@ const Navbar = () => {
     if (!isAuthenticated) {
       // Save consultation intent
       localStorage.setItem('consultationIntent', 'true');
-      navigate('/login?redirect=/my-consultations');
+      navigate('/login?redirect=/dashboard?tab=consultations');
     } else {
-      navigate('/my-consultations');
+      navigate('/dashboard?tab=consultations');
     }
   };
 
@@ -740,7 +740,7 @@ const Navbar = () => {
                           <>
                             {/* My Dashboard - replaces individual account links */}
                             <Link
-                              to="/my-bookings"
+                              to="/dashboard"
                               onClick={() => setIsMenuOpen(false)}
                               className="w-full flex items-center justify-between px-6 py-2 text-[9px] uppercase tracking-[0.18em] font-bold text-white bg-[#093A3E] hover:bg-[#062a2d] transition-colors mx-0 mb-2"
                             >

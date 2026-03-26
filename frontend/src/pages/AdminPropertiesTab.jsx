@@ -371,7 +371,7 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
         <div className="w-14 h-14 rounded-2xl bg-[#093A3E] flex items-center justify-center shadow-lg">
           <FaSpinner className="animate-spin text-white text-2xl" />
         </div>
-        <p className="text-sm font-medium text-stone-400 tracking-widest uppercase" style={{fontFamily:"'DM Sans',system-ui"}}>Loading properties</p>
+        <p className="text-sm font-medium text-stone-400 tracking-widest uppercase" style={{fontFamily:"system-ui,-apple-system,sans-serif"}}>Loading properties</p>
       </div>
     </div>
   );
@@ -379,20 +379,20 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
   return (
     <div className="min-h-screen bg-[#F5F4F0]">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=DM+Sans:wght@300;400;500&display=swap');
-        .f-display{font-family:'Cormorant Garamond',Georgia,serif}
-        .f-body{font-family:'DM Sans',system-ui,sans-serif}
+        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap');
+        .f-display{font-family:'Cormorant Garamond',serif}
+        .f-body{font-family:system-ui,-apple-system,sans-serif}
         .scrollbar-hide::-webkit-scrollbar{display:none}
         .scrollbar-hide{-ms-overflow-style:none;scrollbar-width:none}
         .prop-img{transition:transform .6s cubic-bezier(.25,.46,.45,.94)}
         .prop-card:hover .prop-img{transform:scale(1.07)}
-        .input-base{width:100%;padding:.625rem 1rem;border:1.5px solid #E8E6E1;border-radius:.75rem;font-family:'DM Sans',system-ui;font-size:.875rem;outline:none;transition:border-color .2s;background:#fff;color:#1C2321}
+        .input-base{width:100%;padding:.625rem 1rem;border:1.5px solid #E8E6E1;border-radius:.75rem;font-family:system-ui,-apple-system,sans-serif;font-size:.875rem;outline:none;transition:border-color .2s;background:#fff;color:#1C2321}
         .input-base:focus{border-color:#093A3E}
       `}</style>
 
       <Toaster position="top-right" toastOptions={{
         duration:4000,
-        style:{fontFamily:"'DM Sans',system-ui",fontSize:14,borderRadius:12,boxShadow:"0 8px 30px rgba(0,0,0,.12)",border:"1px solid rgba(0,0,0,.06)"},
+        style:{fontFamily:"system-ui,-apple-system,sans-serif",fontSize:14,borderRadius:12,boxShadow:"0 8px 30px rgba(0,0,0,.12)",border:"1px solid rgba(0,0,0,.06)"},
         success:{style:{borderLeft:"3px solid #10b981"}},
         error:{style:{borderLeft:"3px solid #ef4444"}},
         loading:{style:{borderLeft:"3px solid #f59e0b"}},
@@ -481,7 +481,7 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
                     </div>
                   </div>
                   <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-sm px-2.5 py-1 rounded-lg shadow-sm">
-                    <span className="f-display text-sm font-semibold text-[#093A3E]">Ksh {p.price?.toLocaleString()}</span>
+                    <span className="f-body text-sm font-semibold text-[#093A3E]">Ksh {p.price?.toLocaleString()}</span>
                     <span className="f-body text-[10px] text-stone-400">/night</span>
                   </div>
                   <div className={`absolute top-3 right-3 flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] f-body font-medium ${p.status==="active"?"bg-emerald-500/90 text-white":"bg-stone-500/80 text-white"}`}>
@@ -522,13 +522,13 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
                     </div>
                   </div>
                   <p className="hidden md:block f-body text-sm text-stone-500 self-center">{p.location}</p>
-                  <p className="hidden md:block f-display text-base text-[#093A3E] self-center">Ksh {p.price?.toLocaleString()}</p>
+                  <p className="hidden md:block f-body text-base font-semibold text-[#093A3E] self-center">Ksh {p.price?.toLocaleString()}</p>
                   <div className="hidden md:flex items-center gap-3 text-xs f-body text-stone-500 self-center">
                     <span><FaBed className="inline mr-1 text-stone-300"/>{p.rooms}</span>
                     <span><FaBath className="inline mr-1 text-stone-300"/>{p.bathrooms}</span>
                   </div>
                   <div className="flex items-center justify-between md:hidden text-xs f-body text-stone-500">
-                    <span className="f-display text-sm text-[#093A3E]">Ksh {p.price?.toLocaleString()}</span>
+                    <span className="f-body text-sm font-semibold text-[#093A3E]">Ksh {p.price?.toLocaleString()}</span>
                     <span className="flex gap-3">
                       <span><FaBed className="inline mr-1 text-stone-300"/>{p.rooms}</span>
                       <span><FaBath className="inline mr-1 text-stone-300"/>{p.bathrooms}</span>
@@ -617,7 +617,7 @@ const AdminPropertiesTab = ({ onRefreshStats }) => {
                     <p className="f-body text-sm text-white/70 flex items-center gap-1 mt-1"><FaMapMarkerAlt className="text-[#ED9B40]"/>{selectedProp.location}</p>
                   </div>
                   <div className="text-right">
-                    <p className="f-display text-2xl text-white">Ksh {selectedProp.price?.toLocaleString()}</p>
+                    <p className="f-body text-2xl font-semibold text-white">Ksh {selectedProp.price?.toLocaleString()}</p>
                     <p className="f-body text-xs text-white/60">per night</p>
                   </div>
                 </div>

@@ -31,7 +31,7 @@ export default function Register() {
       const consultIntent = localStorage.getItem('consultationIntent');
       if (consultIntent) {
         localStorage.removeItem('consultationIntent');
-        navigate('/my-consultations');
+        navigate('/dashboard?tab=consultations');
         return;
       }
       
@@ -69,7 +69,7 @@ export default function Register() {
     const consultIntent = localStorage.getItem('consultationIntent');
     if (consultIntent) {
       localStorage.removeItem('consultationIntent');
-      setTimeout(() => navigate('/my-consultations'), 1200);
+      setTimeout(() => navigate('/dashboard?tab=consultations'), 1200);
       return;
     }
     
@@ -172,7 +172,7 @@ export default function Register() {
         const consultIntent = localStorage.getItem('consultationIntent');
         if (consultIntent) {
           localStorage.removeItem('consultationIntent');
-          setTimeout(() => navigate('/my-consultations'), 50);
+          setTimeout(() => navigate('/dashboard?tab=consultations'), 50);
           return;
         }
         

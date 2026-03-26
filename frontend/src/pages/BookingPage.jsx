@@ -588,7 +588,7 @@ function FAQ({ question, answer, isOpen, onToggle }) {
   );
 }
 
-// ─── Chat Drawer (same as PaymentPage concierge) ─────────────────────────────
+// ─── Chat Drawer ─────────────────────────────
 function ChatDrawer({ isOpen, onClose, user, propertyName }) {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');

@@ -263,7 +263,7 @@ const TermsAndPolicy = () => {
                   <div id="bookings" className="mb-8 scroll-mt-32">
                     <h2 className="text-2xl font-bold text-[#0F4C55] mb-4 font-serif">3. Bookings & Payments</h2>
                     <p className="text-stone-700 mb-4">
-                      When you make a booking through our platform, you agree to pay all charges associated with your reservation, including the property rate, cleaning fees, service fees, and any applicable taxes.
+                      When you make a booking through our platform, you agree to pay all charges associated with your reservation, including the property rate and any applicable taxes.
                     </p>
                     <p className="text-stone-700 mb-4">
                       Payments are processed securely through our payment partners. By providing payment information, you represent that you are authorized to use the payment method and authorize us to charge the full amount of your booking.
@@ -644,7 +644,7 @@ const TermsAndPolicy = () => {
               Contact Us
             </Link>
             <Link
-              to="/consultation/new"
+              to="/dashboard?tab=new-consultation"
               className="px-6 py-3 border border-[#0F4C55] text-[#0F4C55] font-bold uppercase tracking-widest text-xs hover:bg-[#0F4C55] hover:text-white transition-colors"
             >
               Schedule Consultation

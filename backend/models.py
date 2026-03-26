@@ -154,7 +154,7 @@ class Booking(db.Model):
     guests = db.Column(db.JSON)
     nights = db.Column(db.Integer, nullable=False)
     base_amount = db.Column(db.Numeric(10, 2), nullable=False)
-    cleaning_fee = db.Column(db.Numeric(10, 2), default=1500)
+    cleaning_fee = db.Column(db.Numeric(10, 2), default=0)
     service_fee = db.Column(db.Numeric(10, 2), default=0)
     total_amount = db.Column(db.Numeric(10, 2), nullable=False)
     pending_amount = db.Column(db.Numeric(10, 2), default=0)

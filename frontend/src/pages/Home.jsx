@@ -71,7 +71,7 @@ export default function Home() {
   // ── Static Data ──
   const premiumFeatures = [
     { id: 1, number: "I",   title: "Verified Excellence", description: "Every residence is physically inspected for 150+ quality points." },
-    { id: 2, number: "II",  title: "Personal Concierge",  description: "Dedicated support from booking to checkout for seamless travel." },
+    { id: 2, number: "II",  title: "Personal Chat Support",  description: "Dedicated support from booking to checkout for seamless travel." },
     { id: 3, number: "III", title: "Curated Design",      description: "Interiors selected for their aesthetic value and comfort." },
   ];
   const testimonials = [
@@ -400,7 +400,7 @@ export default function Home() {
       ═══════════════════════════════════════════════════════ */}
       <div className="w-full bg-[#ED9B40] text-black overflow-hidden py-3 z-20 relative">
         <div className="whitespace-nowrap animate-marquee flex gap-12 text-xs font-medium tracking-[0.2em] uppercase">
-          {Array(10).fill("Concierge • Privacy • Luxury • Comfort • Design • ").map((text, i) => (
+          {Array(10).fill("Chat Support • Privacy • Luxury • Comfort • Design • ").map((text, i) => (
             <span key={i}>{text}</span>
           ))}
         </div>

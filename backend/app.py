@@ -58,8 +58,8 @@ migrate = Migrate(app, db)
 db.init_app(app)
 
 # ===== CORS CONFIGURATION =====
-default_origins = 'http://localhost:3000,http://localhost:5173'
-allowed_origins = os.environ.get('ALLOWED_ORIGINS', default_origins).split(',')
+localhost_origins = ['http://localhost:3000', 'http://localhost:5173']
+env_origins = os.environ.get('ALLOWED_ORIGINS', '').split(',') if os.environ.get('ALLOWED_ORIGINS') else []
 
 vercel_domains = [
     'https://homes-by-mwema-bc0hneof2-karuanaes-projects.vercel.app',
@@ -73,10 +73,10 @@ custom_domains = [
 
 railway_domain = os.environ.get('RAILWAY_PUBLIC_DOMAIN')
 if railway_domain:
-    allowed_origins.append(f'https://{railway_domain}')
-    allowed_origins.append(f'https://www.{railway_domain}')
+    env_origins.append(f'https://{railway_domain}')
+    env_origins.append(f'https://www.{railway_domain}')
 
-all_domains = list({d for d in allowed_origins + vercel_domains + custom_domains if d})
+all_domains = list({d for d in localhost_origins + env_origins + vercel_domains + custom_domains if d})
 
 CORS(app, resources={
     r"/api/*": {
@@ -106,8 +106,6 @@ app.config['JWT_VERIFY_SUB'] = False
 
 # ===== BOOKING & PAYMENT CONFIGURATION =====
 # All values come from environment variables with sensible fallbacks
-app.config['CLEANING_FEE'] = int(os.environ.get('CLEANING_FEE', 1500))
-app.config['SERVICE_FEE_PERCENTAGE'] = int(os.environ.get('SERVICE_FEE_PERCENTAGE', 12))
 app.config['BOOKING_TIMEOUT_MINUTES'] = int(os.environ.get('BOOKING_TIMEOUT_MINUTES', 15))
 app.config['MAX_GUESTS_PER_BOOKING'] = int(os.environ.get('MAX_GUESTS_PER_BOOKING', 10))
 app.config['MIN_NIGHTS_BOOKING'] = int(os.environ.get('MIN_NIGHTS_BOOKING', 1))
@@ -152,8 +150,6 @@ app.config['MAIL_FROM_NAME'] = os.environ.get('MAIL_FROM_NAME', 'Homes by Mwema'
 # Print configuration on startup
 print("=" * 50)
 print("💰 BOOKING CONFIGURATION:")
-print(f"  • Cleaning Fee: KSh {app.config['CLEANING_FEE']}")
-print(f"  • Service Fee: {app.config['SERVICE_FEE_PERCENTAGE']}%")
 print(f"  • Booking Timeout: {app.config['BOOKING_TIMEOUT_MINUTES']} minutes")
 print(f"  • Max Guests: {app.config['MAX_GUESTS_PER_BOOKING']}")
 print(f"  • Min Nights: {app.config['MIN_NIGHTS_BOOKING']}")

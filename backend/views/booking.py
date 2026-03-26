@@ -79,19 +79,6 @@ def create_booking():
         
         # CHECK CONFIG VALUES
         logger.info("🔍 Checking configuration values:")
-        try:
-            cleaning_fee = Decimal(str(current_app.config['CLEANING_FEE']))
-            logger.info(f"  ✅ CLEANING_FEE: {cleaning_fee}")
-        except Exception as e:
-            logger.error(f"  ❌ CLEANING_FEE error: {str(e)}")
-            return jsonify({'error': 'Configuration error: CLEANING_FEE'}), 500
-            
-        try:
-            service_fee_percentage = Decimal(str(current_app.config['SERVICE_FEE_PERCENTAGE'])) / 100
-            logger.info(f"  ✅ SERVICE_FEE_PERCENTAGE: {current_app.config['SERVICE_FEE_PERCENTAGE']}")
-        except Exception as e:
-            logger.error(f"  ❌ SERVICE_FEE_PERCENTAGE error: {str(e)}")
-            return jsonify({'error': 'Configuration error: SERVICE_FEE_PERCENTAGE'}), 500
             
         try:
             timeout_minutes = current_app.config['BOOKING_TIMEOUT_MINUTES']
@@ -241,13 +228,9 @@ def create_booking():
         # Calculate amounts
         logger.info("💰 Calculating amounts...")
         base_amount = Decimal(str(property.price)) * Decimal(nights)
-        cleaning_fee_amount = cleaning_fee
-        service_fee = base_amount * service_fee_percentage
-        total_amount = base_amount + cleaning_fee_amount + service_fee
+        total_amount = base_amount
         
         logger.info(f"  Base amount: {base_amount}")
-        logger.info(f"  Cleaning fee: {cleaning_fee_amount}")
-        logger.info(f"  Service fee: {service_fee}")
         logger.info(f"  Total: {total_amount}")
         
         # Payment type
@@ -268,8 +251,8 @@ def create_booking():
             guests=data['guests'],
             nights=nights,
             base_amount=base_amount,
-            cleaning_fee=cleaning_fee_amount,
-            service_fee=service_fee,
+            cleaning_fee=Decimal('0'),
+            service_fee=Decimal('0'),
             total_amount=total_amount,
             pending_amount=pending_amount,
             payment_type=payment_type,
@@ -310,8 +293,8 @@ def create_booking():
                 'guests': data['guests'],
                 'price_per_night': float(property.price),
                 'base_amount': float(base_amount),
-                'cleaning_fee': float(cleaning_fee_amount),
-                'service_fee': float(service_fee),
+                'cleaning_fee': 0,
+                'service_fee': 0,
                 'total_amount': float(total_amount),
                 'pending_amount': float(pending_amount) if pending_amount > 0 else 0,
                 'payment_type': payment_type,
@@ -398,14 +381,11 @@ def create_booking_from_session():
         nights = (check_out - check_in).days
         
         # Get config values
-        cleaning_fee = Decimal(str(current_app.config['CLEANING_FEE']))
-        service_fee_percentage = Decimal(str(current_app.config['SERVICE_FEE_PERCENTAGE'])) / 100
         timeout_minutes = current_app.config['BOOKING_TIMEOUT_MINUTES']
         
         # Calculate amounts
         base_amount = Decimal(str(property.price)) * Decimal(nights)
-        service_fee = base_amount * service_fee_percentage
-        total_amount = base_amount + cleaning_fee + service_fee
+        total_amount = base_amount
         
         # Generate idempotency key
         idempotency_key = f"session_{user_id}_{property.id}_{check_in}_{check_out}_{datetime.utcnow().timestamp()}"
@@ -434,10 +414,9 @@ def create_booking_from_session():
                     'guests': data['guests'],
                     'price_per_night': float(property.price),
                     'base_amount': float(base_amount),
-                    'cleaning_fee': float(cleaning_fee),
-                    'service_fee': float(service_fee),
+                    'cleaning_fee': 0,
+                    'service_fee': 0,
                     'total_amount': float(total_amount),
-                    'status': existing.status,
                     'expires_at': existing.expires_at.isoformat(),
                     'expires_in_minutes': timeout_minutes
                 }
@@ -452,10 +431,9 @@ def create_booking_from_session():
             guests=data['guests'],
             nights=nights,
             base_amount=base_amount,
-            cleaning_fee=cleaning_fee,
-            service_fee=service_fee,
+            cleaning_fee=Decimal('0'),
+            service_fee=Decimal('0'),
             total_amount=total_amount,
-            pending_amount=Decimal('0'),
             payment_type=data.get('payment_type', 'full'),
             status='pending',
             confirmation='pending',
@@ -490,8 +468,8 @@ def create_booking_from_session():
                 'guests': data['guests'],
                 'price_per_night': float(property.price),
                 'base_amount': float(base_amount),
-                'cleaning_fee': float(cleaning_fee),
-                'service_fee': float(service_fee),
+                'cleaning_fee': 0,
+                'service_fee': 0,
                 'total_amount': float(total_amount),
                 'status': booking.status,
                 'expires_at': booking.expires_at.isoformat(),
