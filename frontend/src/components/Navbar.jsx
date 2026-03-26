@@ -768,7 +768,7 @@ const Navbar = () => {
                       {/* Footer Link */}
                       <div className="bg-[#093A3E] p-3 text-center">
                         <Link
-                          to="/"
+                          to="/properties"
                           onClick={() => setIsMenuOpen(false)}
                           className="text-[#ED9B40] text-[8px] uppercase tracking-[0.3em] hover:text-white transition-colors"
                         >
