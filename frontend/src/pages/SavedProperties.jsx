@@ -10,7 +10,18 @@ export default function SavedProperties() {
   const [removing, setRemoving] = useState(null);
 
   useEffect(() => {
-    fetchFavorites();
+    const processPendingAndFetch = async () => {
+      // Handle any leftover wishlist intent (belt-and-suspenders with Login.jsx)
+      const wishlistIntent = localStorage.getItem('wishlistIntent');
+      if (wishlistIntent) {
+        localStorage.removeItem('wishlistIntent');
+        try {
+          await userAPI.addFavorite(parseInt(wishlistIntent));
+        } catch { /* already added or failed */ }
+      }
+      fetchFavorites();
+    };
+    processPendingAndFetch();
   }, []);
 
   const fetchFavorites = async () => {

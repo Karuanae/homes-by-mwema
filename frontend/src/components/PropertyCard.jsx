@@ -4,11 +4,13 @@
 // - Shows a skeleton placeholder while the image fetches
 // - Graceful fallback on error
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { FaMapMarkerAlt } from "react-icons/fa";
-import { API_BASE_URL } from "../services/api";
+import { Heart } from "lucide-react";
+import { API_BASE_URL, userAPI } from "../services/api";
+import { useAuth } from "../context/AuthContext";
 
 // Derive the host from API_BASE_URL — strip the /api suffix
 const API_HOST = API_BASE_URL
@@ -38,8 +40,43 @@ export const PropertyCardSkeleton = () => (
 const PropertyCard = ({ property, idx = 0 }) => {
   const [imgLoaded, setImgLoaded]   = useState(false);
   const [imgError, setImgError]     = useState(false);
+  const [isSaved, setIsSaved]       = useState(false);
+  const [saving, setSaving]         = useState(false);
+  const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
 
   const src = getImageSrc(property.cover_image || property.images?.[0]);
+
+  useEffect(() => {
+    if (isAuthenticated && property.id) {
+      userAPI.checkFavorite(property.id)
+        .then(res => setIsSaved(res.data?.is_favorited || false))
+        .catch(() => {});
+    }
+  }, [isAuthenticated, property.id]);
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isAuthenticated) {
+      localStorage.setItem('wishlistIntent', property.id);
+      navigate('/login', { state: { message: 'Please log in to save properties' } });
+      return;
+    }
+    if (saving) return;
+    setSaving(true);
+    try {
+      if (isSaved) {
+        await userAPI.removeFavorite(property.id);
+        setIsSaved(false);
+      } else {
+        await userAPI.addFavorite(property.id);
+        setIsSaved(true);
+        navigate('/dashboard?tab=saved');
+      }
+    } catch { /* ignore */ }
+    finally { setSaving(false); }
+  };
 
   return (
     <motion.div
@@ -96,6 +133,17 @@ const PropertyCard = ({ property, idx = 0 }) => {
               {property.tag}
             </div>
           )}
+
+          {/* Save / Heart button */}
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full flex items-center justify-center transition-all bg-white/80 backdrop-blur-sm hover:bg-white shadow-sm"
+          >
+            <Heart
+              className={`w-4 h-4 transition-all ${isSaved ? 'fill-rose-500 stroke-rose-500' : 'stroke-stone-600'}`}
+            />
+          </button>
         </div>
 
         {/* Text info */}
