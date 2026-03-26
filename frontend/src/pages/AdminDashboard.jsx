@@ -119,11 +119,20 @@ export default function AdminDashboard() {
         new Notification("New Chat Message", { body: `${n.user_name}: ${n.message_preview}`, icon: "/favicon.ico" });
     });
     socketService.on("new_message", (message) => {
-      // Update messages for the affected chat
-      setChatMessages(prev => ({
-        ...prev,
-        [message.chat_id]: [...(prev[message.chat_id] || []), message]
-      }));
+      // Update messages keyed by the sender's user_id (or the chat's user)
+      const senderId = message.sender_id;
+      setChatMessages(prev => {
+        // Find which user_id key this message belongs to
+        for (const key of Object.keys(prev)) {
+          if (String(key) === String(senderId)) {
+            return {
+              ...prev,
+              [key]: [...prev[key], message]
+            };
+          }
+        }
+        return prev;
+      });
     });
   };
 
@@ -201,9 +210,46 @@ export default function AdminDashboard() {
     setLoadingMessages(true);
     try {
       const chats = (await api.chats.getAll()).data || [];
-      setMessages(chats);
-      setUnreadCount(chats.reduce((s, c) => s + (c.unread_count || 0), 0));
-    } catch(e){} finally { setLoadingMessages(false); }
+
+      // Group chats by user so each user appears once
+      const byUser = {};
+      chats.forEach(c => {
+        const uid = c.user_id;
+        if (!byUser[uid]) {
+          byUser[uid] = {
+            user_id: uid,
+            user_name: c.user_name || `Client ${uid}`,
+            user_phone: c.user_phone || null,
+            chat_ids: [],
+            unread_count: 0,
+            last_message: null,
+            last_message_time: null,
+            last_active: null,
+            primary_chat_id: null,
+          };
+        }
+        const g = byUser[uid];
+        g.chat_ids.push(c.id);
+        g.unread_count += (c.unread_count || 0);
+
+        const cActive = c.last_active ? new Date(c.last_active) : null;
+        const gActive = g.last_active ? new Date(g.last_active) : null;
+        if (cActive && (!gActive || cActive > gActive)) {
+          g.last_active = c.last_active;
+          g.last_message = c.last_message;
+          g.last_message_time = c.last_message_time;
+          g.primary_chat_id = c.id;
+        }
+        if (!g.primary_chat_id) g.primary_chat_id = c.id;
+      });
+
+      const grouped = Object.values(byUser).sort(
+        (a, b) => new Date(b.last_active || 0) - new Date(a.last_active || 0)
+      );
+
+      setMessages(grouped);
+      setUnreadCount(grouped.reduce((s, g) => s + (g.unread_count || 0), 0));
+    } catch(e){ console.error('Failed to fetch chats:', e); } finally { setLoadingMessages(false); }
   };
 
   // Lightweight summary for the dashboard widget only — doesn't need full list
@@ -224,21 +270,35 @@ export default function AdminDashboard() {
   const handleSelectChat = async (chat) => {
     setSelectedChat(chat);
     
-    // Load messages for this chat if not already loaded
-    if (!chatMessages[chat.id]) {
+    // Load ALL messages for this user across all their chats
+    const userId = chat.user_id;
+    if (!chatMessages[userId]) {
       try {
-        const response = await api.chats.getMessages(chat.id);
+        // Fetch messages from each of the user's chats and merge
+        const chatIds = chat.chat_ids || [chat.primary_chat_id];
+        const allMessages = [];
+        for (const cid of chatIds) {
+          try {
+            const res = await api.chats.getMessages(cid);
+            allMessages.push(...(res.data || []));
+          } catch (_) {}
+        }
+        // Sort by timestamp
+        allMessages.sort((a, b) => new Date(a.timestamp || a.created_at || 0) - new Date(b.timestamp || b.created_at || 0));
+
         setChatMessages(prev => ({
           ...prev,
-          [chat.id]: response.data || []
+          [userId]: allMessages
         }));
         
-        // Mark as read
-        await api.chats.markRead(chat.id);
+        // Mark all user chats as read
+        for (const cid of chatIds) {
+          try { await api.chats.markRead(cid); } catch (_) {}
+        }
         
-        // Update unread count in list
-        setMessages(prev => prev.map(c => 
-          c.id === chat.id ? { ...c, unread_count: 0 } : c
+        // Update unread count in grouped list
+        setMessages(prev => prev.map(g => 
+          g.user_id === userId ? { ...g, unread_count: 0 } : g
         ));
         setUnreadCount(prev => Math.max(0, prev - (chat.unread_count || 0)));
         
@@ -253,9 +313,13 @@ export default function AdminDashboard() {
     }, 100);
   };
 
-  const handleSendMessage = async (chatId) => {
-    const messageContent = newMessage[chatId]?.trim();
-    if (!messageContent) return;
+  const handleSendMessage = async (userId) => {
+    const messageContent = newMessage[userId]?.trim();
+    if (!messageContent || !selectedChat) return;
+
+    // Send to the user's primary (most recent) chat
+    const chatId = selectedChat.primary_chat_id;
+    if (!chatId) return;
 
     const tempId = Date.now();
     const optimisticMessage = {
@@ -269,12 +333,12 @@ export default function AdminDashboard() {
       is_temp: true
     };
 
-    // Optimistic update
+    // Optimistic update keyed by user_id
     setChatMessages(prev => ({
       ...prev,
-      [chatId]: [...(prev[chatId] || []), optimisticMessage]
+      [userId]: [...(prev[userId] || []), optimisticMessage]
     }));
-    setNewMessage(prev => ({ ...prev, [chatId]: '' }));
+    setNewMessage(prev => ({ ...prev, [userId]: '' }));
 
     try {
       const response = await api.chats.sendMessage(chatId, {
@@ -287,7 +351,7 @@ export default function AdminDashboard() {
       // Replace optimistic message with real one
       setChatMessages(prev => ({
         ...prev,
-        [chatId]: prev[chatId].map(msg => 
+        [userId]: prev[userId].map(msg => 
           msg.id === tempId ? response.data : msg
         )
       }));
@@ -297,7 +361,7 @@ export default function AdminDashboard() {
       // Remove optimistic message on error
       setChatMessages(prev => ({
         ...prev,
-        [chatId]: prev[chatId].filter(msg => msg.id !== tempId)
+        [userId]: prev[userId].filter(msg => msg.id !== tempId)
       }));
       alert('Failed to send message');
     }
@@ -807,10 +871,10 @@ export default function AdminDashboard() {
                     <div className="max-h-[600px] overflow-y-auto">
                       {messages.map(chat => (
                         <button
-                          key={chat.id}
+                          key={chat.user_id}
                           onClick={() => handleSelectChat(chat)}
                           className={`w-full p-4 text-left border-b border-stone-100 last:border-0 hover:bg-stone-50 transition-colors flex items-center gap-3 touch-manipulation ${
-                            selectedChat?.id === chat.id ? 'bg-stone-50' : ''
+                            selectedChat?.user_id === chat.user_id ? 'bg-stone-50' : ''
                           }`}
                           style={{ minHeight: '72px' }}
                         >
@@ -877,7 +941,7 @@ export default function AdminDashboard() {
 
                     {/* Messages Area */}
                     <div className="flex-1 overflow-y-auto p-4 bg-stone-50">
-                      {!chatMessages[selectedChat.id] || chatMessages[selectedChat.id].length === 0 ? (
+                      {!chatMessages[selectedChat.user_id] || chatMessages[selectedChat.user_id].length === 0 ? (
                         <div className="h-full flex items-center justify-center">
                           <p className="text-stone-400 text-sm">No messages yet. Say hello!</p>
                         </div>
@@ -885,7 +949,7 @@ export default function AdminDashboard() {
                         <div className="space-y-6">
                           {(() => {
                             // Group messages by date
-                            const messages = chatMessages[selectedChat.id] || [];
+                            const messages = chatMessages[selectedChat.user_id] || [];
                             const groups = {};
                             
                             messages.forEach(msg => {
@@ -973,16 +1037,16 @@ export default function AdminDashboard() {
                       <form 
                         onSubmit={(e) => {
                           e.preventDefault();
-                          handleSendMessage(selectedChat.id);
+                          handleSendMessage(selectedChat.user_id);
                         }} 
                         className="flex items-center gap-2"
                       >
                         <input
                           type="text"
-                          value={newMessage[selectedChat.id] || ''}
+                          value={newMessage[selectedChat.user_id] || ''}
                           onChange={(e) => setNewMessage({
                             ...newMessage,
-                            [selectedChat.id]: e.target.value
+                            [selectedChat.user_id]: e.target.value
                           })}
                           placeholder="Type a message..."
                           className="flex-1 bg-stone-50 rounded-full px-6 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#093A3E] transition-all"
@@ -990,7 +1054,7 @@ export default function AdminDashboard() {
                         />
                         <button
                           type="submit"
-                          disabled={!newMessage[selectedChat.id]?.trim()}
+                          disabled={!newMessage[selectedChat.user_id]?.trim()}
                           className="bg-[#093A3E] text-white p-3 rounded-full hover:bg-[#0a4a52] transition-colors disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
                           style={{ minHeight: '44px', minWidth: '44px' }}
                         >

@@ -602,11 +602,12 @@ function ChatDrawer({ isOpen, onClose, user, propertyName }) {
     const initChat = async () => {
       setLoading(true);
       try {
-        let chatId = localStorage.getItem('bookingChatId');
+        const cacheKey = `bookingChatId_${user.id}`;
+        let chatId = localStorage.getItem(cacheKey);
         if (!chatId) {
           const response = await api.chats.startChat(user.id, null, null);
           chatId = response.data.chat.id;
-          localStorage.setItem('bookingChatId', chatId);
+          localStorage.setItem(cacheKey, chatId);
         }
         setChat({ id: chatId });
         const messagesRes = await api.chats.getMessages(chatId);

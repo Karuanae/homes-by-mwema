@@ -56,20 +56,11 @@ def start_chat():
         if not user_id:
             return jsonify({'error': 'user_id is required'}), 400
 
-        # Try to reuse an existing active chat for same user & property
-        existing = None
-        if property_id:
-            existing = Chat.query.filter_by(
-                user_id=user_id, 
-                property_id=property_id,
-                status='active'
-            ).first()
-        else:
-            # If no property_id, find any active chat for this user
-            existing = Chat.query.filter_by(
-                user_id=user_id,
-                status='active'
-            ).order_by(Chat.last_active.desc()).first()
+        # Always reuse the most recent active chat for this user
+        existing = Chat.query.filter_by(
+            user_id=user_id,
+            status='active'
+        ).order_by(Chat.last_active.desc()).first()
 
         if existing:
             print(f"✅ Found existing chat: {existing.id}")
@@ -228,4 +219,96 @@ def list_chats():
         return jsonify([serialize_chat(c) for c in chats]), 200
     except Exception as e:
         print(f"❌ Error listing chats: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@chat_bp.route('/grouped', methods=['GET'])
+def list_chats_grouped():
+    """Get chats grouped by user (admin usage) - one entry per user"""
+    try:
+        chats = Chat.query.filter_by(
+            status='active'
+        ).order_by(Chat.last_active.desc()).all()
+
+        # Group chats by user_id
+        user_groups = {}
+        for c in chats:
+            uid = c.user_id
+            if uid not in user_groups:
+                user = User.query.get(uid)
+                user_groups[uid] = {
+                    'user_id': uid,
+                    'user_name': user.name if user else f"Unknown User {uid}",
+                    'user_phone': user.phone if user else None,
+                    'chat_ids': [],
+                    'unread_count': 0,
+                    'last_message': None,
+                    'last_message_time': None,
+                    'last_active': None,
+                    'primary_chat_id': None,
+                }
+            group = user_groups[uid]
+            group['chat_ids'].append(c.id)
+            group['unread_count'] += (c.unread_count or 0)
+
+            # Keep the most recent message / activity
+            if c.last_active and (
+                group['last_active'] is None or c.last_active > group['last_active']
+            ):
+                group['last_active'] = c.last_active
+                group['last_message'] = c.last_message
+                group['last_message_time'] = c.last_message_time
+                group['primary_chat_id'] = c.id
+
+        # Build response sorted by most recent activity
+        result = sorted(user_groups.values(),
+                        key=lambda g: g['last_active'] or datetime.min,
+                        reverse=True)
+        for g in result:
+            g['last_active'] = g['last_active'].isoformat() if g['last_active'] else None
+            g['last_message_time'] = g['last_message_time'].isoformat() if g['last_message_time'] else None
+            if g['primary_chat_id'] is None and g['chat_ids']:
+                g['primary_chat_id'] = g['chat_ids'][0]
+
+        print(f"📋 Grouped {len(chats)} chats into {len(result)} user conversations")
+        return jsonify(result), 200
+    except Exception as e:
+        print(f"❌ Error listing grouped chats: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@chat_bp.route('/user/<int:user_id>/all-messages', methods=['GET'])
+def get_user_all_messages(user_id):
+    """Get ALL messages across all chats for a user (admin usage)"""
+    try:
+        chat_ids = [c.id for c in Chat.query.filter_by(user_id=user_id).all()]
+        if not chat_ids:
+            return jsonify([]), 200
+
+        messages = ChatMessage.query.filter(
+            ChatMessage.chat_id.in_(chat_ids)
+        ).order_by(ChatMessage.timestamp).all()
+
+        print(f"📨 Found {len(messages)} total messages for user {user_id} across {len(chat_ids)} chats")
+        return jsonify([serialize_message(m) for m in messages]), 200
+    except Exception as e:
+        print(f"❌ Error getting user messages: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@chat_bp.route('/user/<int:user_id>/read-all', methods=['PUT'])
+def mark_user_all_read(user_id):
+    """Mark all messages in all chats for a user as read"""
+    try:
+        chats = Chat.query.filter_by(user_id=user_id).all()
+        for c in chats:
+            ChatMessage.query.filter_by(chat_id=c.id, is_read=False).update({'is_read': True})
+            c.unread_count = 0
+        db.session.commit()
+
+        print(f"✅ Marked all chats for user {user_id} as read")
+        return jsonify({'message': 'All marked as read'}), 200
+    except Exception as e:
+        print(f"❌ Error marking user chats as read: {str(e)}")
+        db.session.rollback()
         return jsonify({'error': str(e)}), 500

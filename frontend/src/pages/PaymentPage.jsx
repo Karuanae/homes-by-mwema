@@ -34,13 +34,14 @@ function ChatDrawer({ isOpen, onClose, user }) {
       setLoading(true);
       try {
         // Try to get existing chat or create new one
-        let chatId = localStorage.getItem('paymentChatId');
+        const cacheKey = `paymentChatId_${user.id}`;
+        let chatId = localStorage.getItem(cacheKey);
         
         if (!chatId) {
           // Create a new chat for payment assistance
           const response = await api.chats.startChat(user.id, null, null);
           chatId = response.data.chat.id;
-          localStorage.setItem('paymentChatId', chatId);
+          localStorage.setItem(cacheKey, chatId);
         }
         
         setChat({ id: chatId });

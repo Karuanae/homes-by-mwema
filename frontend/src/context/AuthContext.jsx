@@ -93,6 +93,9 @@ export const AuthProvider = ({ children }) => {
     // Clear all auth-related data
     localStorage.removeItem('user');
     localStorage.removeItem('token');
+    // Clear legacy chat keys
+    localStorage.removeItem('bookingChatId');
+    localStorage.removeItem('paymentChatId');
     
     setUser(null);
     

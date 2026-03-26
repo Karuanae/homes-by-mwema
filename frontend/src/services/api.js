@@ -438,6 +438,21 @@ export const chatsAPI = {
     const response = await api.get('/chats', { params });
     return response;
   },
+
+  getGrouped: async () => {
+    const response = await api.get('/chats/grouped');
+    return response;
+  },
+
+  getUserAllMessages: async (userId) => {
+    const response = await api.get(`/chats/user/${userId}/all-messages`);
+    return response;
+  },
+
+  markUserAllRead: async (userId) => {
+    const response = await api.put(`/chats/user/${userId}/read-all`);
+    return response;
+  },
 };
 
 // ==================== LEADS API ====================
