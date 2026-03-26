@@ -360,6 +360,22 @@ class ChatMessage(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+class Favorite(db.Model):
+    __tablename__ = 'favorites'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    property_id = db.Column(db.Integer, db.ForeignKey('properties.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'property_id', name='uq_user_property_fav'),
+    )
+
+    user = db.relationship('User', backref=db.backref('favorites', lazy=True))
+    property = db.relationship('Property', backref=db.backref('favorited_by', lazy=True))
+
+
 class Lead(db.Model):
     __tablename__ = 'leads'
     

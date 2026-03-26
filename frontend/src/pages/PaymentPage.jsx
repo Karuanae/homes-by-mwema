@@ -812,13 +812,14 @@ const initializePayment = async () => {
       )}
       
       {/* MOBILE HEADER */}
-      <div className="md:hidden fixed top-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-b border-stone-200 z-40 px-4 py-3 flex items-center justify-between">
-        <button onClick={() => navigate(-1)} className="p-2 hover:bg-stone-100 rounded-full transition-colors">
-          <ArrowLeft className="w-5 h-5" />
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 px-4 py-2.5 flex items-center justify-between"
+        style={{ background: '#093A3E', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+        <button onClick={() => navigate(-1)} className="p-1.5 hover:bg-white/10 rounded-full transition-colors">
+          <ArrowLeft className="w-4 h-4 text-[#ED9B40]" />
         </button>
-        <h1 className="font-serif text-lg">Complete Payment</h1>
-        <button onClick={() => setShowSummary(!showSummary)} className="p-2 hover:bg-stone-100 rounded-full transition-colors">
-          <Eye className={`w-5 h-5 transition-transform ${showSummary ? 'rotate-180' : ''}`} />
+        <h1 className="text-base font-medium text-[#ED9B40] truncate max-w-[200px]" style={{ fontFamily: 'system-ui' }}>Complete Payment</h1>
+        <button onClick={() => setShowSummary(!showSummary)} className="p-1.5 hover:bg-white/10 rounded-full transition-colors">
+          <Eye className={`w-4 h-4 text-[#ED9B40] transition-transform ${showSummary ? 'rotate-180' : ''}`} />
         </button>
       </div>
 
@@ -829,7 +830,7 @@ const initializePayment = async () => {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="md:hidden fixed top-[57px] left-0 right-0 bg-white border-b border-stone-200 z-40 overflow-hidden shadow-lg"
+            className="md:hidden fixed top-[49px] left-0 right-0 bg-white border-b border-stone-200 z-40 overflow-hidden shadow-lg"
           >
             <div className="p-4">
               <div className="flex gap-3">
@@ -867,11 +868,11 @@ const initializePayment = async () => {
       <div className="max-w-6xl mx-auto px-4 pt-20 md:pt-12">
         
         {/* Desktop Header */}
-        <div className="hidden md:flex items-center gap-4 mb-8">
-          <button onClick={() => navigate(-1)} className="p-2 hover:bg-stone-200 rounded-full transition-colors">
-            <ArrowLeft className="w-5 h-5" />
+        <div className="hidden md:flex items-center gap-3 mb-8">
+          <button onClick={() => navigate(-1)} className="p-1.5 hover:bg-stone-200 rounded-full transition-colors">
+            <ArrowLeft className="w-4 h-4" />
           </button>
-          <h1 className="font-serif text-2xl">Complete Your Payment</h1>
+          <h1 className="font-serif text-xl">Complete Your Payment</h1>
         </div>
 
         {/* Timer Warning - Desktop */}

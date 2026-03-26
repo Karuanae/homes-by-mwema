@@ -33,6 +33,7 @@ const Chat                    = lazy(() => import("./pages/Chat"));
 const MyConsultations         = lazy(() => import("./pages/MyConsultations"));
 const NewConsultation         = lazy(() => import("./pages/NewConsultation"));
 const ProfileSettings         = lazy(() => import("./pages/ProfileSettings"));
+const SavedProperties         = lazy(() => import("./pages/SavedProperties"));
 
 // Admin
 const AdminDashboard          = lazy(() => import("./pages/AdminDashboard"));
@@ -162,7 +163,6 @@ function AppContent() {
         {/* ── Booking — NO auth gate on view; auth enforced inside on "Book Now" ── */}
         <Route path="/booking/:id" element={
           <>
-            <Header />
             <Page><BookingPage /></Page>
             <Footer />
           </>
@@ -230,6 +230,14 @@ function AppContent() {
           <ProtectedRoute>
             <Page>
               <UserLayout><ProfileSettings /></UserLayout>
+            </Page>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/saved" element={
+          <ProtectedRoute>
+            <Page>
+              <UserLayout><SavedProperties /></UserLayout>
             </Page>
           </ProtectedRoute>
         } />

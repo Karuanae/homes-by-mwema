@@ -2,13 +2,15 @@ import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion'
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import api, { API_BASE_URL, IMAGE_BASE_URL } from '../services/api';
+import api, { API_BASE_URL, IMAGE_BASE_URL, userAPI } from '../services/api';
 import GoogleMap from '../components/GoogleMap';  // ← ADD THIS LINE
 import {
   MapPin, ChevronLeft, ChevronRight, Check, AlertCircle,
   Shield, ArrowLeft, ChevronDown, MessageCircle, User, Calendar,
   Star, Heart, Share2, X, Grid3X3, ZoomIn, Wifi, Coffee,
-  Home, Phone, Mail, Flag, ChevronUp, Camera, Send, CheckCheck
+  Home, Phone, Mail, Flag, ChevronUp, Camera, Send, CheckCheck,
+  Copy, Link, Code, Tv, Car, Waves, Dumbbell, UtensilsCrossed,
+  Snowflake, Flame
 } from 'lucide-react';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -491,13 +493,12 @@ function ReviewCard({ review }) {
       className="p-5 rounded-2xl border border-stone-100 bg-white space-y-3"
     >
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-[#093A3E] text-white flex items-center justify-center text-xs font-bold flex-shrink-0"
-          style={{ fontFamily: 'system-ui' }}>
+        <div className="w-10 h-10 rounded-full bg-[#093A3E] text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
           {review.avatar}
         </div>
         <div>
-          <div className="font-semibold text-stone-900 text-sm" style={{ fontFamily: 'system-ui' }}>{review.name}</div>
-          <div className="text-xs text-stone-400" style={{ fontFamily: 'system-ui' }}>{review.location} · {review.date}</div>
+          <div className="font-semibold text-stone-900 text-sm">{review.name}</div>
+          <div className="text-xs text-stone-400">{review.location} · {review.date}</div>
         </div>
         <div className="ml-auto flex items-center gap-0.5">
           {Array.from({length: review.rating}).map((_, i) => <Star key={i} className="w-3 h-3 fill-amber-400 stroke-amber-400" />)}
@@ -773,6 +774,111 @@ function Toast({ message, isVisible }) {
   );
 }
 
+// ─── Share Modal — Airbnb-style ───────────────────────────────────────────────
+function ShareModal({ isOpen, onClose, property, getImageSrc }) {
+  const [copied, setCopied] = useState(false);
+  const url = window.location.href;
+  const title = property?.title || 'Check out this property';
+  const text = `${title} — ${property?.location || ''}`;
+  const encodedUrl = encodeURIComponent(url);
+  const encodedText = encodeURIComponent(text);
+  const encodedTitle = encodeURIComponent(title);
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* ignore */ }
+  };
+
+  const shareOptions = [
+    { label: 'Copy Link', icon: <Copy className="w-5 h-5" />, action: copyLink, highlight: copied },
+    { label: 'Email', icon: <Mail className="w-5 h-5" />, href: `mailto:?subject=${encodedTitle}&body=${encodedText}%0A${encodedUrl}` },
+    { label: 'WhatsApp', icon: <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>, href: `https://wa.me/?text=${encodedText}%20${encodedUrl}` },
+    { label: 'Facebook', icon: <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>, href: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}` },
+    { label: 'Messenger', icon: <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 4.974 0 11.111c0 3.498 1.744 6.614 4.469 8.654V24l4.088-2.242c1.092.301 2.246.464 3.443.464 6.627 0 12-4.975 12-11.111C24 4.974 18.627 0 12 0zm1.191 14.963l-3.055-3.26-5.963 3.26L10.732 8.2l3.131 3.26 5.886-3.26-6.558 6.763z"/></svg>, href: `https://www.facebook.com/dialog/send?link=${encodedUrl}&app_id=291494419107518&redirect_uri=${encodedUrl}` },
+    { label: 'X (Twitter)', icon: <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>, href: `https://twitter.com/intent/tweet?text=${encodedText}&url=${encodedUrl}` },
+    { label: 'Embed', icon: <Code className="w-5 h-5" />, action: async () => { const embed = `<iframe src="${url}" width="600" height="400" frameborder="0"></iframe>`; try { await navigator.clipboard.writeText(embed); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch {} } },
+  ];
+
+  const coverImg = property?.images?.[0]?.url;
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
+          onClick={onClose}
+        >
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+            className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100">
+              <h3 className="text-lg font-semibold text-stone-900" style={{ fontFamily: 'system-ui' }}>Share this place</h3>
+              <button onClick={onClose} className="p-1.5 hover:bg-stone-100 rounded-full transition-colors">
+                <X className="w-5 h-5 text-stone-500" />
+              </button>
+            </div>
+
+            {/* Property preview */}
+            <div className="px-6 py-4 flex items-center gap-4 border-b border-stone-100">
+              {coverImg && (
+                <img src={getImageSrc(coverImg)} alt="" className="w-16 h-16 rounded-xl object-cover flex-shrink-0" />
+              )}
+              <div className="min-w-0">
+                <p className="font-medium text-stone-900 truncate text-sm" style={{ fontFamily: 'system-ui' }}>{property?.title}</p>
+                <p className="text-xs text-stone-500 truncate" style={{ fontFamily: 'system-ui' }}>{property?.location}</p>
+              </div>
+            </div>
+
+            {/* Share options grid */}
+            <div className="px-6 py-4 grid grid-cols-2 gap-2 max-h-[340px] overflow-y-auto">
+              {shareOptions.map((opt) => {
+                const Wrapper = opt.href ? 'a' : 'button';
+                const extraProps = opt.href ? { href: opt.href, target: '_blank', rel: 'noopener noreferrer' } : { onClick: opt.action };
+                return (
+                  <Wrapper
+                    key={opt.label}
+                    {...extraProps}
+                    className={`flex items-center gap-3 px-4 py-3.5 rounded-xl border text-left transition-all hover:shadow-sm ${
+                      opt.highlight ? 'border-[#093A3E] bg-[#093A3E]/5 text-[#093A3E]' : 'border-stone-200 text-stone-700 hover:border-stone-300 hover:bg-stone-50'
+                    }`}
+                    style={{ fontFamily: 'system-ui' }}
+                  >
+                    <span className="flex-shrink-0">{opt.icon}</span>
+                    <span className="text-sm font-medium truncate">{opt.highlight && opt.label === 'Copy Link' ? 'Copied!' : opt.label}</span>
+                  </Wrapper>
+                );
+              })}
+            </div>
+
+            {/* Native share fallback */}
+            {typeof navigator !== 'undefined' && navigator.share && (
+              <div className="px-6 pb-4">
+                <button
+                  onClick={async () => { try { await navigator.share({ title, text, url }); onClose(); } catch {} }}
+                  className="w-full py-3 rounded-xl bg-[#093A3E] text-white text-sm font-medium hover:bg-[#0c4e52] transition-colors flex items-center justify-center gap-2"
+                  style={{ fontFamily: 'system-ui' }}
+                >
+                  <Share2 className="w-4 h-4" />
+                  More options
+                </button>
+              </div>
+            )}
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
 // ─── Booking Sidebar ──────────────────────────────────────────────────────────
 function BookingSidebar({ property, checkInDate, setCheckInDate, checkOutDate, setCheckOutDate, guests, setGuests, totals, isAvailable, availabilityMessage, showAvailabilityWarning, creatingBooking, isAuthenticated, onBook }) {
   const [showGuests, setShowGuests] = useState(false);
@@ -864,14 +970,6 @@ function BookingSidebar({ property, checkInDate, setCheckInDate, checkOutDate, s
               <span>Ksh {property.price.toLocaleString()} × {totals.nights} night{totals.nights > 1 ? 's' : ''}</span>
               <span className="text-stone-900">Ksh {totals.basePrice.toLocaleString()}</span>
             </div>
-            <div className="flex justify-between text-stone-500">
-              <span>Cleaning fee</span>
-              <span className="text-stone-900">Ksh {totals.cleaningFee.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between text-stone-500">
-              <span>Service fee</span>
-              <span className="text-stone-900">Ksh {Math.round(totals.serviceFee).toLocaleString()}</span>
-            </div>
             <div className="flex justify-between font-bold pt-3 border-t border-stone-100 text-stone-900">
               <span>Total</span>
               <span>Ksh {Math.round(totals.total).toLocaleString()}</span>
@@ -925,6 +1023,8 @@ export default function BookingPage() {
   const [showTour, setShowTour] = useState(false);
   const [tourStartIdx, setTourStartIdx] = useState(0);
   const [isWishlisted, setIsWishlisted] = useState(false);
+  const [wishlistLoading, setWishlistLoading] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [toast, setToast] = useState({ visible: false, message: '' });
 
   const [showAllAmenities, setShowAllAmenities] = useState(false);
@@ -978,8 +1078,32 @@ export default function BookingPage() {
         localStorage.removeItem('chatIntent');
         setShowChat(true);
       }
+      // Handle wishlist intent after login redirect
+      const wishlistIntent = localStorage.getItem('wishlistIntent');
+      if (wishlistIntent) {
+        localStorage.removeItem('wishlistIntent');
+        (async () => {
+          try {
+            await userAPI.addFavorite(parseInt(wishlistIntent));
+            setIsWishlisted(true);
+            showToast('Added to wishlist ♡');
+          } catch { /* ignore */ }
+        })();
+      }
     }
   }, [isAuthenticated, user]);
+
+  // Check if property is in user's favorites
+  useEffect(() => {
+    if (isAuthenticated && id) {
+      (async () => {
+        try {
+          const res = await userAPI.checkFavorite(id);
+          setIsWishlisted(res.data?.is_favorited || false);
+        } catch { /* ignore */ }
+      })();
+    }
+  }, [isAuthenticated, id]);
 
   useEffect(() => {
     if (!id) return;
@@ -1034,10 +1158,10 @@ export default function BookingPage() {
   }, [checkInDate, checkOutDate]);
 
   const calculateTotal = () => {
-    if (!checkInDate || !checkOutDate || !property) return { nights: 0, basePrice: 0, cleaningFee: 0, serviceFee: 0, total: 0 };
+    if (!checkInDate || !checkOutDate || !property) return { nights: 0, basePrice: 0, total: 0 };
     const nights = Math.max(1, Math.ceil((new Date(checkOutDate) - new Date(checkInDate)) / 86400000));
-    const basePrice = property.price * nights, cleaningFee = 1500, serviceFee = basePrice * 0.12;
-    return { nights, basePrice, cleaningFee, serviceFee, total: basePrice + cleaningFee + serviceFee };
+    const basePrice = property.price * nights;
+    return { nights, basePrice, total: basePrice };
   };
   const totals = calculateTotal();
 
@@ -1074,24 +1198,35 @@ export default function BookingPage() {
     await createBookingAndGoToPayment();
   };
 
-  const handleShare = async () => {
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: property.title, url: window.location.href });
-      } else {
-        await navigator.clipboard.writeText(window.location.href);
-        showToast('Link copied to clipboard');
-      }
-    } catch { showToast('Link copied to clipboard'); }
-  };
+  const handleShare = () => setShowShareModal(true);
 
-  const handleWishlist = () => {
-    setIsWishlisted(w => !w);
-    showToast(isWishlisted ? 'Removed from wishlist' : 'Added to wishlist ♡');
+  const handleWishlist = async () => {
+    if (!isAuthenticated) {
+      localStorage.setItem('wishlistIntent', id);
+      navigate('/login', { state: { from: `/booking/${id}`, message: 'Please log in to save properties' } });
+      return;
+    }
+    if (wishlistLoading) return;
+    setWishlistLoading(true);
+    try {
+      if (isWishlisted) {
+        await userAPI.removeFavorite(id);
+        setIsWishlisted(false);
+        showToast('Removed from wishlist');
+      } else {
+        await userAPI.addFavorite(id);
+        setIsWishlisted(true);
+        showToast('Added to wishlist ♡');
+      }
+    } catch {
+      showToast('Something went wrong');
+    } finally {
+      setWishlistLoading(false);
+    }
   };
 
   if (loading) return (
-    <div className="min-h-screen bg-[#f7f5f2] flex items-center justify-center" style={{ fontFamily: "'Cormorant Garamond', serif" }}>
+    <div className="min-h-screen bg-[#f7f5f2] flex items-center justify-center" style={{ fontFamily: "system-ui, -apple-system, sans-serif" }}>
       <div className="text-center">
         <div className="w-10 h-10 border-2 border-[#093A3E] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
         <p className="text-stone-400 text-sm uppercase tracking-widest" style={{ fontFamily: 'system-ui' }}>Loading…</p>
@@ -1108,7 +1243,7 @@ export default function BookingPage() {
   const reviewsToShow = showAllReviews ? SAMPLE_REVIEWS : SAMPLE_REVIEWS.slice(0, 2);
 
   return (
-    <div style={{ background: '#f7f5f2', minHeight: '100vh', fontFamily: "'Cormorant Garamond', serif" }}>
+    <div style={{ background: '#f7f5f2', minHeight: '100vh', fontFamily: "system-ui, -apple-system, sans-serif" }}>
       {/* Google Fonts */}
       <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&display=swap" rel="stylesheet" />
 
@@ -1129,6 +1264,14 @@ export default function BookingPage() {
 
       {/* Toast */}
       <Toast message={toast.message} isVisible={toast.visible} />
+
+      {/* Share Modal */}
+      <ShareModal
+        isOpen={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        property={property}
+        getImageSrc={getImageSrc}
+      />
 
       {/* Chat Drawer */}
       {isAuthenticated && (
@@ -1173,23 +1316,23 @@ export default function BookingPage() {
 
       {/* Top Nav */}
       <nav className="fixed top-0 left-0 right-0 z-40 px-4 md:px-8 py-4 flex items-center justify-between"
-        style={{ background: 'rgba(247,245,242,0.85)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
-        <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-stone-700 hover:text-stone-900 transition-colors">
+        style={{ background: '#093A3E', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+        <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-[#ED9B40] hover:text-white transition-colors">
           <ArrowLeft className="w-4 h-4" />
           <span className="text-sm hidden sm:block" style={{ fontFamily: 'system-ui', letterSpacing: '0.05em' }}>Back</span>
         </button>
-        <h1 className="text-base md:text-lg font-medium text-stone-900 truncate max-w-[200px] md:max-w-[400px]">{property.title}</h1>
+        <h1 className="text-base md:text-lg font-medium text-[#ED9B40] truncate max-w-[200px] md:max-w-[400px]">{property.title}</h1>
         <div className="flex items-center gap-2">
           <button onClick={handleShare}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm text-stone-700 hover:bg-white transition-all border border-transparent hover:border-stone-200 hover:shadow-sm"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm text-[#ED9B40] hover:text-white hover:bg-white/10 transition-all border border-transparent hover:border-white/20"
             style={{ fontFamily: 'system-ui' }}>
             <Share2 className="w-4 h-4" />
             <span className="hidden sm:block">Share</span>
           </button>
           <button onClick={handleWishlist}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-all border border-transparent hover:border-stone-200 hover:shadow-sm"
-            style={{ fontFamily: 'system-ui', color: isWishlisted ? '#e11d48' : '#57534e', background: isWishlisted ? '#fff1f2' : 'transparent' }}>
-            <Heart className={`w-4 h-4 transition-all ${isWishlisted ? 'fill-rose-500 stroke-rose-500 scale-110' : ''}`} />
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-all border border-transparent hover:border-white/20"
+            style={{ fontFamily: 'system-ui', color: isWishlisted ? '#fb7185' : '#ED9B40', background: isWishlisted ? 'rgba(251,113,133,0.15)' : 'transparent' }}>
+            <Heart className={`w-4 h-4 transition-all ${isWishlisted ? 'fill-rose-400 stroke-rose-400 scale-110' : ''}`} />
             <span className="hidden sm:block">{isWishlisted ? 'Saved' : 'Save'}</span>
           </button>
         </div>
@@ -1199,7 +1342,8 @@ export default function BookingPage() {
         {/* Property Title Block */}
         <div className="mb-6">
           <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-            className="text-3xl md:text-5xl lg:text-6xl text-stone-900 leading-tight mb-3">
+            className="text-3xl md:text-5xl lg:text-6xl text-stone-900 leading-tight mb-3"
+            style={{ fontFamily: "'Cormorant Garamond', serif" }}>
             {property.title}
           </motion.h1>
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }}
@@ -1241,7 +1385,7 @@ export default function BookingPage() {
 
             {/* Description */}
             <section>
-              <h2 className="text-2xl md:text-3xl text-stone-900 mb-4">About this residence</h2>
+              <h2 className="text-2xl md:text-3xl text-stone-900 mb-4" style={{ fontFamily: "'Cormorant Garamond', serif" }}>About this residence</h2>
               <p className="text-stone-600 leading-relaxed text-base md:text-lg" style={{ fontFamily: 'system-ui', fontWeight: 300, lineHeight: 1.8 }}>
                 {property.description}
               </p>
@@ -1250,16 +1394,30 @@ export default function BookingPage() {
             {/* Amenities */}
             {property.amenities?.length > 0 && (
               <section className="border-t border-stone-200 pt-10">
-                <h2 className="text-2xl md:text-3xl text-stone-900 mb-6">What's included</h2>
+                <h2 className="text-2xl md:text-3xl text-stone-900 mb-6" style={{ fontFamily: "'Cormorant Garamond', serif" }}>What's included</h2>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {property.amenities.slice(0, showAllAmenities ? undefined : 9).map((a, i) => (
-                    <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-white border border-stone-100 text-sm text-stone-700" style={{ fontFamily: 'system-ui' }}>
-                      <div className="w-5 h-5 rounded-full bg-stone-100 flex items-center justify-center flex-shrink-0">
-                        <Check className="w-3 h-3 text-stone-600" />
+                  {property.amenities.slice(0, showAllAmenities ? undefined : 9).map((a, i) => {
+                    const iconMap = {
+                      wifi: Wifi, internet: Wifi,
+                      parking: Car,
+                      pool: Waves, swimming: Waves,
+                      gym: Dumbbell, fitness: Dumbbell,
+                      kitchen: UtensilsCrossed, cooking: UtensilsCrossed,
+                      tv: Tv, television: Tv,
+                      ac: Snowflake, 'air conditioning': Snowflake, 'a/c': Snowflake,
+                      fireplace: Flame, fire: Flame,
+                      breakfast: Coffee, coffee: Coffee,
+                      security: Shield, safe: Shield,
+                    };
+                    const lower = a.name.toLowerCase();
+                    const Icon = Object.entries(iconMap).find(([key]) => lower.includes(key))?.[1] || Check;
+                    return (
+                      <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-white border border-stone-100 text-sm text-stone-700" style={{ fontFamily: 'system-ui' }}>
+                        <Icon className="w-5 h-5 text-stone-600 flex-shrink-0" />
+                        {a.name}
                       </div>
-                      {a.name}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
                 {property.amenities.length > 9 && (
                   <button onClick={() => setShowAllAmenities(s => !s)} className="mt-5 text-sm underline text-stone-900" style={{ fontFamily: 'system-ui' }}>
@@ -1272,7 +1430,7 @@ export default function BookingPage() {
             {/* Ratings & Reviews */}
             <section className="border-t border-stone-200 pt-10">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl md:text-3xl text-stone-900">
+                <h2 className="text-2xl md:text-3xl text-stone-900" style={{ fontFamily: "'Cormorant Garamond', serif" }}>
                   <span className="text-amber-500">★</span> {property.rating} · {SAMPLE_REVIEWS.length} reviews
                 </h2>
               </div>
@@ -1304,7 +1462,7 @@ export default function BookingPage() {
 
             {/* Map */}
 <section className="border-t border-stone-200 pt-10">
-  <h2 className="text-2xl md:text-3xl text-stone-900 mb-2">Where you'll be</h2>
+  <h2 className="text-2xl md:text-3xl text-stone-900 mb-2" style={{ fontFamily: "'Cormorant Garamond', serif" }}>Where you'll be</h2>
   <p className="text-sm text-stone-500 mb-5" style={{ fontFamily: 'system-ui' }}>
     {property.location}
   </p>
@@ -1319,7 +1477,7 @@ export default function BookingPage() {
 
             {/* Host */}
             <section className="border-t border-stone-200 pt-10">
-              <h2 className="text-2xl md:text-3xl text-stone-900 mb-6">Meet your host</h2>
+              <h2 className="text-2xl md:text-3xl text-stone-900 mb-6" style={{ fontFamily: "'Cormorant Garamond', serif" }}>Meet your host</h2>
               <div className="bg-white rounded-2xl p-6 border border-stone-100">
                 <div className="flex items-start gap-5 mb-4">
                   <div className="w-16 h-16 rounded-full bg-[#093A3E] flex items-center justify-center flex-shrink-0 text-white text-xl font-light">
@@ -1364,7 +1522,7 @@ export default function BookingPage() {
 
             {/* Things to Know */}
             <section className="border-t border-stone-200 pt-10">
-              <h2 className="text-2xl md:text-3xl text-stone-900 mb-6">Things to know</h2>
+              <h2 className="text-2xl md:text-3xl text-stone-900 mb-6" style={{ fontFamily: "'Cormorant Garamond', serif" }}>Things to know</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
                   <h4 className="font-semibold text-stone-800 mb-3 flex items-center gap-2 text-sm" style={{ fontFamily: 'system-ui' }}><Home className="w-4 h-4" /> House Rules</h4>
@@ -1387,7 +1545,7 @@ export default function BookingPage() {
 
             {/* FAQ */}
             <section className="border-t border-stone-200 pt-10">
-              <h2 className="text-2xl md:text-3xl text-stone-900 mb-4">Frequently asked</h2>
+              <h2 className="text-2xl md:text-3xl text-stone-900 mb-4" style={{ fontFamily: "'Cormorant Garamond', serif" }}>Frequently asked</h2>
               <div className="bg-white rounded-2xl border border-stone-100 px-5 divide-y divide-stone-100">
                 {faqs.map((f, i) => (
                   <FAQ key={i} question={f.question} answer={f.answer} isOpen={openFaqIndex === i} onToggle={() => setOpenFaqIndex(openFaqIndex === i ? null : i)} />

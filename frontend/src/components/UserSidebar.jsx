@@ -7,6 +7,7 @@ import {
   LogOut, 
   Home, 
   X,
+  Heart,
   CalendarCheck, // For consultations
   PlusCircle    // For new consultation
 } from 'lucide-react';
@@ -24,6 +25,12 @@ const UserSidebar = ({ isOpen, onClose }) => {
       label: 'My Bookings', 
       icon: Calendar,
       description: 'View your reservations'
+    },
+    { 
+      path: '/saved', 
+      label: 'Saved Properties', 
+      icon: Heart,
+      description: 'Your wishlist'
     },
     { 
       path: '/my-consultations', 

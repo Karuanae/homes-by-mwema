@@ -702,18 +702,23 @@ export const userAPI = {
     return response;
   },
 
-  getFavorites: async (userId) => {
-    const response = await api.get(`/users/${userId}/favorites`);
+  getFavorites: async () => {
+    const response = await api.get('/users/favorites');
     return response;
   },
 
-  addFavorite: async (userId, propertyId) => {
-    const response = await api.post(`/users/${userId}/favorites`, { property_id: propertyId });
+  addFavorite: async (propertyId) => {
+    const response = await api.post('/users/favorites', { property_id: propertyId });
     return response;
   },
 
-  removeFavorite: async (userId, propertyId) => {
-    const response = await api.delete(`/users/${userId}/favorites/${propertyId}`);
+  removeFavorite: async (propertyId) => {
+    const response = await api.delete(`/users/favorites/${propertyId}`);
+    return response;
+  },
+
+  checkFavorite: async (propertyId) => {
+    const response = await api.get(`/users/favorites/check/${propertyId}`);
     return response;
   },
 };

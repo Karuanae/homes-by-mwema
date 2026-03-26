@@ -58,6 +58,13 @@ export default function Register() {
       return;
     }
     
+    // Check for wishlist intent (from booking page save button)
+    const wishlistIntent = localStorage.getItem('wishlistIntent');
+    if (wishlistIntent) {
+      setTimeout(() => navigate(`/booking/${wishlistIntent}`), 1200);
+      return;
+    }
+    
     // Check for consultation intent
     const consultIntent = localStorage.getItem('consultationIntent');
     if (consultIntent) {
@@ -151,6 +158,13 @@ export default function Register() {
         if (chatIntent) {
           console.log('💬 Found chat intent, redirecting to:', chatIntent);
           setTimeout(() => navigate(chatIntent), 50);
+          return;
+        }
+        
+        // Check for wishlist intent
+        const wishlistIntent = localStorage.getItem('wishlistIntent');
+        if (wishlistIntent) {
+          setTimeout(() => navigate(`/booking/${wishlistIntent}`), 50);
           return;
         }
         

@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import db, User
+from models import db, User, Favorite, Property
 from werkzeug.exceptions import BadRequest
 from datetime import datetime
 import re
@@ -235,3 +235,120 @@ def get_user_stats():
     except Exception as e:
         logger.error(f"Error fetching user stats: {str(e)}")
         return jsonify({'error': 'Failed to fetch statistics'}), 500
+
+
+# ==================== FAVORITES / WISHLIST ====================
+
+@user_bp.route('/favorites', methods=['GET'])
+@jwt_required()
+def get_favorites():
+    """Get all favorited properties for the current user"""
+    try:
+        user_id = get_jwt_identity()
+        favorites = Favorite.query.filter_by(user_id=user_id).order_by(Favorite.created_at.desc()).all()
+        
+        result = []
+        for fav in favorites:
+            prop = Property.query.get(fav.property_id)
+            if not prop:
+                continue
+            cover = None
+            from models import PropertyImage
+            cover_img = PropertyImage.query.filter_by(property_id=prop.id, is_cover=True).first()
+            if cover_img:
+                cover = f"/api/admin/property-image/{cover_img.id}"
+            elif prop.images:
+                cover = f"/api/admin/property-image/{prop.images[0].id}"
+            
+            result.append({
+                'id': fav.id,
+                'property_id': prop.id,
+                'created_at': fav.created_at.isoformat() if fav.created_at else None,
+                'property': {
+                    'id': prop.id,
+                    'name': prop.name,
+                    'title': prop.title,
+                    'location': prop.location,
+                    'price': float(prop.price),
+                    'rating': float(prop.rating) if prop.rating else 0,
+                    'review_count': prop.review_count or 0,
+                    'rooms': prop.rooms,
+                    'bathrooms': prop.bathrooms,
+                    'max_guests': prop.max_guests,
+                    'cover_image': cover,
+                    'type': prop.type,
+                }
+            })
+        
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error(f"Error fetching favorites: {str(e)}")
+        return jsonify({'error': 'Failed to fetch favorites'}), 500
+
+
+@user_bp.route('/favorites', methods=['POST'])
+@jwt_required()
+def add_favorite():
+    """Add a property to favorites"""
+    try:
+        user_id = get_jwt_identity()
+        data = request.get_json()
+        
+        if not data or not data.get('property_id'):
+            return jsonify({'error': 'property_id is required'}), 400
+        
+        property_id = data['property_id']
+        
+        # Check property exists
+        prop = Property.query.get(property_id)
+        if not prop:
+            return jsonify({'error': 'Property not found'}), 404
+        
+        # Check if already favorited
+        existing = Favorite.query.filter_by(user_id=user_id, property_id=property_id).first()
+        if existing:
+            return jsonify({'message': 'Already in favorites', 'id': existing.id}), 200
+        
+        fav = Favorite(user_id=user_id, property_id=property_id)
+        db.session.add(fav)
+        db.session.commit()
+        
+        return jsonify({'message': 'Added to favorites', 'id': fav.id}), 201
+    except Exception as e:
+        logger.error(f"Error adding favorite: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': 'Failed to add favorite'}), 500
+
+
+@user_bp.route('/favorites/<int:property_id>', methods=['DELETE'])
+@jwt_required()
+def remove_favorite(property_id):
+    """Remove a property from favorites"""
+    try:
+        user_id = get_jwt_identity()
+        fav = Favorite.query.filter_by(user_id=user_id, property_id=property_id).first()
+        
+        if not fav:
+            return jsonify({'error': 'Favorite not found'}), 404
+        
+        db.session.delete(fav)
+        db.session.commit()
+        
+        return jsonify({'message': 'Removed from favorites'}), 200
+    except Exception as e:
+        logger.error(f"Error removing favorite: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': 'Failed to remove favorite'}), 500
+
+
+@user_bp.route('/favorites/check/<int:property_id>', methods=['GET'])
+@jwt_required()
+def check_favorite(property_id):
+    """Check if a property is in user's favorites"""
+    try:
+        user_id = get_jwt_identity()
+        fav = Favorite.query.filter_by(user_id=user_id, property_id=property_id).first()
+        return jsonify({'is_favorited': fav is not None}), 200
+    except Exception as e:
+        logger.error(f"Error checking favorite: {str(e)}")
+        return jsonify({'error': 'Failed to check favorite'}), 500
