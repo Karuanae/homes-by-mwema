@@ -151,7 +151,7 @@ function ChatDrawer({ isOpen, onClose, user }) {
                   <MessageCircle size={16} className="text-[#093A3E]" />
                 </div>
                 <div>
-                  <h3 className="font-serif text-base">Concierge Support</h3>
+                  <h3 className="font-serif text-base">Chat Support</h3>
                   <p className="text-[10px] text-white/60">Typically replies in minutes</p>
                 </div>
               </div>
@@ -1228,7 +1228,7 @@ const initializePayment = async () => {
                 {/* Help Section */}
                 <div className="p-4 bg-stone-50 border-t border-stone-200">
                   <p className="text-[10px] md:text-xs text-stone-500 text-center">
-                    Need help? <button onClick={() => setShowChat(true)} className="text-stone-900 underline">Contact Concierge</button>
+                    Need help? <button onClick={() => setShowChat(true)} className="text-stone-900 underline">Chat with us</button>
                   </p>
                 </div>
               </div>

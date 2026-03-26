@@ -374,10 +374,10 @@ export default function AdminDashboard() {
           >
             <div className="p-6 border-b border-white/10">
               <div className="flex justify-between items-center">
-                <h1 className="text-xl font-serif tracking-wider text-white">MWEMA<span className="text-[#ED9B40]">.</span></h1>
+                <h1 className="text-xl font-serif tracking-wider text-white">HOMES BY MWEMA<span className="text-[#ED9B40]">.</span></h1>
                 <button onClick={() => setMobileMenuOpen(false)} className="text-white/60 hover:text-white"><FaTimes size={18}/></button>
               </div>
-              <p className="text-[9px] uppercase tracking-[0.2em] text-white/40 mt-2">Estate Administration</p>
+              <p className="text-[9px] uppercase tracking-[0.2em] text-white/40 mt-2">Homes By Mwema Admin</p>
             </div>
             <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
               {navItems.map(item => (
@@ -399,7 +399,7 @@ export default function AdminDashboard() {
               </div>
               <div className="flex items-center gap-1.5 text-[10px] text-white/40">
                 <div className={`w-1.5 h-1.5 rounded-full ${socketConnected?"bg-green-500":"bg-red-500"}`}/>
-                {socketConnected?"Live Chat Active":"Chat Offline"}
+                {socketConnected?"Concierge Desk Active":"Concierge Desk Offline"}
               </div>
               <button onClick={handleLogout}
                 className="w-full flex items-center gap-2 text-white/40 hover:text-red-300 transition-colors uppercase tracking-widest text-[10px] py-1.5">
@@ -416,7 +416,7 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-[#F9F8F6] flex items-center justify-center">
       <div className="text-center">
         <div className="w-16 h-16 border-4 border-stone-200 border-t-[#093A3E] rounded-full animate-spin mx-auto mb-4"/>
-        <p className="font-serif text-stone-600 tracking-widest uppercase text-sm">Loading Estate Data…</p>
+        <p className="font-serif text-stone-600 tracking-widest uppercase text-sm">Loading Homes By Mwema</p>
       </div>
     </div>
   );
@@ -435,8 +435,8 @@ export default function AdminDashboard() {
       {/* ── Desktop Sidebar - Updated to match client dashboard green ── */}
       <aside className="hidden md:flex md:w-72 bg-[#093A3E] text-white flex-col shadow-2xl z-20 flex-shrink-0">
         <div className="p-10 border-b border-white/10">
-          <h1 className="text-2xl font-serif tracking-wider text-white">MWEMA<span className="text-[#ED9B40]">.</span></h1>
-          <p className="text-[10px] uppercase tracking-[0.2em] text-white/40 mt-2">Estate Administration</p>
+          <h1 className="text-2xl font-serif tracking-wider text-white">HOMES BY MWEMA<span className="text-[#ED9B40]">.</span></h1>
+          <p className="text-[10px] uppercase tracking-[0.2em] text-white/40 mt-2">Homes By Mwema Admin</p>
         </div>
         <nav className="flex-1 py-8 px-4 space-y-2 overflow-y-auto">
           {navItems.map(item => (
@@ -745,7 +745,7 @@ export default function AdminDashboard() {
             {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
               <div>
-                <h2 className="text-xl md:text-2xl font-serif text-[#1C2321]">Concierge Desk</h2>
+                <h2 className="text-xl md:text-2xl font-serif text-[#1C2321]">Chat</h2>
                 <p className="text-stone-500 font-serif italic text-sm">
                   {socketConnected ? "🟢 Live client support" : "⚪️ Chat offline"}
                 </p>
