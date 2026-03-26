@@ -4,7 +4,6 @@ import { motion } from 'framer-motion';
 import { FaEye, FaEyeSlash, FaSpinner, FaGoogle } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
 import { socialAuth } from '../services/socialAuth';
-import { userAPI } from '../services/api';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -85,12 +84,10 @@ export default function Login() {
       return;
     }
     
-    // Check for wishlist intent (from save button)
+    // Check for wishlist intent (from booking page save button)
     const wishlistIntent = localStorage.getItem('wishlistIntent');
     if (wishlistIntent) {
-      localStorage.removeItem('wishlistIntent');
-      userAPI.addFavorite(parseInt(wishlistIntent)).catch(() => {});
-      navigate('/dashboard?tab=saved');
+      navigate(`/booking/${wishlistIntent}`);
       return;
     }
     
@@ -195,9 +192,7 @@ export default function Login() {
         // Check for wishlist intent
         const wishlistIntent = localStorage.getItem('wishlistIntent');
         if (wishlistIntent) {
-          localStorage.removeItem('wishlistIntent');
-          userAPI.addFavorite(parseInt(wishlistIntent)).catch(() => {});
-          setTimeout(() => navigate('/dashboard?tab=saved'), 50);
+          setTimeout(() => navigate(`/booking/${wishlistIntent}`), 50);
           return;
         }
         

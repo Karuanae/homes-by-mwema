@@ -246,7 +246,7 @@ const FullyFurnishedUnitsOnSale = () => {
         { icon: FaParking, name: "2 Parking Slots" },
         { icon: MdOutlineBalcony, name: "Private Terrace" },
         { icon: FaWifi, name: "Smart Home Ready" },
-        { icon: MdOutlineSecurity, name: "Chat Support" }
+        { icon: MdOutlineSecurity, name: "Concierge Service" }
       ],
       furnishing: [
         "Contemporary African art collection",

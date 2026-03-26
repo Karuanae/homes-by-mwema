@@ -59,7 +59,7 @@ const SafariTours = () => {
     },
     {
       icon: FaClock,
-      title: "24/7 Chat Support",
+      title: "24/7 Concierge Support",
       description: "Round-the-clock assistance throughout your safari journey—because wildlife doesn't keep office hours."
     }
   ];

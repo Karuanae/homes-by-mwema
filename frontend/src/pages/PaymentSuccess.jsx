@@ -262,7 +262,7 @@ export default function PaymentSuccess() {
                   <Phone className="w-3 h-3 text-stone-600" />
                 </div>
                 <p className="text-xs text-stone-600">
-                  Our chat support is available 24/7 for any questions
+                  Our concierge is available 24/7 for any questions
                 </p>
               </div>
             </div>
@@ -297,7 +297,7 @@ export default function PaymentSuccess() {
           <p className="text-xs text-stone-500">
             Need assistance?{' '}
             <button className="text-stone-900 underline font-medium">
-              Chat With Us
+              Contact Concierge
             </button>
           </p>
         </div>

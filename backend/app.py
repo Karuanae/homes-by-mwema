@@ -58,8 +58,8 @@ migrate = Migrate(app, db)
 db.init_app(app)
 
 # ===== CORS CONFIGURATION =====
-localhost_origins = ['http://localhost:3000', 'http://localhost:5173']
-env_origins = os.environ.get('ALLOWED_ORIGINS', '').split(',') if os.environ.get('ALLOWED_ORIGINS') else []
+default_origins = 'http://localhost:3000,http://localhost:5173'
+allowed_origins = os.environ.get('ALLOWED_ORIGINS', default_origins).split(',')
 
 vercel_domains = [
     'https://homes-by-mwema-bc0hneof2-karuanaes-projects.vercel.app',
@@ -73,10 +73,10 @@ custom_domains = [
 
 railway_domain = os.environ.get('RAILWAY_PUBLIC_DOMAIN')
 if railway_domain:
-    env_origins.append(f'https://{railway_domain}')
-    env_origins.append(f'https://www.{railway_domain}')
+    allowed_origins.append(f'https://{railway_domain}')
+    allowed_origins.append(f'https://www.{railway_domain}')
 
-all_domains = list({d for d in localhost_origins + env_origins + vercel_domains + custom_domains if d})
+all_domains = list({d for d in allowed_origins + vercel_domains + custom_domains if d})
 
 CORS(app, resources={
     r"/api/*": {

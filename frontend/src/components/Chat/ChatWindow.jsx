@@ -407,7 +407,7 @@ export default function ChatWindow({ chatId, currentUser, onClose, propertyName 
         
         <div className="flex-1 min-w-0">
           <h3 className="font-serif text-lg truncate">
-            {isAdmin ? (chatInfo?.user_name || 'Client') : 'Chat Support'}
+            {isAdmin ? (chatInfo?.user_name || 'Client') : 'Concierge Support'}
           </h3>
           {propertyName && (
             <p className="text-xs text-stone-400 truncate">{propertyName}</p>

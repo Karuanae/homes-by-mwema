@@ -729,7 +729,7 @@ export default function MyBookings() {
         )}
       </AnimatePresence>
 
-      {/* Chat Section */}
+      {/* Concierge Section */}
       <div className="max-w-7xl mx-auto px-6 mt-12">
         <div className="bg-gradient-to-r from-[#093A3E] to-[#0a4a52] text-white rounded-xl p-6 md:p-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
@@ -740,7 +740,7 @@ export default function MyBookings() {
               <div>
                 <h3 className="font-serif text-xl md:text-2xl">Need assistance with your stay?</h3>
                 <p className="text-white/80 text-sm mt-1">
-                  Our chat support team is here 24/7 to help with special requests or questions
+                  Our concierge team is here 24/7 to help with special requests or questions
                 </p>
               </div>
             </div>
@@ -748,7 +748,7 @@ export default function MyBookings() {
               to="/contact"
               className="px-6 py-2.5 bg-[#ED9B40] text-[#093A3E] rounded-lg hover:bg-white transition-colors font-medium text-sm"
             >
-              Chat With Us
+              Contact Concierge
             </Link>
           </div>
         </div>

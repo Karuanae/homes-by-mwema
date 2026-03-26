@@ -132,7 +132,7 @@ export default function PaymentCancel() {
                 className="overflow-hidden mt-4"
               >
                 <div className="bg-white rounded-lg p-4 border border-stone-200">
-                  <h4 className="font-medium text-sm mb-3">Chat With Us</h4>
+                  <h4 className="font-medium text-sm mb-3">Contact Concierge</h4>
                   <div className="space-y-2">
                     <a
                       href="tel:+254700000000"

@@ -37,7 +37,7 @@ const navItems = [
   { id: "saved",           label: "Saved Properties",  shortLabel: "Saved",           icon: Heart },
   { id: "consultations",   label: "My Consultations",  shortLabel: "Consultations",   icon: CalendarCheck },
   { id: "new-consultation", label: "New Consultation", shortLabel: "New Consultation", icon: PlusCircle },
-  { id: "chat",            label: "Chat", shortLabel: "Chat",       icon: MessageSquare },
+  { id: "chat",            label: "Concierge Service", shortLabel: "Concierge",       icon: MessageSquare },
   { id: "profile",         label: "Profile Settings",  shortLabel: "Profile",         icon: User },
 ];
 

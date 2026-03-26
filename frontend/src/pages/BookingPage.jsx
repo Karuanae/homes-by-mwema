@@ -588,7 +588,7 @@ function FAQ({ question, answer, isOpen, onToggle }) {
   );
 }
 
-// ─── Chat Drawer ─────────────────────────────
+// ─── Chat Drawer (same as PaymentPage concierge) ─────────────────────────────
 function ChatDrawer({ isOpen, onClose, user, propertyName }) {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
@@ -1078,7 +1078,18 @@ export default function BookingPage() {
         localStorage.removeItem('chatIntent');
         setShowChat(true);
       }
-
+      // Handle wishlist intent after login redirect
+      const wishlistIntent = localStorage.getItem('wishlistIntent');
+      if (wishlistIntent) {
+        localStorage.removeItem('wishlistIntent');
+        (async () => {
+          try {
+            await userAPI.addFavorite(parseInt(wishlistIntent));
+            setIsWishlisted(true);
+            showToast('Added to wishlist ♡');
+          } catch { /* ignore */ }
+        })();
+      }
     }
   }, [isAuthenticated, user]);
 
@@ -1192,7 +1203,7 @@ export default function BookingPage() {
   const handleWishlist = async () => {
     if (!isAuthenticated) {
       localStorage.setItem('wishlistIntent', id);
-      navigate('/login', { state: { message: 'Please log in to save properties' } });
+      navigate('/login', { state: { from: `/booking/${id}`, message: 'Please log in to save properties' } });
       return;
     }
     if (wishlistLoading) return;
@@ -1201,12 +1212,11 @@ export default function BookingPage() {
       if (isWishlisted) {
         await userAPI.removeFavorite(id);
         setIsWishlisted(false);
-        showToast('Removed from saved');
+        showToast('Removed from wishlist');
       } else {
         await userAPI.addFavorite(id);
         setIsWishlisted(true);
-        showToast('Property saved!');
-        navigate('/dashboard?tab=saved');
+        showToast('Added to wishlist ♡');
       }
     } catch {
       showToast('Something went wrong');

@@ -213,7 +213,7 @@ export default function ChatList({ currentUser, onSelectChat }) {
           <div className="flex items-center gap-3">
             <FaComments className="text-[#D4AF37] text-xl" />
             <div>
-              <h3 className="font-serif text-xl">Chat Desk</h3>
+              <h3 className="font-serif text-xl">Concierge Desk</h3>
               <p className="text-stone-400 text-xs uppercase tracking-widest">
                 Live Client Support
               </p>
