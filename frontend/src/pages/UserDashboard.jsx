@@ -37,7 +37,7 @@ const navItems = [
   { id: "saved",           label: "Saved Properties",  shortLabel: "Saved",           icon: Heart },
   { id: "consultations",   label: "My Consultations",  shortLabel: "Consultations",   icon: CalendarCheck },
   { id: "new-consultation", label: "New Consultation", shortLabel: "New Consultation", icon: PlusCircle },
-  { id: "chat",            label: "Concierge Service", shortLabel: "Concierge",       icon: MessageSquare },
+  { id: "chat",            label: "Chat",              shortLabel: "Chat",            icon: MessageSquare },
   { id: "profile",         label: "Profile Settings",  shortLabel: "Profile",         icon: User },
 ];
 
@@ -77,7 +77,7 @@ export default function UserDashboard() {
             <div className="p-6 border-b border-white/10">
               <div className="flex justify-between items-center">
                 <h1 className="text-xl font-serif tracking-wider text-white">
-                  MWEMA<span className="text-[#ED9B40]">.</span>
+                  HOMES BY MWEMA<span className="text-[#ED9B40]">.</span>
                 </h1>
                 <button
                   onClick={() => setMobileMenuOpen(false)}
@@ -87,7 +87,7 @@ export default function UserDashboard() {
                 </button>
               </div>
               <p className="text-[9px] uppercase tracking-[0.2em] text-white/40 mt-2">
-                Member Account
+                My Account
               </p>
             </div>
 
