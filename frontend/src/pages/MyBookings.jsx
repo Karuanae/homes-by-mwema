@@ -5,7 +5,7 @@ import {
   FaMapMarkerAlt, FaStar, FaDownload, FaWhatsapp, 
   FaPhone, FaQuestionCircle, FaBed, FaSearch, 
   FaFilter, FaChevronRight, FaCalendarAlt, FaHistory, 
-  FaMoneyBillWave, FaExclamationTriangle, FaEye, FaTimes, 
+  FaExclamationTriangle, FaEye, FaTimes, 
   FaCheck, FaClock, FaSpinner, FaUserCircle, FaChevronDown,
   FaCreditCard, FaRegClock, FaCalendarCheck, FaChartLine,
   FaMap, FaGlobe, FaPlane, FaHotel, FaHeart, FaShareAlt
@@ -227,7 +227,6 @@ export default function MyBookings() {
   });
 
   const stats = {
-    totalSpent: bookings.reduce((sum, b) => sum + (b.paidAmount || 0), 0),
     upcomingNights: bookings.filter(b => ["confirmed", "upcoming"].includes(b.status)).reduce((sum, b) => sum + (b.nights || 0), 0),
     completedStays: bookings.filter(b => b.status === "completed").length,
     pendingPayments: bookings.filter(b => b.status === "pending").length,
@@ -290,12 +289,7 @@ export default function MyBookings() {
         </div>
         
         {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mt-6">
-          <div className="bg-white rounded-lg p-4 border border-stone-100 shadow-sm">
-            <FaMoneyBillWave className="text-[#093A3E] mb-2" size={20} />
-            <p className="text-2xl font-serif">{formatCurrency(stats.totalSpent)}</p>
-            <p className="text-xs text-stone-500">Total spent</p>
-          </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-6">
           <div className="bg-white rounded-lg p-4 border border-stone-100 shadow-sm">
             <FaCalendarCheck className="text-[#093A3E] mb-2" size={20} />
             <p className="text-2xl font-serif">{stats.upcomingNights}</p>
