@@ -12,107 +12,71 @@ logger = logging.getLogger(__name__)
 
 # ==================== HELPER FUNCTIONS ====================
 
-def derive_display_status(booking, today):
-    """
-    Single source of truth for booking display status.
-    This function is self-contained — it does NOT rely on the DB
-    status field already being 'expired'.  It checks expires_at
-    directly so expiry is instantaneous the moment the timer
-    crosses zero, regardless of whether the scheduler or
-    check_and_update_expired() has run yet.
-
-    Call this INSTEAD OF (or after) check_and_update_expired().
-    """
-    raw = booking.status
-    pay = booking.payment_status   # 'pending' | 'completed' | 'partial' | 'refunded'
-    now = datetime.utcnow()
-
-    # ── Cancelled is always exact — never override ──────────────
-    if raw == 'cancelled':
-        return 'cancelled'
-
-    # ── Already marked expired in DB ───────────────────────────
-    if raw == 'expired':
-        return 'expired'
-
-    # ── Pending: check timer RIGHT NOW, not just via DB field ──
-    # A booking is only 'pending' while expires_at is in the future
-    # AND payment_status is not yet 'completed'.
-    # The instant expires_at passes, it becomes 'expired' — no
-    # need to wait for the scheduler or a separate API call.
-    if raw == 'pending':
-        if pay == 'completed':
-            # Payment arrived just before expiry — treat as confirmed below
-            pass
-        elif booking.expires_at and booking.expires_at <= now:
-            # Timer has elapsed, no confirmed payment → expired immediately
-            return 'expired'
-        else:
-            # Timer still running
-            return 'pending'
-
-    # ── For all other DB statuses (confirmed / upcoming / active)
-    # and for the edge case above where raw=='pending' but pay=='completed':
-    # a booking is only confirmed/active/completed when payment is confirmed.
-    if pay == 'completed':
-        if booking.check_out < today:
-            return 'completed'     # stay is over
-        if booking.check_in <= today:
-            return 'active'        # guest is currently in-house
-        return 'confirmed'         # paid, upcoming stay
-
-    # payment_status is NOT 'completed' — not confirmed regardless of DB status.
-    # Treat conservatively: if timer still running → pending, else → expired.
-    if booking.expires_at and booking.expires_at <= now:
-        return 'expired'
-    return 'pending'
-
-def check_property_availability(property_id, check_in, check_out, exclude_booking_id=None):
-    """
-    SIMPLE availability check:
-    Returns (is_available, conflicting_bookings)
-    """
-    # Convert string dates if needed
+def check_property_availability_with_lock(property_id, check_in, check_out, exclude_booking_id=None):
+    """Check availability with row locking to prevent race conditions"""
     if isinstance(check_in, str):
         check_in = datetime.strptime(check_in, '%Y-%m-%d').date()
     if isinstance(check_out, str):
         check_out = datetime.strptime(check_out, '%Y-%m-%d').date()
     
-    # Build query for bookings that conflict with requested dates
     query = Booking.query.filter(
         Booking.property_id == property_id,
-        # Only active bookings block availability
         Booking.status.in_(['pending', 'confirmed', 'upcoming']),
-        # Overlap condition: 
-        # Existing booking starts before new checkout AND
-        # Existing booking ends after new checkin
         Booking.check_in < check_out,
         Booking.check_out > check_in
-    )
+    ).with_for_update()
     
-    # Exclude current booking if updating
     if exclude_booking_id:
         query = query.filter(Booking.id != exclude_booking_id)
     
-    # Get all conflicting bookings
     conflicting = query.all()
-    
     return len(conflicting) == 0, conflicting
 
 
-def check_and_update_expired(booking):
+# ── HELPER: delete_if_timer_elapsed ──────────────────────────
+def delete_if_timer_elapsed(booking):
     """
-    REAL-TIME EXPIRY CHECK - Check if a booking is expired and update its status if needed.
-    Returns True if booking was just expired, False otherwise.
+    If a pending booking's timer has elapsed with no confirmed payment,
+    delete it permanently and return True.
+    Returns False if the booking is still valid.
     """
-    if (booking.status == 'pending' and 
-        booking.expires_at and 
-        booking.expires_at < datetime.utcnow()):
-        booking.status = 'expired'
+    if booking.status != 'pending':
+        return False
+    if booking.payment_status == 'completed':
+        return False
+    if booking.expires_at and booking.expires_at <= datetime.utcnow():
+        logger.info(f"Deleting elapsed pending booking {booking.id} — no payment received")
+        db.session.delete(booking)
         db.session.commit()
-        logger.info(f"⚡ Real-time expiry: Booking {booking.id} expired")
         return True
     return False
+
+
+# ── HELPER: derive_display_status ────────────────────────────
+def derive_display_status(booking, today):
+    """
+    Single source of truth for display status.
+    No 'expired' — only pending / confirmed / active / completed / cancelled.
+    Call AFTER delete_if_timer_elapsed() so expired bookings are already gone.
+    """
+    raw = booking.status
+    pay = booking.payment_status
+
+    if raw == 'cancelled':
+        return 'cancelled'
+
+    if raw == 'pending':
+        return 'pending'
+
+    if pay == 'completed':
+        if booking.check_out < today:
+            return 'completed'
+        if booking.check_in <= today:
+            return 'active'
+        return 'confirmed'
+
+    # Fallback — treat as pending so user can still pay
+    return 'pending'
 
 
 # ==================== CREATE BOOKING ====================
@@ -120,54 +84,23 @@ def check_and_update_expired(booking):
 @booking_bp.route('', methods=['POST'])
 @jwt_required()
 def create_booking():
-    """
-    Create a new booking with configurable timeout
-    All settings come from environment variables
-    """
+    """Create a new booking with configurable timeout and row locking"""
     try:
         user_id = get_jwt_identity()
         data = request.json
         
-        # LOG INCOMING DATA
         logger.info(f"📥 Booking request from user {user_id}")
-        logger.info(f"📦 Booking data: {data}")
         
-        # CHECK CONFIG VALUES
-        logger.info("🔍 Checking configuration values:")
-            
-        try:
-            timeout_minutes = current_app.config['BOOKING_TIMEOUT_MINUTES']
-            logger.info(f"  ✅ BOOKING_TIMEOUT_MINUTES: {timeout_minutes}")
-        except Exception as e:
-            logger.error(f"  ❌ BOOKING_TIMEOUT_MINUTES error: {str(e)}")
-            return jsonify({'error': 'Configuration error: BOOKING_TIMEOUT_MINUTES'}), 500
-            
-        try:
-            max_guests = current_app.config['MAX_GUESTS_PER_BOOKING']
-            logger.info(f"  ✅ MAX_GUESTS_PER_BOOKING: {max_guests}")
-        except Exception as e:
-            logger.error(f"  ❌ MAX_GUESTS_PER_BOOKING error: {str(e)}")
-            return jsonify({'error': 'Configuration error: MAX_GUESTS_PER_BOOKING'}), 500
-            
-        try:
-            min_nights = current_app.config['MIN_NIGHTS_BOOKING']
-            logger.info(f"  ✅ MIN_NIGHTS_BOOKING: {min_nights}")
-        except Exception as e:
-            logger.error(f"  ❌ MIN_NIGHTS_BOOKING error: {str(e)}")
-            return jsonify({'error': 'Configuration error: MIN_NIGHTS_BOOKING'}), 500
-            
-        try:
-            max_nights = current_app.config['MAX_NIGHTS_BOOKING']
-            logger.info(f"  ✅ MAX_NIGHTS_BOOKING: {max_nights}")
-        except Exception as e:
-            logger.error(f"  ❌ MAX_NIGHTS_BOOKING error: {str(e)}")
-            return jsonify({'error': 'Configuration error: MAX_NIGHTS_BOOKING'}), 500
+        # Get config values
+        timeout_minutes = current_app.config.get('BOOKING_TIMEOUT_MINUTES', 15)
+        max_guests = current_app.config.get('MAX_GUESTS_PER_BOOKING', 10)
+        min_nights = current_app.config.get('MIN_NIGHTS_BOOKING', 1)
+        max_nights = current_app.config.get('MAX_NIGHTS_BOOKING', 30)
         
         # Generate unique idempotency key
         idempotency_key = request.headers.get('Idempotency-Key')
         if not idempotency_key:
             idempotency_key = str(uuid.uuid4())
-        logger.info(f"🔑 Idempotency Key: {idempotency_key}")
         
         # Check if already processed
         existing = Booking.query.filter_by(idempotency_key=idempotency_key).first()
@@ -181,90 +114,49 @@ def create_booking():
             }), 200
         
         # Validate required fields
-        logger.info("🔍 Validating required fields...")
         required_fields = ['property_id', 'check_in', 'check_out', 'guests']
         for field in required_fields:
             if field not in data:
-                logger.error(f"❌ Missing required field: {field}")
-                return jsonify({
-                    'success': False,
-                    'error': f'Missing required field: {field}'
-                }), 400
+                return jsonify({'error': f'Missing required field: {field}'}), 400
         
         # Parse and validate dates
         try:
             check_in = datetime.strptime(data['check_in'], '%Y-%m-%d').date()
             check_out = datetime.strptime(data['check_out'], '%Y-%m-%d').date()
-            logger.info(f"📅 Dates: {check_in} to {check_out}")
-        except ValueError as e:
-            logger.error(f"❌ Invalid date format: {str(e)}")
-            return jsonify({
-                'success': False,
-                'error': 'Invalid date format. Use YYYY-MM-DD'
-            }), 400
+        except ValueError:
+            return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
         
         # Validate date logic
         if check_in >= check_out:
-            logger.error("❌ Check-out must be after check-in")
-            return jsonify({
-                'success': False,
-                'error': 'Check-out must be after check-in'
-            }), 400
+            return jsonify({'error': 'Check-out must be after check-in'}), 400
         
         if check_in < datetime.now().date():
-            logger.error("❌ Check-in cannot be in the past")
-            return jsonify({
-                'success': False,
-                'error': 'Check-in cannot be in the past'
-            }), 400
+            return jsonify({'error': 'Check-in cannot be in the past'}), 400
         
         # Validate nights
         nights = (check_out - check_in).days
-        logger.info(f"🌙 Nights: {nights}")
-        
         if nights < min_nights:
-            logger.error(f"❌ Minimum stay is {min_nights} nights")
-            return jsonify({
-                'success': False,
-                'error': f'Minimum stay is {min_nights} night{"s" if min_nights > 1 else ""}'
-            }), 400
+            return jsonify({'error': f'Minimum stay is {min_nights} night{"s" if min_nights > 1 else ""}'}), 400
         
         if nights > max_nights:
-            logger.error(f"❌ Maximum stay is {max_nights} nights")
-            return jsonify({
-                'success': False,
-                'error': f'Maximum stay is {max_nights} nights'
-            }), 400
+            return jsonify({'error': f'Maximum stay is {max_nights} nights'}), 400
         
         # Validate guests
         total_guests = data['guests'].get('adults', 0) + data['guests'].get('children', 0)
-        logger.info(f"👥 Total guests: {total_guests}")
-        
         if total_guests > max_guests:
-            logger.error(f"❌ Maximum {max_guests} guests allowed")
-            return jsonify({
-                'success': False,
-                'error': f'Maximum {max_guests} guests allowed'
-            }), 400
+            return jsonify({'error': f'Maximum {max_guests} guests allowed'}), 400
         
-        # Get property
-        property = Property.query.get(data['property_id'])
+        # Get property with lock
+        property = Property.query.filter_by(id=data['property_id']).with_for_update().first()
         if not property:
-            logger.error(f"❌ Property not found: {data['property_id']}")
-            return jsonify({
-                'success': False,
-                'error': 'Property not found'
-            }), 404
+            return jsonify({'error': 'Property not found'}), 404
         
-        logger.info(f"🏠 Property found: {property.name} (${property.price})")
-        
-        # Check availability
-        is_available, conflicts = check_property_availability(
+        # Check availability with lock
+        is_available, conflicts = check_property_availability_with_lock(
             property.id, check_in, check_out
         )
         
         if not is_available:
-            logger.warning(f"⚠️ Property not available for selected dates")
             conflict_dates = []
             for c in conflicts[:3]:
                 conflict_dates.append({
@@ -272,21 +164,15 @@ def create_booking():
                     'check_out': c.check_out.strftime('%b %d'),
                     'status': c.status
                 })
-            
             return jsonify({
-                'success': False,
                 'error': 'Property not available for selected dates',
                 'conflicts': conflict_dates,
                 'message': 'These dates are already booked. Please try different dates.'
             }), 409
         
         # Calculate amounts
-        logger.info("💰 Calculating amounts...")
         base_amount = Decimal(str(property.price)) * Decimal(nights)
         total_amount = base_amount
-        
-        logger.info(f"  Base amount: {base_amount}")
-        logger.info(f"  Total: {total_amount}")
         
         # Payment type
         payment_type = data.get('payment_type', 'full')
@@ -294,10 +180,8 @@ def create_booking():
         
         if payment_type == 'partial':
             pending_amount = total_amount * Decimal('0.5')
-            logger.info(f"💰 Partial payment: {pending_amount} deposit")
         
-        # Create booking
-        logger.info("📝 Creating booking object...")
+        # Create booking with cancellation deadlines
         booking = Booking(
             user_id=user_id,
             property_id=property.id,
@@ -318,16 +202,19 @@ def create_booking():
             payment_status='pending',
             idempotency_key=idempotency_key,
             expires_at=datetime.utcnow() + timedelta(minutes=timeout_minutes),
-            created_at=datetime.utcnow()
+            created_at=datetime.utcnow(),
+            cancellation_policy='moderate'
         )
         
-        logger.info("💾 Saving to database...")
+        # Calculate and store cancellation deadlines
+        booking.cancellation_deadline_30 = check_in - timedelta(days=30)
+        booking.cancellation_deadline_14 = check_in - timedelta(days=14)
+        
         db.session.add(booking)
         db.session.commit()
         
         logger.info(f"✅ Booking created successfully with ID: {booking.id}")
 
-        # Build property image URL instead of passing the ORM object
         property_image_url = None
         if property.images and len(property.images) > 0:
             property_image_url = f"/api/admin/property-image/{property.images[0].id}"
@@ -348,61 +235,48 @@ def create_booking():
                 'guests': data['guests'],
                 'price_per_night': float(property.price),
                 'base_amount': float(base_amount),
-                'cleaning_fee': 0,
-                'service_fee': 0,
                 'total_amount': float(total_amount),
                 'pending_amount': float(pending_amount) if pending_amount > 0 else 0,
                 'payment_type': payment_type,
                 'status': booking.status,
                 'expires_at': booking.expires_at.isoformat(),
-                'expires_in_minutes': timeout_minutes
+                'expires_in_minutes': timeout_minutes,
+                'cancellation_deadline_30': booking.cancellation_deadline_30.isoformat() if booking.cancellation_deadline_30 else None,
+                'cancellation_deadline_14': booking.cancellation_deadline_14.isoformat() if booking.cancellation_deadline_14 else None,
             }
         }), 201
         
     except Exception as e:
         db.session.rollback()
-        logger.error(f"❌❌❌ UNHANDLED EXCEPTION: {str(e)}")
-        logger.error(f"❌ Error type: {type(e).__name__}")
+        logger.error(f"❌ Error creating booking: {str(e)}")
         import traceback
-        logger.error(f"❌ Traceback: {traceback.format_exc()}")
-        return jsonify({
-            'success': False,
-            'error': 'Failed to create booking. Please try again.',
-            'details': str(e)
-        }), 500
+        logger.error(traceback.format_exc())
+        return jsonify({'error': 'Failed to create booking. Please try again.'}), 500
 
 
-# ========== SESSION BOOKING ==========
+# ==================== CREATE BOOKING FROM SESSION ====================
 
 @booking_bp.route('/create-from-session', methods=['POST'])
 @jwt_required()
 def create_booking_from_session():
-    """
-    Create a booking from session data saved during pre-login
-    This is called after user logs in, before showing payment page
-    """
+    """Create a booking from session data saved during pre-login"""
     try:
         user_id = get_jwt_identity()
         data = request.json
         
         logger.info(f"📝 Creating booking from session for user {user_id}")
-        logger.info(f"📦 Session data: {data}")
         
         # Validate required fields
         required_fields = ['property_id', 'check_in', 'check_out', 'guests']
         for field in required_fields:
             if field not in data:
-                logger.error(f"❌ Missing required field: {field}")
-                return jsonify({
-                    'success': False,
-                    'error': f'Missing required field: {field}'
-                }), 400
+                return jsonify({'error': f'Missing required field: {field}'}), 400
         
         # Parse and validate dates
         try:
             check_in = datetime.strptime(data['check_in'], '%Y-%m-%d').date()
             check_out = datetime.strptime(data['check_out'], '%Y-%m-%d').date()
-        except ValueError as e:
+        except ValueError:
             return jsonify({'error': 'Invalid date format'}), 400
         
         # Validate date logic
@@ -412,21 +286,19 @@ def create_booking_from_session():
         if check_in < datetime.now().date():
             return jsonify({'error': 'Check-in cannot be in the past'}), 400
         
-        # Get property and verify it exists
-        property = Property.query.get(data['property_id'])
+        # Get property with lock
+        property = Property.query.filter_by(id=data['property_id']).with_for_update().first()
         if not property:
-            logger.error(f"❌ Property not found: {data['property_id']}")
             return jsonify({'error': 'Property not found'}), 404
         
         # Check availability AGAIN (in case dates were booked while user was logging in)
-        is_available, conflicts = check_property_availability(
+        is_available, conflicts = check_property_availability_with_lock(
             property.id, check_in, check_out
         )
         
         if not is_available:
             logger.warning(f"⚠️ Property {property.id} no longer available for selected dates")
             return jsonify({
-                'success': False,
                 'error': 'These dates are no longer available',
                 'available': False,
                 'message': 'Sorry, these dates were just booked by someone else. Please try different dates.'
@@ -434,9 +306,7 @@ def create_booking_from_session():
         
         # Calculate nights
         nights = (check_out - check_in).days
-        
-        # Get config values
-        timeout_minutes = current_app.config['BOOKING_TIMEOUT_MINUTES']
+        timeout_minutes = current_app.config.get('BOOKING_TIMEOUT_MINUTES', 15)
         
         # Calculate amounts
         base_amount = Decimal(str(property.price)) * Decimal(nights)
@@ -463,14 +333,10 @@ def create_booking_from_session():
                     'property_image': property_image_url,
                     'check_in': check_in.strftime('%Y-%m-%d'),
                     'check_out': check_out.strftime('%Y-%m-%d'),
-                    'check_in_display': check_in.strftime('%b %d, %Y'),
-                    'check_out_display': check_out.strftime('%b %d, %Y'),
                     'nights': nights,
                     'guests': data['guests'],
                     'price_per_night': float(property.price),
                     'base_amount': float(base_amount),
-                    'cleaning_fee': 0,
-                    'service_fee': 0,
                     'total_amount': float(total_amount),
                     'expires_at': existing.expires_at.isoformat(),
                     'expires_in_minutes': timeout_minutes
@@ -494,15 +360,20 @@ def create_booking_from_session():
             confirmation='pending',
             payment_status='pending',
             idempotency_key=idempotency_key,
-            expires_at=datetime.utcnow() + timedelta(minutes=timeout_minutes)
+            expires_at=datetime.utcnow() + timedelta(minutes=timeout_minutes),
+            created_at=datetime.utcnow(),
+            cancellation_policy='moderate'
         )
+        
+        # Set cancellation deadlines
+        booking.cancellation_deadline_30 = check_in - timedelta(days=30)
+        booking.cancellation_deadline_14 = check_in - timedelta(days=14)
         
         db.session.add(booking)
         db.session.commit()
         
         logger.info(f"✅ Booking created successfully from session: ID {booking.id}")
         
-        # Build property image URL
         property_image_url = None
         if property.images and len(property.images) > 0:
             property_image_url = f"/api/admin/property-image/{property.images[0].id}"
@@ -517,28 +388,64 @@ def create_booking_from_session():
                 'property_image': property_image_url,
                 'check_in': check_in.strftime('%Y-%m-%d'),
                 'check_out': check_out.strftime('%Y-%m-%d'),
-                'check_in_display': check_in.strftime('%b %d, %Y'),
-                'check_out_display': check_out.strftime('%b %d, %Y'),
                 'nights': nights,
                 'guests': data['guests'],
                 'price_per_night': float(property.price),
                 'base_amount': float(base_amount),
-                'cleaning_fee': 0,
-                'service_fee': 0,
                 'total_amount': float(total_amount),
                 'status': booking.status,
                 'expires_at': booking.expires_at.isoformat(),
-                'expires_in_minutes': timeout_minutes
+                'expires_in_minutes': timeout_minutes,
+                'cancellation_deadline_30': booking.cancellation_deadline_30.isoformat() if booking.cancellation_deadline_30 else None,
+                'cancellation_deadline_14': booking.cancellation_deadline_14.isoformat() if booking.cancellation_deadline_14 else None,
             }
         }), 201
         
     except Exception as e:
         db.session.rollback()
         logger.error(f"❌ Error creating booking from session: {str(e)}")
+        return jsonify({'error': 'Failed to create booking. Please try again.'}), 500
+
+
+# ==================== GET BOOKING BY ID ====================
+
+@booking_bp.route('/<int:booking_id>', methods=['GET'])
+@jwt_required()
+def get_booking_by_id(booking_id):
+    """Get a single booking by ID"""
+    try:
+        user_id = get_jwt_identity()
+        
+        booking = Booking.query.filter_by(id=booking_id, user_id=user_id).first()
+        if not booking:
+            return jsonify({'error': 'Booking not found'}), 404
+        
+        # Delete if elapsed
+        if delete_if_timer_elapsed(booking):
+            return jsonify({'error': 'Booking expired and has been removed'}), 404
+        
+        property_obj = booking.property
+        
         return jsonify({
-            'success': False,
-            'error': 'Failed to create booking. Please try again.'
-        }), 500
+            'id': booking.id,
+            'property_id': booking.property_id,
+            'property_name': property_obj.name if property_obj else 'Unknown',
+            'property_location': property_obj.location if property_obj else 'Unknown',
+            'check_in': booking.check_in.strftime('%Y-%m-%d'),
+            'check_out': booking.check_out.strftime('%Y-%m-%d'),
+            'nights': booking.nights,
+            'guests': booking.guests,
+            'total_amount': float(booking.total_amount),
+            'paid_amount': float(booking.total_amount) if booking.payment_status == 'completed' else 0,
+            'pending_amount': float(booking.pending_amount or 0) if booking.status == 'pending' else 0,
+            'payment_status': booking.payment_status,
+            'status': booking.status,
+            'expires_at': booking.expires_at.isoformat() if booking.expires_at else None,
+            'created_at': booking.created_at.isoformat() if booking.created_at else None
+        }), 200
+    except Exception as e:
+        logger.error(f"Get booking error: {str(e)}")
+        return jsonify({'error': 'Failed to fetch booking'}), 500
 
 
 # ==================== GET BOOKING STATUS ====================
@@ -547,40 +454,41 @@ def create_booking_from_session():
 @jwt_required()
 def get_booking_status(booking_id):
     """
-    REAL-TIME STATUS CHECK - Check if booking is still valid (not expired)
-    Used by frontend to show timeout warnings
+    Real-time status check used by the payment page timer.
+    If the timer has elapsed with no payment, the booking is deleted
+    and a 404 is returned — the payment page redirects away.
     """
     user_id = get_jwt_identity()
-    
+
     booking = Booking.query.filter_by(id=booking_id, user_id=user_id).first()
     if not booking:
-        return jsonify({'error': 'Booking not found'}), 404
-    
-    # REAL-TIME EXPIRY CHECK - happens on every status request
-    was_expired = check_and_update_expired(booking)
-    
-    # Check if expired
+        return jsonify({'error': 'Booking not found', 'is_expired': True}), 404
+
+    # Delete if elapsed — 404 tells the payment page the booking is gone
+    if delete_if_timer_elapsed(booking):
+        return jsonify({
+            'error':      'Booking window expired. The booking has been removed.',
+            'is_expired': True,
+        }), 404
+
     now = datetime.utcnow()
-    is_expired = booking.expires_at and booking.expires_at < now
-    
-    # Calculate time left
     time_left = None
-    if booking.expires_at and not is_expired and booking.status == 'pending':
+    if booking.status == 'pending' and booking.expires_at:
         diff = booking.expires_at - now
-        time_left = {
-            'minutes': diff.seconds // 60,
-            'seconds': diff.seconds % 60,
-            'total_seconds': diff.seconds
-        }
-    
+        if diff.total_seconds() > 0:
+            time_left = {
+                'minutes':       diff.seconds // 60,
+                'seconds':       diff.seconds % 60,
+                'total_seconds': int(diff.total_seconds()),
+            }
+
     return jsonify({
-        'id': booking.id,
-        'status': booking.status,
+        'id':             booking.id,
+        'status':         booking.status,
         'payment_status': booking.payment_status,
-        'is_expired': is_expired,
-        'was_just_expired': was_expired,
-        'expires_at': booking.expires_at.isoformat() if booking.expires_at else None,
-        'time_left': time_left
+        'is_expired':     False,
+        'expires_at':     booking.expires_at.isoformat() if booking.expires_at else None,
+        'time_left':      time_left,
     }), 200
 
 
@@ -588,10 +496,7 @@ def get_booking_status(booking_id):
 
 @booking_bp.route('/check-availability', methods=['POST'])
 def check_availability():
-    """
-    Public endpoint to check property availability
-    No login required - used on booking page
-    """
+    """Public endpoint to check property availability"""
     try:
         data = request.json
         
@@ -600,30 +505,19 @@ def check_availability():
         check_out = data.get('check_out')
         
         if not all([property_id, check_in, check_out]):
-            return jsonify({
-                'success': False,
-                'error': 'Missing required fields'
-            }), 400
+            return jsonify({'error': 'Missing required fields'}), 400
         
         try:
             check_in_date = datetime.strptime(check_in, '%Y-%m-%d').date()
             check_out_date = datetime.strptime(check_out, '%Y-%m-%d').date()
         except ValueError:
-            return jsonify({
-                'success': False,
-                'error': 'Invalid date format'
-            }), 400
+            return jsonify({'error': 'Invalid date format'}), 400
         
-        # Verify property exists
         property_obj = Property.query.get(property_id)
         if not property_obj:
-            return jsonify({
-                'success': False,
-                'error': 'Property not found',
-                'available': False
-            }), 404
+            return jsonify({'error': 'Property not found', 'available': False}), 404
         
-        is_available, conflicts = check_property_availability(
+        is_available, conflicts = check_property_availability_with_lock(
             property_id, check_in_date, check_out_date
         )
         
@@ -636,11 +530,7 @@ def check_availability():
         }), 200
     except Exception as e:
         logger.error(f"Availability check error: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': 'Failed to check availability',
-            'available': False
-        }), 500
+        return jsonify({'error': 'Failed to check availability', 'available': False}), 500
 
 
 # ==================== GET MY BOOKINGS ====================
@@ -648,7 +538,11 @@ def check_availability():
 @booking_bp.route('/my-bookings', methods=['GET'])
 @jwt_required()
 def get_my_bookings():
-    """Get all bookings for the current user with real-time status."""
+    """
+    Get all bookings for the current user.
+    Pending bookings whose timer has elapsed are deleted on the spot
+    and simply do not appear in the response.
+    """
     try:
         user_id = get_jwt_identity()
 
@@ -662,6 +556,10 @@ def get_my_bookings():
 
         for booking in bookings:
             try:
+                # Silently delete if timer elapsed with no payment
+                if delete_if_timer_elapsed(booking):
+                    continue
+
                 prop = booking.property
                 if not prop:
                     logger.warning(f"Booking {booking.id} has no property — skipping")
@@ -669,36 +567,28 @@ def get_my_bookings():
 
                 display_status = derive_display_status(booking, today)
 
-                # If derive_display_status decided this booking is expired but the
-                # DB still says 'pending', write the update now so every future
-                # query sees the correct state without waiting for the scheduler.
-                if display_status == 'expired' and booking.status == 'pending':
-                    booking.status = 'expired'
-                    db.session.add(booking)
-                    logger.info(f"⚡ Real-time expiry (my-bookings): Booking {booking.id} expired")
-
                 # Cover image
                 property_image = None
                 if prop.images:
                     property_image = f"/api/admin/property-image/{prop.images[0].id}"
 
-                # Time left (only meaningful while pending)
+                # Time left — only for pending bookings still within the window
                 time_left = None
-                if booking.status == 'pending' and booking.expires_at:
+                if display_status == 'pending' and booking.expires_at:
                     diff = booking.expires_at - now_dt
                     if diff.total_seconds() > 0:
                         time_left = {
                             'minutes': int(diff.total_seconds() // 60),
-                            'seconds': int(diff.total_seconds() % 60)
+                            'seconds': int(diff.total_seconds() % 60),
                         }
 
-                # Refund info for cancelled bookings
+                # Refund info — only for cancelled bookings that had a payment
                 refund_info = None
-                if display_status == 'cancelled':
+                if display_status == 'cancelled' and float(booking.refund_amount or 0) > 0:
                     refund_info = {
-                        'refund_amount':    float(booking.refund_amount or 0),
-                        'cancellation_fee': float(booking.cancellation_fee or 0),
-                        'refund_processed': booking.refund_processed or False,
+                        'refund_amount':      float(booking.refund_amount),
+                        'cancellation_fee':   float(booking.cancellation_fee or 0),
+                        'refund_processed':   booking.refund_processed or False,
                         'refund_processed_at': (
                             booking.refund_processed_at.isoformat()
                             if booking.refund_processed_at else None
@@ -710,35 +600,31 @@ def get_my_bookings():
                     }
 
                 result.append({
-                    'id':                booking.id,
-                    'property_id':       booking.property_id,
-                    'property_name':     prop.name,
-                    'property_location': prop.location,
-                    'property_image':    property_image,
+                    'id':                 booking.id,
+                    'property_id':        booking.property_id,
+                    'property_name':      prop.name,
+                    'property_location':  prop.location,
+                    'property_image':     property_image,
                     'property_latitude':  float(prop.latitude)  if prop.latitude  else None,
                     'property_longitude': float(prop.longitude) if prop.longitude else None,
-                    'check_in':         booking.check_in.strftime('%Y-%m-%d'),
-                    'check_out':        booking.check_out.strftime('%Y-%m-%d'),
-                    'check_in_display': booking.check_in.strftime('%b %d, %Y'),
-                    'check_out_display':booking.check_out.strftime('%b %d, %Y'),
-                    'nights':           booking.nights,
-                    'guests':           booking.guests,
-                    'total_amount':     float(booking.total_amount),
-                    'base_amount':      float(booking.base_amount),
-                    'paid_amount':      float(booking.total_amount - (booking.pending_amount or 0)),
-                    # pending_amount is ONLY meaningful while status == 'pending'
-                    # (inside the 15-min payment window). Zero it out for everything else
-                    # so the frontend never accidentally renders a "balance due" on a
-                    # confirmed, cancelled, or expired booking.
-                    'pending_amount':   float(booking.pending_amount or 0) if display_status == 'pending' else 0,
-                    'payment_status':   booking.payment_status,
-                    'status':           display_status,
-                    'original_status':  booking.status,
-                    'expires_at':       booking.expires_at.isoformat() if booking.expires_at else None,
-                    'time_left':        time_left,
-                    'created_at':       booking.created_at.isoformat() if booking.created_at else None,
+                    'check_in':          booking.check_in.strftime('%Y-%m-%d'),
+                    'check_out':         booking.check_out.strftime('%Y-%m-%d'),
+                    'check_in_display':  booking.check_in.strftime('%b %d, %Y'),
+                    'check_out_display': booking.check_out.strftime('%b %d, %Y'),
+                    'nights':            booking.nights,
+                    'guests':            booking.guests,
+                    'total_amount':      float(booking.total_amount),
+                    'base_amount':       float(booking.base_amount),
+                    # pending_amount only non-zero while booking is still pending
+                    'pending_amount':    float(booking.pending_amount or 0) if display_status == 'pending' else 0,
+                    'paid_amount':       float(booking.total_amount) if display_status != 'pending' else 0,
+                    'payment_status':    booking.payment_status,
+                    'status':            display_status,
+                    'expires_at':        booking.expires_at.isoformat() if booking.expires_at else None,
+                    'time_left':         time_left,
+                    'created_at':        booking.created_at.isoformat() if booking.created_at else None,
                     'can_cancel': (
-                        booking.status in ['pending', 'confirmed', 'upcoming']
+                        display_status in ['pending', 'confirmed']
                         and booking.check_in > today
                     ),
                     'refund_info': refund_info,
@@ -747,13 +633,6 @@ def get_my_bookings():
             except Exception as e:
                 logger.error(f"Error processing booking {booking.id}: {str(e)}")
                 continue
-
-        # Flush any expiry writes accumulated during the loop
-        try:
-            db.session.commit()
-        except Exception as e:
-            logger.warning(f"Could not flush expiry writes: {str(e)}")
-            db.session.rollback()
 
         return jsonify(result), 200
 
@@ -766,7 +645,7 @@ def get_my_bookings():
 
 @booking_bp.route('/<int:booking_id>/cancel', methods=['POST'])
 @jwt_required()
-def cancel_booking(booking_id):          # ← comes from URL, not request body
+def cancel_booking(booking_id):
     """Cancel a booking (user-initiated) with refund calculation."""
     try:
         user_id = get_jwt_identity()
@@ -775,12 +654,11 @@ def cancel_booking(booking_id):          # ← comes from URL, not request body
         if not booking:
             return jsonify({'error': 'Booking not found'}), 404
 
-        # Real-time expiry
-        if check_and_update_expired(booking):
+        # If timer elapsed, delete it — cannot cancel what no longer exists
+        if delete_if_timer_elapsed(booking):
             return jsonify({
                 'success': False,
-                'error':   'Booking has expired and cannot be cancelled',
-                'expired': True
+                'error':   'Your booking window expired. The booking has been removed.',
             }), 400
 
         if booking.status == 'cancelled':
@@ -791,32 +669,33 @@ def cancel_booking(booking_id):          # ← comes from URL, not request body
             return jsonify({
                 'success':    False,
                 'error':      'Cannot cancel a booking that has already started',
-                'can_cancel': False
+                'can_cancel': False,
             }), 400
 
-        # Set deadlines if missing
+        # Set cancellation deadlines if missing
         if hasattr(booking, 'calculate_cancellation_deadlines') and (
             not booking.cancellation_deadline_30 or not booking.cancellation_deadline_14
         ):
             booking.calculate_cancellation_deadlines()
 
-        # Refund calculation
-        if hasattr(booking, 'calculate_refund_amount'):
-            fee_amount, refund_amount = booking.calculate_refund_amount()
-        else:
-            days = (booking.check_in - today).days
-            if days >= 30:
-                fee_amount, refund_amount = 0, float(booking.total_amount)
-            elif days >= 14:
-                fee_amount = float(booking.total_amount) * 0.5
-                refund_amount = float(booking.total_amount) * 0.5
-            else:
-                fee_amount, refund_amount = float(booking.total_amount), 0
+        # Refund only applies if payment was completed
+        payment_was_made = booking.payment_status == 'completed'
 
-        logger.info(
-            f"Cancelling booking {booking.id}: "
-            f"fee={fee_amount}, refund={refund_amount}"
-        )
+        if payment_was_made:
+            if hasattr(booking, 'calculate_refund_amount'):
+                fee_amount, refund_amount = booking.calculate_refund_amount()
+            else:
+                days = (booking.check_in - today).days
+                if days >= 30:
+                    fee_amount, refund_amount = 0, float(booking.total_amount)
+                elif days >= 14:
+                    fee_amount = float(booking.total_amount) * 0.5
+                    refund_amount = float(booking.total_amount) * 0.5
+                else:
+                    fee_amount, refund_amount = float(booking.total_amount), 0
+        else:
+            # Cancelled during the payment window — no money exchanged
+            fee_amount, refund_amount = 0, 0
 
         booking.status       = 'cancelled'
         booking.cancelled_at = datetime.utcnow()
@@ -828,7 +707,9 @@ def cancel_booking(booking_id):          # ← comes from URL, not request body
 
         db.session.commit()
 
-        if refund_amount > 0:
+        if not payment_was_made:
+            message = 'Booking cancelled. No payment was taken.'
+        elif refund_amount > 0:
             if refund_amount == float(booking.total_amount):
                 message = 'Booking cancelled. Full refund will be processed within 5-7 business days.'
             else:
@@ -842,9 +723,9 @@ def cancel_booking(booking_id):          # ← comes from URL, not request body
         return jsonify({
             'success':       True,
             'message':       message,
-            'refund_amount': float(refund_amount) if refund_amount else 0,
-            'fee_amount':    float(fee_amount)    if fee_amount    else 0,
-            'cancelled_at':  booking.cancelled_at.isoformat()
+            'refund_amount': float(refund_amount),
+            'fee_amount':    float(fee_amount),
+            'cancelled_at':  booking.cancelled_at.isoformat(),
         }), 200
 
     except Exception as e:
@@ -853,35 +734,46 @@ def cancel_booking(booking_id):          # ← comes from URL, not request body
         return jsonify({'error': 'Failed to cancel booking'}), 500
 
 
-# ==================== BACKGROUND TASK ====================
+# ==================== SCHEDULER: expire_old_pending_bookings ====================
 
 def expire_old_pending_bookings():
     """
-    BACKGROUND TASK - Find pending bookings older than configured minutes and expire them
-    This is a backup for the real-time checks
+    Background task — permanently delete pending bookings whose timer
+    has elapsed with no confirmed payment.  Runs every minute via
+    APScheduler as a safety net; delete_if_timer_elapsed() handles
+    most cases the moment a user or admin touches the booking.
     """
     try:
-        # Get timeout from app config
-        timeout_minutes = current_app.config['BOOKING_TIMEOUT_MINUTES']
-        
-        # Find expired pending bookings
-        expired = Booking.query.filter(
+        elapsed = Booking.query.filter(
             Booking.status == 'pending',
+            Booking.payment_status != 'completed',
             Booking.expires_at < datetime.utcnow()
         ).all()
-        
+
         count = 0
-        for booking in expired:
-            booking.status = 'expired'
-            logger.info(f"⏰ Background task: Booking {booking.id} expired - no payment received")
+        for booking in elapsed:
+            logger.info(f"Scheduler deleting elapsed booking {booking.id}")
+            db.session.delete(booking)
             count += 1
-        
+
         if count > 0:
             db.session.commit()
-            logger.info(f"✅ Background task expired {count} pending bookings")
-        
+            logger.info(f"Scheduler deleted {count} elapsed pending bookings")
+
+        # Also delete any bookings already marked 'expired' from before
+        # this change was deployed (one-time cleanup).
+        old_expired = Booking.query.filter(
+            Booking.status == 'expired'
+        ).all()
+        if old_expired:
+            for b in old_expired:
+                db.session.delete(b)
+            db.session.commit()
+            logger.info(f"Cleaned up {len(old_expired)} legacy 'expired' bookings")
+
         return count
+
     except Exception as e:
-        logger.error(f"Error expiring bookings: {str(e)}")
+        logger.error(f"Error in expire_old_pending_bookings: {str(e)}")
         db.session.rollback()
         return 0

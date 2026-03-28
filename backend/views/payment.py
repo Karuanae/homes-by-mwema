@@ -12,7 +12,7 @@ import uuid
 import requests
 from mpesa_service import MPesaService
 from paypal_service import PayPalService
-from views.booking import check_and_update_expired
+from views.booking import delete_if_timer_elapsed
 
 payment_bp = Blueprint('payment', __name__)
 logger = logging.getLogger(__name__)
@@ -69,19 +69,21 @@ def initiate_mpesa_payment():
     if not booking:
         return jsonify({'success': False, 'error': 'Booking not found'}), 404
 
-    if check_and_update_expired(booking):
+    # REPLACED: check_and_update_expired -> delete_if_timer_elapsed
+    if delete_if_timer_elapsed(booking):
         return jsonify({
             'success': False,
-            'error': 'Booking session expired. Please start over.',
+            'error': 'Booking session expired. The booking has been removed.',
             'expired': True
         }), 400
 
     if booking.expires_at and booking.expires_at < datetime.utcnow():
-        booking.status = 'expired'
+        # REPLACED: Instead of marking as expired, delete
+        db.session.delete(booking)
         db.session.commit()
         return jsonify({
             'success': False,
-            'error': 'Booking session expired. Please start over.',
+            'error': 'Booking session expired. The booking has been removed.',
             'expired': True
         }), 400
 
@@ -207,13 +209,12 @@ def mpesa_callback():
                     booking.payment_status = 'completed'
                     booking.status = 'confirmed'
                     booking.confirmation = 'confirmed'
-                    booking.pending_amount = Decimal('0')   # ← ADDED THIS LINE
+                    booking.pending_amount = Decimal('0')
                     logger.info(f"✅ Booking {booking.id} fully paid — KES {total_paid}")
                 elif total_paid >= (booking.total_amount - booking.pending_amount):
                     booking.payment_status = 'partial'
                     booking.status = 'confirmed'
                     booking.confirmation = 'confirmed'
-                    # partial: keep pending_amount as-is (remainder still owed)
                     logger.info(f"✅ Booking {booking.id} partially paid — KES {total_paid}")
 
                 booking.expires_at = None
@@ -495,7 +496,7 @@ def capture_paypal_order():
                 booking.payment_status = 'completed'
                 booking.confirmation = 'confirmed'
                 booking.payment_method = 'paypal'
-                booking.pending_amount = Decimal('0')    # ← ADDED THIS LINE (full payment)
+                booking.pending_amount = Decimal('0')
 
                 if booking.payment_type == 'partial':
                     paid_amount = db.session.query(
@@ -508,9 +509,8 @@ def capture_paypal_order():
 
                     remaining = booking.total_amount - paid_amount
                     if remaining > 0:
-                        booking.pending_amount = remaining   # partial: restore remainder
+                        booking.pending_amount = remaining
                         booking.payment_status = 'partial'
-                    # if remaining <= 0: pending_amount stays 0 (set above)
 
                 booking.expires_at = None
 
@@ -617,7 +617,7 @@ def paypal_webhook():
                     if booking:
                         booking.payment_status = 'completed'
                         booking.confirmation = 'confirmed'
-                        booking.pending_amount = Decimal('0')  # ← ADDED THIS LINE
+                        booking.pending_amount = Decimal('0')
                         booking.expires_at = None
                     db.session.commit()
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -17,7 +17,6 @@ import GoogleMap from "../components/GoogleMap";
 // ─── Status helpers ───────────────────────────────────────────────────────────
 //
 //  pending   → 15-min timer running, no payment
-//  expired   → timer ended, no payment
 //  confirmed → payment done, check-in is in the future
 //  active    → payment done, guest is currently staying
 //  completed → payment done AND check-out has passed
@@ -29,7 +28,6 @@ const STATUS_STYLE = {
   active:    "bg-purple-100  text-purple-700  border-purple-200",
   completed: "bg-stone-100   text-stone-500   border-stone-200",
   cancelled: "bg-red-50      text-red-700     border-red-200",
-  expired:   "bg-stone-100   text-stone-400   border-stone-200",
 };
 
 const STATUS_TEXT = {
@@ -38,7 +36,6 @@ const STATUS_TEXT = {
   active:    "Active Stay",
   completed: "Completed",
   cancelled: "Cancelled",
-  expired:   "Expired",
 };
 
 const getStatusStyle = (s) => STATUS_STYLE[s] || STATUS_STYLE.confirmed;
@@ -47,7 +44,7 @@ const getStatusText  = (s) => STATUS_TEXT[s]  || s;
 // Which statuses count as "upcoming / current"
 const CURRENT_STATUSES = ["pending", "confirmed", "active"];
 // Which statuses count as history
-const HISTORY_STATUSES = ["completed", "cancelled", "expired"];
+const HISTORY_STATUSES = ["completed", "cancelled"];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const formatCurrency = (n) => `KSh ${Number(n || 0).toLocaleString()}`;
@@ -60,7 +57,7 @@ const formatDate = (d) => {
 
 function calculateTimeLeft(expiresAt) {
   const diff = new Date(expiresAt) - new Date();
-  if (diff <= 0) return "Expired";
+  if (diff <= 0) return null;
   const m = Math.floor(diff / 60000);
   const s = Math.floor((diff % 60000) / 1000);
   return `${m}:${s.toString().padStart(2, "0")}`;
@@ -86,8 +83,19 @@ export default function MyBookings() {
   const [mapCenter,       setMapCenter]       = useState({ lat: -1.286389, lng: 36.817223 });
   const [timers,          setTimers]          = useState({});
 
-  // ── Fetch bookings ──────────────────────────────────────────────────────────
-  const fetchBookings = async () => {
+  // ✅ FIX: Add refs to prevent infinite loops
+  const bookingsRef = useRef(bookings);
+  const fetchInProgressRef = useRef(false);
+
+  // ── Fetch bookings with protection against concurrent calls ─────────────────
+  const fetchBookings = useCallback(async () => {
+    // ✅ Prevent concurrent fetches
+    if (fetchInProgressRef.current) {
+      return;
+    }
+    
+    fetchInProgressRef.current = true;
+    
     try {
       setLoading(true);
       const { data = [] } = await api.bookings.getUserBookings();
@@ -137,75 +145,103 @@ export default function MyBookings() {
       console.error("fetchBookings error:", err);
     } finally {
       setLoading(false);
+      fetchInProgressRef.current = false;
     }
-  };
+  }, []);
 
+  // ✅ FIX: Sync ref with bookings state
+  useEffect(() => {
+    bookingsRef.current = bookings;
+  }, [bookings]);
+
+  // ── Initial fetch ──────────────────────────────────────────────────────────
   useEffect(() => {
     setUser(JSON.parse(localStorage.getItem("user") || "null"));
     fetchBookings();
-  }, []);
+  }, [fetchBookings]);
 
-  // ── Real-time timer polling ─────────────────────────────────────────────────
+  // ── Real-time timer polling (SMOOTH & ACCURATE) ─────────────────────────────
   useEffect(() => {
-    const pendingBookings = bookings.filter((b) => b.status === "pending" && b.expiresAt);
+    let localTimerInterval = null;
+    let serverCheckInterval = null;
 
-    if (pendingBookings.length === 0) return;
+    const updateLocalTimers = () => {
+      // Use ref to get current bookings without triggering re-renders
+      const currentBookings = bookingsRef.current;
+      const pendingBookings = currentBookings.filter((b) => b.status === "pending" && b.expiresAt);
 
-    const tick = async () => {
+      if (pendingBookings.length === 0) {
+        setTimers({});
+        return;
+      }
+
       const now = new Date();
-      let needsRefresh = false;
-      const newTimers  = {};
+      const newTimers = {};
+      let needsServerRefresh = false;
 
-      // First pass: client-side check — if any timer has already elapsed
-      // locally, trigger a refresh immediately without waiting for the API.
       pendingBookings.forEach((b) => {
         const expiry = new Date(b.expiresAt);
         if (expiry <= now) {
-          needsRefresh = true;
+          needsServerRefresh = true;
         } else {
-          const diff    = expiry - now;
+          const diff = expiry - now;
           const minutes = Math.floor(diff / 60000);
           const seconds = Math.floor((diff % 60000) / 1000);
           newTimers[b.id] = `${minutes}:${String(seconds).padStart(2, "0")}`;
         }
       });
 
-      if (needsRefresh) {
-        // Re-fetch from server so expired bookings get their correct status
-        await fetchBookings();
-        return;
-      }
+      setTimers(newTimers);
 
-      // Second pass: ask server to confirm status (catches server-side expiry
-      // and any payment that completed since last poll)
-      try {
-        const responses = await Promise.all(
-          pendingBookings.map((b) => api.bookings.getStatus(b.id))
-        );
-
-        responses.forEach((res, i) => {
-          const id = pendingBookings[i].id;
-          if (res.data.is_expired) {
-            needsRefresh = true;
-          } else if (res.data.time_left) {
-            const { minutes, seconds } = res.data.time_left;
-            newTimers[id] = `${minutes}:${String(seconds).padStart(2, "0")}`;
-          }
-        });
-
-        if (needsRefresh) fetchBookings();
-        else setTimers(newTimers);
-      } catch (e) {
-        // If the API call fails, still update the local countdown
-        setTimers(newTimers);
-        console.error("Timer poll error:", e);
+      // Only trigger server refresh when a timer actually hits zero
+      if (needsServerRefresh && !fetchInProgressRef.current) {
+        fetchBookings();
       }
     };
 
-    tick();
-    const iv = setInterval(tick, 5000);
-    return () => clearInterval(iv);
-  }, [bookings]);
+    const checkServerStatus = async () => {
+      const currentBookings = bookingsRef.current;
+      const pendingBookings = currentBookings.filter((b) => b.status === "pending" && b.expiresAt);
+      
+      if (pendingBookings.length === 0) return;
+
+      // Check with server every 30 seconds for status updates
+      try {
+        const results = await Promise.allSettled(
+          pendingBookings.map((b) => api.bookings.getStatus(b.id))
+        );
+
+        let needsRefresh = false;
+        results.forEach((result, i) => {
+          const id = pendingBookings[i].id;
+          if (result.status === "rejected" || result.value?.data?.is_expired) {
+            needsRefresh = true;
+          }
+        });
+
+        if (needsRefresh && !fetchInProgressRef.current) {
+          await fetchBookings();
+        }
+      } catch (e) {
+        console.error("Server status check error:", e);
+      }
+    };
+
+    // Start local timer that updates EVERY SECOND (smooth countdown)
+    localTimerInterval = setInterval(updateLocalTimers, 1000);
+    
+    // Check with server every 30 seconds (reduces API calls by 83%)
+    serverCheckInterval = setInterval(checkServerStatus, 30000);
+
+    // Initial update
+    updateLocalTimers();
+
+    // Cleanup on unmount
+    return () => {
+      if (localTimerInterval) clearInterval(localTimerInterval);
+      if (serverCheckInterval) clearInterval(serverCheckInterval);
+    };
+  }, [fetchBookings]);
 
   // ── Cancel helpers ──────────────────────────────────────────────────────────
   const handleCancelClick = (booking, e) => {
@@ -417,7 +453,7 @@ export default function MyBookings() {
               <div className="bg-white rounded-xl border border-stone-200 p-4">
                 <div className="flex flex-wrap gap-3 items-center">
                   <span className="text-sm text-stone-600">Status:</span>
-                  {["all", "pending", "confirmed", "active", "completed", "cancelled", "expired"].map((s) => (
+                  {["all", "pending", "confirmed", "active", "completed", "cancelled"].map((s) => (
                     <button
                       key={s}
                       onClick={() => setFilterStatus(s)}
@@ -509,11 +545,18 @@ export default function MyBookings() {
                           Staying now
                         </div>
                       )}
+                      {/* Timer with smooth animation */}
                       {booking.status === "pending" && timers[booking.id] && (
-                        <div className="absolute top-3 right-3 bg-amber-500 text-white px-2 py-1 rounded text-[10px] font-mono">
+                        <motion.div
+                          key={timers[booking.id]}
+                          initial={{ scale: 0.95, opacity: 0.5 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          transition={{ duration: 0.2 }}
+                          className="absolute top-3 right-3 bg-amber-500 text-white px-2 py-1 rounded text-[10px] font-mono"
+                        >
                           <FaClock className="inline mr-1" size={10} />
                           {timers[booking.id]}
-                        </div>
+                        </motion.div>
                       )}
                     </div>
 

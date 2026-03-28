@@ -23,7 +23,7 @@ const fmtDate = (d) => {
 const fmtTimeLeft = (expiresAt) => {
   if (!expiresAt) return null;
   const diff = new Date(expiresAt) - new Date();
-  if (diff <= 0) return "Expired";
+  if (diff <= 0) return null;
   const m = Math.floor(diff / 60000);
   const s = Math.floor((diff % 60000) / 1000);
   return `${m}:${s.toString().padStart(2, "0")}`;
@@ -32,14 +32,12 @@ const fmtTimeLeft = (expiresAt) => {
 // Canonical status derivation
 //
 //   pending   -> timer still running, no confirmed payment
-//   expired   -> timer elapsed, no confirmed payment (IMMEDIATE, no scheduler wait)
-//   confirmed -> payment_status === 'completed', check-in in the future
-//   active    -> payment_status === 'completed', guest currently in-house
-//   completed -> payment_status === 'completed', check_out has passed
+//   confirmed -> payment completed, check-in in the future
+//   active    -> payment completed, guest currently in-house
+//   completed -> payment completed, check_out has passed
 //   cancelled -> cancelled at any stage
 //
-//   Self-contained: checks expires_at directly so a booking becomes 'expired'
-//   the instant the timer crosses zero, with no dependency on the scheduler.
+//   NO expired state. Elapsed pending bookings are deleted by the backend.
 //
 function deriveDisplayStatus(b) {
   const raw   = b.status;
@@ -48,28 +46,12 @@ function deriveDisplayStatus(b) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // Cancelled is always exact
   if (raw === "cancelled") return "cancelled";
 
-  // Already marked expired in DB
-  if (raw === "expired") return "expired";
+  // Pending: timer still running (backend deletes elapsed ones)
+  // Guard: if somehow an elapsed booking slips through, treat as pending
+  if (raw === "pending" || raw === "expired") return "pending";
 
-  // For pending bookings: check the timer RIGHT NOW against expires_at
-  if (raw === "pending") {
-    if (pay === "completed") {
-      // Payment arrived just before expiry - fall through to confirmed logic
-    } else if (b.expires_at && new Date(b.expires_at) <= now) {
-      // Timer has elapsed with no payment - expired immediately
-      return "expired";
-    } else {
-      // Timer still running
-      return "pending";
-    }
-  }
-
-  // For all other DB statuses (confirmed / upcoming / active) and the
-  // edge case where raw==="pending" but pay==="completed":
-  // only confirmed/active/completed when payment is confirmed.
   if (pay === "completed") {
     const checkOut = b.check_out ? new Date(b.check_out) : null;
     const checkIn  = b.check_in  ? new Date(b.check_in)  : null;
@@ -78,8 +60,6 @@ function deriveDisplayStatus(b) {
     return "confirmed";
   }
 
-  // payment_status not completed - check timer to decide pending vs expired
-  if (b.expires_at && new Date(b.expires_at) <= now) return "expired";
   return "pending";
 }
 
@@ -89,7 +69,6 @@ const STATUS_STYLE = {
   active:    "bg-purple-50  text-purple-700  border border-purple-200",
   completed: "bg-slate-100  text-slate-600   border border-slate-200",
   cancelled: "bg-red-50     text-red-700     border border-red-200",
-  expired:   "bg-stone-100  text-stone-500   border border-stone-200",
 };
 
 const statusStyle = (s) => STATUS_STYLE[s] || "bg-stone-100 text-stone-500 border border-stone-200";
@@ -132,7 +111,6 @@ const AdminBookingsTab = () => {
     active:    [],
     completed: [],
     cancelled: [],
-    expired:   [],
   });
 
   // ── Fetch ────────────────────────────────────────────────────────────────────
@@ -152,7 +130,6 @@ const AdminBookingsTab = () => {
         return {
           ...b,
           displayStatus,
-          isExpired:    displayStatus === "expired",
           refundAmount,
           netEarnings,
           needsRefund:
@@ -187,8 +164,7 @@ const AdminBookingsTab = () => {
   // ── Stats ─────────────────────────────────────────────────────────────────────
   // All counts use displayStatus exclusively — the single source of truth.
   // Raw DB fields (status, payment_status) are unreliable on their own:
-  // a booking is only "confirmed" when displayStatus === "confirmed", not
-  // when payment_status === "completed" (which can still be pending/expired).
+  // a booking is only "confirmed" when displayStatus === "confirmed".
   const computeStats = (data) => {
     const confirmed  = data.filter((b) => b.displayStatus === "confirmed");
     const active     = data.filter((b) => b.displayStatus === "active");
@@ -240,7 +216,6 @@ const AdminBookingsTab = () => {
       active:    f.filter((b) => b.displayStatus === "active"),
       completed: f.filter((b) => b.displayStatus === "completed"),
       cancelled: f.filter((b) => b.displayStatus === "cancelled"),
-      expired:   f.filter((b) => b.displayStatus === "expired"),
     });
   };
 
@@ -327,7 +302,6 @@ const AdminBookingsTab = () => {
     active:    displayBookings.active.length,
     completed: displayBookings.completed.length,
     cancelled: displayBookings.cancelled.length,
-    expired:   displayBookings.expired.length,
   };
 
   const currentRows = displayBookings[activeTab] || [];
@@ -395,14 +369,13 @@ const AdminBookingsTab = () => {
       </div>
 
       {/* Tab cards */}
-      <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           { key: "pending",   label: "Pending",   active: "border-amber-400",   text: "text-amber-600",   icon: null },
           { key: "confirmed", label: "Confirmed", active: "border-emerald-400", text: "text-emerald-600", icon: null },
           { key: "active",    label: "Active",    active: "border-purple-400",  text: "text-purple-600",  icon: <FaDoorOpen className="text-xs mb-0.5" /> },
           { key: "completed", label: "Completed", active: "border-stone-500",   text: "text-stone-600",   icon: null },
           { key: "cancelled", label: "Cancelled", active: "border-red-400",     text: "text-red-600",     icon: null },
-          { key: "expired",   label: "Expired",   active: "border-stone-300",   text: "text-stone-400",   icon: null },
         ].map(({ key, label, active, text, icon }) => (
           <button key={key} onClick={() => setActiveTab(key)}
             className={`bg-white p-4 rounded-xl border-2 text-left transition-all ${
@@ -569,7 +542,7 @@ const AdminBookingsTab = () => {
                           <FaUndo className="text-xs" />
                         </button>
                       )}
-                      {(activeTab === "expired" || activeTab === "cancelled") && (
+                      {activeTab === "cancelled" && (
                         <button onClick={() => handleDelete(b.id)} disabled={deleting}
                           className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-40"
                           title="Delete">
@@ -584,12 +557,10 @@ const AdminBookingsTab = () => {
           </table>
         </div>
 
-        {(activeTab === "expired" || activeTab === "cancelled") && currentRows.length > 0 && (
+        {activeTab === "cancelled" && currentRows.length > 0 && (
           <div className="px-5 py-3 bg-stone-50 border-t border-stone-100 text-xs text-stone-400 flex items-center gap-2">
             <FaExclamationTriangle className="text-amber-400 shrink-0" />
-            {activeTab === "expired"
-              ? "Expired bookings received no payment. Safe to delete."
-              : "Process any pending refunds before deleting cancelled bookings."}
+            Process any pending refunds before deleting cancelled bookings.
           </div>
         )}
       </div>
@@ -755,7 +726,7 @@ const AdminBookingsTab = () => {
                       <FaUndo /> Process refund
                     </button>
                   )}
-                  {(activeTab === "expired" || activeTab === "cancelled") && (
+                  {activeTab === "cancelled" && (
                     <button onClick={() => handleDelete(selectedBooking.id)} disabled={deleting}
                       className="flex-1 bg-red-600 text-white py-3 rounded-xl text-sm font-medium hover:bg-red-700 flex items-center justify-center gap-2 disabled:opacity-50 transition-colors">
                       {deleting
