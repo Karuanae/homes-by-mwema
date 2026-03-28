@@ -2,171 +2,210 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  FaMapMarkerAlt, FaStar, FaDownload, FaWhatsapp, 
-  FaPhone, FaQuestionCircle, FaBed, FaSearch, 
-  FaFilter, FaChevronRight, FaCalendarAlt, FaHistory, 
-  FaExclamationTriangle, FaEye, FaTimes, 
+  FaMapMarkerAlt, FaStar, FaDownload, FaWhatsapp,
+  FaPhone, FaQuestionCircle, FaBed, FaSearch,
+  FaFilter, FaChevronRight, FaCalendarAlt, FaHistory,
+  FaExclamationTriangle, FaEye, FaTimes,
   FaCheck, FaClock, FaSpinner, FaUserCircle, FaChevronDown,
   FaCreditCard, FaRegClock, FaCalendarCheck, FaChartLine,
-  FaMap, FaGlobe, FaPlane, FaHotel, FaHeart, FaShareAlt
+  FaMap, FaGlobe, FaPlane, FaHotel, FaHeart, FaShareAlt,
+  FaDoorOpen,
 } from "react-icons/fa";
 import api, { IMAGE_BASE_URL } from "../services/api";
 import GoogleMap from "../components/GoogleMap";
 
+// ─── Status helpers ───────────────────────────────────────────────────────────
+//
+//  pending   → 15-min timer running, no payment
+//  expired   → timer ended, no payment
+//  confirmed → payment done, check-in is in the future
+//  active    → payment done, guest is currently staying
+//  completed → payment done AND check-out has passed
+//  cancelled → cancelled by user; may have refund
+//
+const STATUS_STYLE = {
+  pending:   "bg-amber-100   text-amber-700   border-amber-200",
+  confirmed: "bg-green-100   text-green-700   border-green-200",
+  active:    "bg-purple-100  text-purple-700  border-purple-200",
+  completed: "bg-stone-100   text-stone-500   border-stone-200",
+  cancelled: "bg-red-50      text-red-700     border-red-200",
+  expired:   "bg-stone-100   text-stone-400   border-stone-200",
+};
+
+const STATUS_TEXT = {
+  pending:   "Pending Payment",
+  confirmed: "Confirmed",
+  active:    "Active Stay",
+  completed: "Completed",
+  cancelled: "Cancelled",
+  expired:   "Expired",
+};
+
+const getStatusStyle = (s) => STATUS_STYLE[s] || STATUS_STYLE.confirmed;
+const getStatusText  = (s) => STATUS_TEXT[s]  || s;
+
+// Which statuses count as "upcoming / current"
+const CURRENT_STATUSES = ["pending", "confirmed", "active"];
+// Which statuses count as history
+const HISTORY_STATUSES = ["completed", "cancelled", "expired"];
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+const formatCurrency = (n) => `KSh ${Number(n || 0).toLocaleString()}`;
+const formatDate = (d) => {
+  if (!d) return "";
+  return new Date(d).toLocaleDateString("en-GB", {
+    day: "numeric", month: "long", year: "numeric",
+  });
+};
+
+function calculateTimeLeft(expiresAt) {
+  const diff = new Date(expiresAt) - new Date();
+  if (diff <= 0) return "Expired";
+  const m = Math.floor(diff / 60000);
+  const s = Math.floor((diff % 60000) / 1000);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 export default function MyBookings() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("current");
-  const [bookings, setBookings] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
-  const [filterStatus, setFilterStatus] = useState("all");
+
+  const [activeTab,       setActiveTab]       = useState("current");
+  const [bookings,        setBookings]        = useState([]);
+  const [loading,         setLoading]         = useState(true);
+  const [user,            setUser]            = useState(null);
+  const [searchTerm,      setSearchTerm]      = useState("");
+  const [showFilters,     setShowFilters]     = useState(false);
+  const [filterStatus,    setFilterStatus]    = useState("all");
   const [selectedBooking, setSelectedBooking] = useState(null);
-  const [cancelBooking, setCancelBooking] = useState(null);
+  const [cancelBooking,   setCancelBooking]   = useState(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
-  const [cancelCalculation, setCancelCalculation] = useState(null);
-  const [viewMode, setViewMode] = useState("list"); // "list" or "map"
-  const [mapCenter, setMapCenter] = useState({ lat: -1.286389, lng: 36.817223 });
-  
-  // Timer state for pending bookings
-  const [timers, setTimers] = useState({});
+  const [cancelling,      setCancelling]      = useState(false);
+  const [cancelCalc,      setCancelCalc]      = useState(null);
+  const [viewMode,        setViewMode]        = useState("list");
+  const [mapCenter,       setMapCenter]       = useState({ lat: -1.286389, lng: 36.817223 });
+  const [timers,          setTimers]          = useState({});
+
+  // ── Fetch bookings ──────────────────────────────────────────────────────────
+  const fetchBookings = async () => {
+    try {
+      setLoading(true);
+      const { data = [] } = await api.bookings.getUserBookings();
+
+      const transformed = data.map((b) => ({
+        id:               b.id,
+        propertyName:     b.property_name     || "Unknown Property",
+        propertyLocation: b.property_location || "Nairobi",
+        propertyImage:    b.property_image,
+        propertyLatitude: b.property_latitude  || b.latitude,
+        propertyLongitude:b.property_longitude || b.longitude,
+        checkIn:          b.check_in,
+        checkOut:         b.check_out,
+        nights:           b.nights || 0,
+        guests:           b.guests || { adults: 1, children: 0 },
+        totalAmount:      b.total_amount  || 0,
+        baseAmount:       b.base_amount   || 0,
+        pendingAmount:    b.pending_amount || 0,
+        paidAmount:       (b.total_amount || 0) - (b.pending_amount || 0),
+        status:           b.status        || "pending",
+        paymentStatus:    b.payment_status || "pending",
+        createdAt:        b.created_at,
+        expiresAt:        b.expires_at,
+        canCancel:        b.can_cancel,
+        refundInfo:       b.refund_info || null,
+      }));
+
+      setBookings(transformed);
+
+      // Map centre
+      const withCoords = transformed.filter((b) => b.propertyLatitude && b.propertyLongitude);
+      if (withCoords.length > 0) {
+        const lat = withCoords.reduce((s, b) => s + b.propertyLatitude,  0) / withCoords.length;
+        const lng = withCoords.reduce((s, b) => s + b.propertyLongitude, 0) / withCoords.length;
+        setMapCenter({ lat, lng });
+      }
+
+      // Initial timers
+      const init = {};
+      transformed.forEach((b) => {
+        if (b.status === "pending" && b.expiresAt) {
+          init[b.id] = calculateTimeLeft(b.expiresAt);
+        }
+      });
+      setTimers(init);
+    } catch (err) {
+      console.error("fetchBookings error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchBookings = async () => {
-      try {
-        setLoading(true);
-        const response = await api.bookings.getUserBookings();
-        
-        const transformedBookings = (response.data || []).map(booking => ({
-          id: booking.id,
-          propertyName: booking.property_name || booking.propertyName || 'Unknown Property',
-          propertyLocation: booking.property_location || booking.propertyLocation || 'Nairobi',
-          propertyImage: booking.property_image || booking.propertyImage,
-          propertyLatitude: booking.property_latitude || booking.latitude,
-          propertyLongitude: booking.property_longitude || booking.longitude,
-          checkIn: booking.check_in || booking.checkIn,
-          checkOut: booking.check_out || booking.checkOut,
-          nights: booking.nights || 0,
-          guests: booking.guests || { adults: 1, children: 0 },
-          totalAmount: booking.total_amount || booking.totalAmount || 0,
-          baseAmount: booking.base_amount || booking.baseAmount || 0,
-          pendingAmount: booking.pending_amount || booking.pendingAmount || 0,
-          paidAmount: (booking.total_amount || 0) - (booking.pending_amount || 0),
-          status: booking.status || 'pending',
-          paymentStatus: booking.payment_status || booking.paymentStatus || 'pending',
-          createdAt: booking.created_at || booking.createdAt,
-          expiresAt: booking.expires_at || booking.expiresAt
-        }));
-        
-        setBookings(transformedBookings);
-        
-        // Calculate map center from bookings with coordinates
-        const bookingsWithCoords = transformedBookings.filter(b => b.propertyLatitude && b.propertyLongitude);
-        if (bookingsWithCoords.length > 0) {
-          const avgLat = bookingsWithCoords.reduce((sum, b) => sum + b.propertyLatitude, 0) / bookingsWithCoords.length;
-          const avgLng = bookingsWithCoords.reduce((sum, b) => sum + b.propertyLongitude, 0) / bookingsWithCoords.length;
-          setMapCenter({ lat: avgLat, lng: avgLng });
-        }
-        
-        // Initialize timers for pending bookings
-        const initialTimers = {};
-        transformedBookings.forEach(booking => {
-          if (booking.status === 'pending' && booking.expiresAt) {
-            initialTimers[booking.id] = calculateTimeLeft(booking.expiresAt);
-          }
-        });
-        setTimers(initialTimers);
-        
-      } catch (error) {
-        console.error('Error fetching bookings:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    const storedUser = JSON.parse(localStorage.getItem('user') || 'null');
-    setUser(storedUser);
+    setUser(JSON.parse(localStorage.getItem("user") || "null"));
     fetchBookings();
   }, []);
 
-  // REAL-TIME EXPIRY CHECK
+  // ── Real-time timer polling ─────────────────────────────────────────────────
   useEffect(() => {
-    const checkPendingBookings = async () => {
-      const pendingIds = bookings
-        .filter(b => b.status === 'pending' && b.expiresAt)
-        .map(b => b.id);
-      
-      if (pendingIds.length === 0) return;
-      
+    const pendingIds = bookings
+      .filter((b) => b.status === "pending" && b.expiresAt)
+      .map((b) => b.id);
+
+    if (pendingIds.length === 0) return;
+
+    const tick = async () => {
       try {
-        const promises = pendingIds.map(id => api.bookings.getStatus(id));
-        const responses = await Promise.all(promises);
-        
+        const responses = await Promise.all(
+          pendingIds.map((id) => api.bookings.getStatus(id))
+        );
+
         let needsRefresh = false;
-        const newTimers = {};
-        
-        responses.forEach((response, index) => {
-          const bookingId = pendingIds[index];
-          if (response.data.is_expired) {
+        const newTimers  = {};
+
+        responses.forEach((res, i) => {
+          const id = pendingIds[i];
+          if (res.data.is_expired) {
             needsRefresh = true;
-          } else if (response.data.time_left) {
-            newTimers[bookingId] = `${response.data.time_left.minutes}:${response.data.time_left.seconds.toString().padStart(2, '0')}`;
+          } else if (res.data.time_left) {
+            const { minutes, seconds } = res.data.time_left;
+            newTimers[id] = `${minutes}:${String(seconds).padStart(2, "0")}`;
           }
         });
-        
-        if (needsRefresh) {
-          window.location.reload();
-        } else {
-          setTimers(newTimers);
-        }
-        
-      } catch (error) {
-        console.error('Error checking booking statuses:', error);
+
+        if (needsRefresh) fetchBookings();
+        else setTimers(newTimers);
+      } catch (e) {
+        console.error("Timer poll error:", e);
       }
     };
-    
-    checkPendingBookings();
-    const interval = setInterval(checkPendingBookings, 5000);
-    return () => clearInterval(interval);
+
+    tick();
+    const iv = setInterval(tick, 5000);
+    return () => clearInterval(iv);
   }, [bookings]);
 
-  const calculateTimeLeft = (expiresAt) => {
-    const now = new Date();
-    const expiry = new Date(expiresAt);
-    const diff = expiry - now;
-    
-    if (diff <= 0) return 'Expired';
-    
-    const mins = Math.floor(diff / 60000);
-    const secs = Math.floor((diff % 60000) / 1000);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
+  // ── Cancel helpers ──────────────────────────────────────────────────────────
   const handleCancelClick = (booking, e) => {
     e.stopPropagation();
     setCancelBooking(booking);
-    
-    const today = new Date();
-    const checkIn = new Date(booking.checkIn);
-    const daysUntilCheckIn = Math.ceil((checkIn - today) / (1000 * 60 * 60 * 24));
-    
-    let refundAmount = 0;
-    let message = '';
-    
-    if (daysUntilCheckIn >= 30) {
+
+    const today        = new Date();
+    const checkIn      = new Date(booking.checkIn);
+    const daysUntil    = Math.ceil((checkIn - today) / 86400000);
+    let refundAmount   = 0;
+    let message        = "";
+
+    if (daysUntil >= 30) {
       refundAmount = booking.totalAmount;
-      message = 'Full refund (cancellation more than 30 days before check-in)';
-    } else if (daysUntilCheckIn >= 14) {
+      message = "Full refund — cancellation more than 30 days before check-in.";
+    } else if (daysUntil >= 14) {
       refundAmount = booking.totalAmount * 0.5;
-      message = '50% refund (cancellation 14-29 days before check-in)';
+      message = "50% refund — cancellation 14–29 days before check-in.";
     } else {
-      refundAmount = 0;
-      message = 'No refund (cancellation less than 14 days before check-in)';
+      message = "No refund — cancellation less than 14 days before check-in.";
     }
-    
-    setCancelCalculation({ refundAmount, message, daysUntilCheckIn });
+
+    setCancelCalc({ refundAmount, message, daysUntil });
     setShowCancelModal(true);
   };
 
@@ -174,11 +213,11 @@ export default function MyBookings() {
     if (!cancelBooking) return;
     setCancelling(true);
     try {
-      const response = await api.bookings.cancel(cancelBooking.id);
-      alert(response.data.message || 'Booking cancelled successfully');
-      window.location.reload();
-    } catch (error) {
-      alert(error.response?.data?.error || 'Failed to cancel booking');
+      const res = await api.bookings.cancel(cancelBooking.id);
+      alert(res.data.message || "Booking cancelled successfully.");
+      await fetchBookings();
+    } catch (err) {
+      alert(err.response?.data?.error || "Failed to cancel booking.");
     } finally {
       setCancelling(false);
       setShowCancelModal(false);
@@ -186,97 +225,62 @@ export default function MyBookings() {
     }
   };
 
-  const getStatusStyle = (status) => {
-    const styles = {
-      pending: "bg-amber-100 text-amber-700 border-amber-200",
-      confirmed: "bg-green-100 text-green-700 border-green-200",
-      upcoming: "bg-blue-100 text-blue-700 border-blue-200",
-      active: "bg-purple-100 text-purple-700 border-purple-200",
-      completed: "bg-stone-100 text-stone-500 border-stone-200",
-      cancelled: "bg-red-50 text-red-700 border-red-200",
-      expired: "bg-stone-100 text-stone-400 border-stone-200",
-      failed: "bg-red-50 text-red-700 border-red-200"
-    };
-    return styles[status] || styles.upcoming;
+  // ── "Return to payment" — fetch booking from API if needed ────────────────
+  const handlePayNow = async (booking) => {
+    try {
+      // Ask the backend for the full booking object (contains expires_at, total_amount, etc.)
+      const res = await api.bookings.getById(booking.id);
+      navigate(`/payment/${booking.id}`, {
+        state: { bookingDetails: res.data },
+      });
+    } catch (err) {
+      console.error("handlePayNow error:", err);
+      // Fallback: navigate anyway and let PaymentPage fetch it
+      navigate(`/payment/${booking.id}`);
+    }
   };
 
-  const getStatusText = (status) => {
-    const texts = {
-      pending: 'Pending Payment',
-      confirmed: 'Confirmed',
-      upcoming: 'Upcoming',
-      active: 'Active Stay',
-      completed: 'Completed',
-      cancelled: 'Cancelled',
-      expired: 'Expired',
-      failed: 'Payment Failed'
-    };
-    return texts[status] || status;
-  };
-
-  const formatCurrency = (amount) => `KSh ${amount?.toLocaleString() || "0"}`;
-  const formatDate = (dateStr) => {
-    if (!dateStr) return '';
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-  };
-
-  const filteredBookings = bookings.filter(booking => {
-    if (activeTab === "current" && !["pending", "confirmed", "upcoming", "active"].includes(booking.status)) return false;
-    if (activeTab === "history" && !["completed", "cancelled", "expired", "failed"].includes(booking.status)) return false;
-    if (searchTerm && !booking.propertyName.toLowerCase().includes(searchTerm.toLowerCase())) return false;
-    if (filterStatus !== "all" && booking.status !== filterStatus) return false;
+  // ── Derived data ────────────────────────────────────────────────────────────
+  const filteredBookings = bookings.filter((b) => {
+    if (activeTab === "current" && !CURRENT_STATUSES.includes(b.status)) return false;
+    if (activeTab === "history" && !HISTORY_STATUSES.includes(b.status)) return false;
+    if (searchTerm && !b.propertyName.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+    if (filterStatus !== "all" && b.status !== filterStatus) return false;
     return true;
   });
 
   const stats = {
-    upcomingNights: bookings.filter(b => ["confirmed", "upcoming"].includes(b.status)).reduce((sum, b) => sum + (b.nights || 0), 0),
-    completedStays: bookings.filter(b => b.status === "completed").length,
-    pendingPayments: bookings.filter(b => b.status === "pending").length,
+    upcomingNights:    bookings.filter((b) => ["confirmed", "active"].includes(b.status))
+                               .reduce((s, b) => s + (b.nights || 0), 0),
+    completedStays:    bookings.filter((b) => b.status === "completed").length,
+    pendingPayments:   bookings.filter((b) => b.status === "pending").length,
+    activeStays:       bookings.filter((b) => b.status === "active").length,
     favoriteDestination: getFavoriteDestination(bookings),
-    averageStay: getAverageStay(bookings)
   };
 
-  function getFavoriteDestination(bookings) {
-    const locations = bookings.filter(b => b.status === "completed").map(b => b.propertyLocation);
-    if (locations.length === 0) return 'Nairobi';
+  function getFavoriteDestination(bks) {
+    const locs = bks.filter((b) => b.status === "completed").map((b) => b.propertyLocation);
+    if (!locs.length) return "Nairobi";
     const counts = {};
-    locations.forEach(l => counts[l] = (counts[l] || 0) + 1);
-    return Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
+    locs.forEach((l) => (counts[l] = (counts[l] || 0) + 1));
+    return Object.keys(counts).reduce((a, b) => (counts[a] > counts[b] ? a : b));
   }
 
-  function getAverageStay(bookings) {
-    const completed = bookings.filter(b => b.status === "completed");
-    if (completed.length === 0) return 0;
-    const totalNights = completed.reduce((sum, b) => sum + (b.nights || 0), 0);
-    return Math.round(totalNights / completed.length);
-  }
-
-  // Prepare map markers for bookings
-  const mapMarkers = filteredBookings
-    .filter(b => b.propertyLatitude && b.propertyLongitude)
-    .map(b => ({
-      id: b.id,
-      lat: b.propertyLatitude,
-      lng: b.propertyLongitude,
-      title: b.propertyName,
-      status: b.status,
-      checkIn: b.checkIn,
-      nights: b.nights
-    }));
-
+  // ── Render ──────────────────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="min-h-screen bg-[#f5f2ee] flex flex-col items-center justify-center">
         <div className="w-12 h-12 border-2 border-stone-200 border-t-stone-900 rounded-full animate-spin mb-4" />
-        <p className="text-[10px] uppercase tracking-[0.3em] text-stone-500 font-bold">Loading your journey</p>
+        <p className="text-[10px] uppercase tracking-[0.3em] text-stone-500 font-bold">
+          Loading your journey
+        </p>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-[#f5f2ee] text-stone-900 pb-20 pt-8">
-      
+
       {/* Header */}
       <div className="max-w-7xl mx-auto px-6 mb-8">
         <div className="flex items-center gap-4 mb-2">
@@ -286,18 +290,25 @@ export default function MyBookings() {
           <div>
             <p className="text-sm text-stone-500">Welcome back,</p>
             <h1 className="text-3xl md:text-4xl font-serif text-stone-900">
-              {user?.name?.split(' ')[0] || 'Guest'}
+              {user?.name?.split(" ")[0] || "Guest"}
             </h1>
           </div>
         </div>
-        
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-6">
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
           <div className="bg-white rounded-lg p-4 border border-stone-100 shadow-sm">
             <FaCalendarCheck className="text-[#093A3E] mb-2" size={20} />
             <p className="text-2xl font-serif">{stats.upcomingNights}</p>
             <p className="text-xs text-stone-500">Nights ahead</p>
           </div>
+          {stats.activeStays > 0 && (
+            <div className="bg-purple-50 rounded-lg p-4 border border-purple-200 shadow-sm">
+              <FaDoorOpen className="text-purple-600 mb-2" size={20} />
+              <p className="text-2xl font-serif text-purple-700">{stats.activeStays}</p>
+              <p className="text-xs text-purple-500">Active stay{stats.activeStays > 1 ? "s" : ""}</p>
+            </div>
+          )}
           <div className="bg-white rounded-lg p-4 border border-stone-100 shadow-sm">
             <FaHistory className="text-[#093A3E] mb-2" size={20} />
             <p className="text-2xl font-serif">{stats.completedStays}</p>
@@ -311,18 +322,18 @@ export default function MyBookings() {
           <div className="bg-white rounded-lg p-4 border border-stone-100 shadow-sm">
             <FaGlobe className="text-[#093A3E] mb-2" size={20} />
             <p className="text-lg font-serif truncate">{stats.favoriteDestination}</p>
-            <p className="text-xs text-stone-500">Favorite spot</p>
+            <p className="text-xs text-stone-500">Favourite spot</p>
           </div>
         </div>
       </div>
 
-      {/* Tabs and Filters */}
+      {/* Tabs + Search */}
       <div className="max-w-7xl mx-auto px-6">
         <div className="flex flex-col md:flex-row justify-between items-center gap-6 mb-6">
           <div className="flex gap-8 border-b border-stone-200 w-full md:w-auto">
             {[
-              { id: "current", label: "Upcoming Stays", icon: <FaCalendarAlt /> },
-              { id: "history", label: "Past Stays", icon: <FaHistory /> }
+              { id: "current", label: "Upcoming & Active", icon: <FaCalendarAlt /> },
+              { id: "history", label: "Past Stays",        icon: <FaHistory /> },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -343,15 +354,15 @@ export default function MyBookings() {
           <div className="flex gap-3 w-full md:w-auto">
             <div className="relative flex-1 md:w-64">
               <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={14} />
-              <input 
+              <input
                 type="text"
-                placeholder="Search properties..."
+                placeholder="Search properties…"
                 className="w-full bg-white border border-stone-200 rounded-lg py-2 pl-9 pr-4 text-sm focus:ring-1 focus:ring-[#093A3E] focus:outline-none"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <button 
+            <button
               onClick={() => setShowFilters(!showFilters)}
               className="px-4 py-2 border border-stone-200 bg-white hover:bg-stone-50 rounded-lg text-sm flex items-center gap-2"
             >
@@ -360,8 +371,8 @@ export default function MyBookings() {
             <button
               onClick={() => setViewMode(viewMode === "list" ? "map" : "list")}
               className={`px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors ${
-                viewMode === "map" 
-                  ? "bg-[#093A3E] text-white" 
+                viewMode === "map"
+                  ? "bg-[#093A3E] text-white"
                   : "border border-stone-200 bg-white hover:bg-stone-50"
               }`}
             >
@@ -371,7 +382,7 @@ export default function MyBookings() {
           </div>
         </div>
 
-        {/* Filter Dropdown */}
+        {/* Filter dropdown */}
         <AnimatePresence>
           {showFilters && (
             <motion.div
@@ -383,17 +394,17 @@ export default function MyBookings() {
               <div className="bg-white rounded-xl border border-stone-200 p-4">
                 <div className="flex flex-wrap gap-3 items-center">
                   <span className="text-sm text-stone-600">Status:</span>
-                  {["all", "pending", "confirmed", "completed", "cancelled"].map(status => (
+                  {["all", "pending", "confirmed", "active", "completed", "cancelled", "expired"].map((s) => (
                     <button
-                      key={status}
-                      onClick={() => setFilterStatus(status)}
+                      key={s}
+                      onClick={() => setFilterStatus(s)}
                       className={`px-3 py-1.5 rounded-full text-xs capitalize transition-colors ${
-                        filterStatus === status
+                        filterStatus === s
                           ? "bg-[#093A3E] text-white"
                           : "bg-stone-100 text-stone-600 hover:bg-stone-200"
                       }`}
                     >
-                      {status}
+                      {s}
                     </button>
                   ))}
                 </div>
@@ -402,7 +413,7 @@ export default function MyBookings() {
           )}
         </AnimatePresence>
 
-        {/* Map View */}
+        {/* Map view */}
         {viewMode === "map" && filteredBookings.length > 0 && (
           <div className="mb-8">
             <div className="bg-white rounded-xl overflow-hidden border border-stone-200 shadow-sm">
@@ -414,58 +425,71 @@ export default function MyBookings() {
                 />
                 <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur-sm rounded-xl px-4 py-2 shadow-lg text-sm">
                   <FaMapMarkerAlt className="inline text-[#ED9B40] mr-1" />
-                  {filteredBookings.length} booking{filteredBookings.length !== 1 ? 's' : ''} on map
+                  {filteredBookings.length} booking{filteredBookings.length !== 1 ? "s" : ""} on map
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Bookings List */}
+        {/* List view */}
         {viewMode === "list" && (
           <div className="space-y-4">
             {filteredBookings.length === 0 ? (
               <div className="text-center py-16 bg-white rounded-lg border border-stone-200">
-                <div className="max-w-md mx-auto">
-                  <FaCalendarAlt className="text-4xl text-stone-300 mx-auto mb-4" />
-                  <h3 className="font-serif text-xl text-stone-800 mb-2">No bookings found</h3>
-                  <p className="text-stone-500 mb-6">
-                    {activeTab === "current" 
-                      ? "You don't have any upcoming stays. Time to plan your next getaway!" 
-                      : "Your past stays will appear here."}
-                  </p>
-                  <Link 
-                    to="/properties" 
-                    className="inline-block px-6 py-2 bg-[#093A3E] text-white rounded-lg hover:bg-[#0a4a52] transition-colors"
-                  >
-                    Browse Properties
-                  </Link>
-                </div>
+                <FaCalendarAlt className="text-4xl text-stone-300 mx-auto mb-4" />
+                <h3 className="font-serif text-xl text-stone-800 mb-2">No bookings found</h3>
+                <p className="text-stone-500 mb-6">
+                  {activeTab === "current"
+                    ? "You don't have any upcoming stays. Time to plan your next getaway!"
+                    : "Your past stays will appear here."}
+                </p>
+                <Link
+                  to="/properties"
+                  className="inline-block px-6 py-2 bg-[#093A3E] text-white rounded-lg hover:bg-[#0a4a52] transition-colors"
+                >
+                  Browse Properties
+                </Link>
               </div>
             ) : (
               filteredBookings.map((booking) => (
-                <motion.div 
+                <motion.div
                   key={booking.id}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="bg-white rounded-xl border border-stone-200 overflow-hidden hover:shadow-md transition-shadow"
+                  className={`bg-white rounded-xl border overflow-hidden hover:shadow-md transition-shadow ${
+                    booking.status === "active"
+                      ? "border-purple-200 shadow-purple-50"
+                      : "border-stone-200"
+                  }`}
                 >
                   <div className="flex flex-col md:flex-row">
                     {/* Image */}
                     <div className="md:w-56 h-48 md:h-auto relative bg-stone-100">
-                      <img 
-                        src={booking.propertyImage && !booking.propertyImage.startsWith('http') 
-                          ? `${IMAGE_BASE_URL}${booking.propertyImage}` 
-                          : booking.propertyImage || 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=400'} 
+                      <img
+                        src={
+                          booking.propertyImage && !booking.propertyImage.startsWith("http")
+                            ? `${IMAGE_BASE_URL}${booking.propertyImage}`
+                            : booking.propertyImage ||
+                              "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=400"
+                        }
                         className="w-full h-full object-cover"
                         alt={booking.propertyName}
                       />
-                      <div className={`absolute top-3 left-3 px-2 py-1 text-[10px] font-medium rounded ${getStatusStyle(booking.status)}`}>
+                      <div className={`absolute top-3 left-3 px-2 py-1 text-[10px] font-medium rounded border ${getStatusStyle(booking.status)}`}>
                         {getStatusText(booking.status)}
                       </div>
-                      {booking.status === 'pending' && timers[booking.id] && (
+                      {/* Active stay pulse badge */}
+                      {booking.status === "active" && (
+                        <div className="absolute top-3 right-3 bg-purple-600 text-white px-2 py-1 rounded text-[10px] font-medium flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse inline-block" />
+                          Staying now
+                        </div>
+                      )}
+                      {booking.status === "pending" && timers[booking.id] && (
                         <div className="absolute top-3 right-3 bg-amber-500 text-white px-2 py-1 rounded text-[10px] font-mono">
-                          <FaClock className="inline mr-1" size={10} /> {timers[booking.id]}
+                          <FaClock className="inline mr-1" size={10} />
+                          {timers[booking.id]}
                         </div>
                       )}
                     </div>
@@ -475,10 +499,10 @@ export default function MyBookings() {
                       <div className="flex justify-between items-start mb-2">
                         <h3 className="font-serif text-xl text-stone-900">{booking.propertyName}</h3>
                         <div className="flex items-center gap-1 text-amber-500">
-                          <FaStar size={12} /><FaStar size={12} /><FaStar size={12} /><FaStar size={12} /><FaStar size={12} />
+                          {[...Array(5)].map((_, i) => <FaStar key={i} size={12} />)}
                         </div>
                       </div>
-                      
+
                       <p className="text-stone-500 text-sm flex items-center gap-1 mb-3">
                         <FaMapMarkerAlt size={12} /> {booking.propertyLocation}
                       </p>
@@ -494,7 +518,10 @@ export default function MyBookings() {
                         </div>
                         <div>
                           <p className="text-[10px] uppercase text-stone-400">Guests</p>
-                          <p className="text-sm font-medium">{booking.guests?.adults || 1} Adults{booking.guests?.children > 0 ? `, ${booking.guests.children} Children` : ''}</p>
+                          <p className="text-sm font-medium">
+                            {booking.guests?.adults || 1} Adults
+                            {booking.guests?.children > 0 && `, ${booking.guests.children} Children`}
+                          </p>
                         </div>
                         <div>
                           <p className="text-[10px] uppercase text-stone-400">Nights</p>
@@ -502,31 +529,54 @@ export default function MyBookings() {
                         </div>
                       </div>
 
+                      {/* Cancelled — show refund info if any */}
+                      {booking.status === "cancelled" && booking.refundInfo && booking.refundInfo.refund_amount > 0 && (
+                        <div className={`mb-3 px-3 py-2 rounded-lg text-xs flex items-center gap-2 ${
+                          booking.refundInfo.refund_processed
+                            ? "bg-green-50 text-green-700"
+                            : "bg-amber-50 text-amber-700"
+                        }`}>
+                          {booking.refundInfo.refund_processed ? (
+                            <><FaCheck size={10} /> Refund of {formatCurrency(booking.refundInfo.refund_amount)} processed</>
+                          ) : (
+                            <><FaClock size={10} /> Refund of {formatCurrency(booking.refundInfo.refund_amount)} pending</>
+                          )}
+                        </div>
+                      )}
+
                       <div className="flex items-center justify-between flex-wrap gap-3">
                         <div>
                           <p className="text-xs text-stone-500">Total amount</p>
                           <p className="text-xl font-serif text-stone-900">{formatCurrency(booking.totalAmount)}</p>
                           {booking.pendingAmount > 0 && (
-                            <p className="text-xs text-amber-600">Balance due: {formatCurrency(booking.pendingAmount)}</p>
+                            <p className="text-xs text-amber-600">
+                              Balance due: {formatCurrency(booking.pendingAmount)}
+                            </p>
                           )}
                         </div>
-                        <div className="flex gap-2">
-                          <button 
+
+                        <div className="flex gap-2 flex-wrap">
+                          {/* Details */}
+                          <button
                             onClick={() => setSelectedBooking(booking)}
                             className="px-4 py-2 border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors text-sm flex items-center gap-2"
                           >
                             <FaEye size={14} /> Details
                           </button>
-                          {booking.status === 'pending' && (
-                            <button 
-                              onClick={() => navigate(`/payment/${booking.id}`)}
+
+                          {/* Pay Now — only for pending bookings */}
+                          {booking.status === "pending" && (
+                            <button
+                              onClick={() => handlePayNow(booking)}
                               className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors text-sm flex items-center gap-2"
                             >
                               <FaCreditCard size={14} /> Pay Now
                             </button>
                           )}
-                          {['pending', 'confirmed', 'upcoming'].includes(booking.status) && (
-                            <button 
+
+                          {/* Cancel — pending or confirmed (not active, not completed) */}
+                          {["pending", "confirmed"].includes(booking.status) && booking.canCancel && (
+                            <button
                               onClick={(e) => handleCancelClick(booking, e)}
                               className="px-4 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors text-sm"
                             >
@@ -544,20 +594,16 @@ export default function MyBookings() {
         )}
       </div>
 
-      {/* Cancel Modal */}
+      {/* ── Cancel Modal ────────────────────────────────────────── */}
       <AnimatePresence>
         {showCancelModal && cancelBooking && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
             onClick={() => { setShowCancelModal(false); setCancelBooking(null); }}
           >
             <motion.div
-              initial={{ scale: 0.95, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 20 }}
+              initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }}
               className="bg-white rounded-xl max-w-md w-full"
               onClick={(e) => e.stopPropagation()}
             >
@@ -566,39 +612,41 @@ export default function MyBookings() {
                   <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
                     <FaExclamationTriangle className="text-red-600 text-xl" />
                   </div>
-                  <button onClick={() => { setShowCancelModal(false); setCancelBooking(null); }} className="p-2 hover:bg-stone-100 rounded-full">
+                  <button
+                    onClick={() => { setShowCancelModal(false); setCancelBooking(null); }}
+                    className="p-2 hover:bg-stone-100 rounded-full"
+                  >
                     <FaTimes />
                   </button>
                 </div>
 
                 <h3 className="font-serif text-xl mb-2">Cancel Booking?</h3>
                 <p className="text-stone-500 text-sm mb-6">
-                  Are you sure you want to cancel your stay at <span className="font-medium text-stone-900">{cancelBooking?.propertyName}</span>?
+                  Are you sure you want to cancel your stay at{" "}
+                  <span className="font-medium text-stone-900">{cancelBooking.propertyName}</span>?
                 </p>
 
                 <div className="bg-stone-50 p-4 rounded-lg mb-6 space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-stone-600">Check-in</span>
-                    <span className="font-medium">{formatDate(cancelBooking?.checkIn)}</span>
+                    <span className="font-medium">{formatDate(cancelBooking.checkIn)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-stone-600">Check-out</span>
-                    <span className="font-medium">{formatDate(cancelBooking?.checkOut)}</span>
+                    <span className="font-medium">{formatDate(cancelBooking.checkOut)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-stone-600">Total paid</span>
-                    <span className="font-medium">{formatCurrency(cancelBooking?.totalAmount)}</span>
+                    <span className="font-medium">{formatCurrency(cancelBooking.totalAmount)}</span>
                   </div>
                 </div>
 
                 <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
                   <p className="text-sm text-amber-800 mb-2">⚠️ Refund Policy</p>
-                  <p className="text-xs text-amber-700">
-                    {cancelCalculation?.message || "Refund amount will be calculated based on days until check-in."}
-                  </p>
-                  {cancelCalculation?.refundAmount > 0 && (
+                  <p className="text-xs text-amber-700">{cancelCalc?.message}</p>
+                  {cancelCalc?.refundAmount > 0 && (
                     <p className="text-sm font-medium text-amber-800 mt-2">
-                      Refund amount: {formatCurrency(cancelCalculation.refundAmount)}
+                      Refund amount: {formatCurrency(cancelCalc.refundAmount)}
                     </p>
                   )}
                 </div>
@@ -615,7 +663,9 @@ export default function MyBookings() {
                     disabled={cancelling}
                     className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                   >
-                    {cancelling ? <><FaSpinner className="animate-spin" /> Cancelling...</> : 'Yes, Cancel'}
+                    {cancelling
+                      ? <><FaSpinner className="animate-spin" /> Cancelling…</>
+                      : "Yes, Cancel"}
                   </button>
                 </div>
               </div>
@@ -624,20 +674,16 @@ export default function MyBookings() {
         )}
       </AnimatePresence>
 
-      {/* Details Modal */}
+      {/* ── Details Modal ────────────────────────────────────────── */}
       <AnimatePresence>
         {selectedBooking && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
             onClick={() => setSelectedBooking(null)}
           >
             <motion.div
-              initial={{ scale: 0.95, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 20 }}
+              initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }}
               className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
@@ -654,20 +700,29 @@ export default function MyBookings() {
                   </button>
                 </div>
 
-                <div className="flex gap-2 mb-6">
-                  <span className={`px-3 py-1 text-xs rounded-full ${getStatusStyle(selectedBooking.status)}`}>
+                <div className="flex gap-2 mb-6 flex-wrap">
+                  <span className={`px-3 py-1 text-xs rounded-full border ${getStatusStyle(selectedBooking.status)}`}>
                     {getStatusText(selectedBooking.status)}
                   </span>
-                  <span className="px-3 py-1 text-xs rounded-full bg-stone-100">
+                  <span className="px-3 py-1 text-xs rounded-full bg-stone-100 text-stone-600">
                     Payment: {selectedBooking.paymentStatus}
                   </span>
+                  {selectedBooking.status === "active" && (
+                    <span className="px-3 py-1 text-xs rounded-full bg-purple-100 text-purple-700 border border-purple-200 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-pulse inline-block" />
+                      Currently staying
+                    </span>
+                  )}
                 </div>
 
                 <div className="h-48 rounded-lg overflow-hidden mb-6">
                   <img
-                    src={selectedBooking.propertyImage && !selectedBooking.propertyImage.startsWith('http') 
-                      ? `${IMAGE_BASE_URL}${selectedBooking.propertyImage}` 
-                      : selectedBooking.propertyImage || 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=800'}
+                    src={
+                      selectedBooking.propertyImage && !selectedBooking.propertyImage.startsWith("http")
+                        ? `${IMAGE_BASE_URL}${selectedBooking.propertyImage}`
+                        : selectedBooking.propertyImage ||
+                          "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=800"
+                    }
                     alt={selectedBooking.propertyName}
                     className="w-full h-full object-cover"
                   />
@@ -698,23 +753,49 @@ export default function MyBookings() {
                   </div>
                 </div>
 
+                {/* Cancelled — refund details */}
+                {selectedBooking.status === "cancelled" && selectedBooking.refundInfo && (
+                  <div className="border-t border-stone-200 pt-4 mb-6">
+                    <h4 className="font-medium mb-3">Cancellation & Refund</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-stone-600">Cancellation fee</span>
+                        <span className="text-red-600">
+                          {formatCurrency(selectedBooking.refundInfo.cancellation_fee)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-stone-600">Refund amount</span>
+                        <span className="text-green-600">
+                          {formatCurrency(selectedBooking.refundInfo.refund_amount)}
+                        </span>
+                      </div>
+                      <div className={`mt-2 px-3 py-2 rounded-lg text-xs flex items-center gap-2 ${
+                        selectedBooking.refundInfo.refund_processed
+                          ? "bg-green-50 text-green-700"
+                          : "bg-amber-50 text-amber-700"
+                      }`}>
+                        {selectedBooking.refundInfo.refund_processed ? (
+                          <><FaCheck size={10} /> Refund processed{selectedBooking.refundInfo.refund_processed_at && ` on ${formatDate(selectedBooking.refundInfo.refund_processed_at)}`}</>
+                        ) : (
+                          <><FaClock size={10} /> Refund pending — will be processed within 5-7 business days</>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex gap-3">
-                  {selectedBooking.status === 'pending' && (
+                  {selectedBooking.status === "pending" && (
                     <button
-                      onClick={() => {
-                        setSelectedBooking(null);
-                        navigate(`/payment/${selectedBooking.id}`);
-                      }}
+                      onClick={() => { setSelectedBooking(null); handlePayNow(selectedBooking); }}
                       className="flex-1 bg-amber-500 text-white py-3 rounded-lg hover:bg-amber-600"
                     >
                       Complete Payment
                     </button>
                   )}
                   <button
-                    onClick={() => {
-                      // Download invoice functionality
-                      alert('Invoice download coming soon');
-                    }}
+                    onClick={() => alert("Invoice download coming soon")}
                     className="flex-1 border border-stone-200 py-3 rounded-lg hover:bg-stone-50 flex items-center justify-center gap-2"
                   >
                     <FaDownload size={14} /> Download Invoice
@@ -726,7 +807,7 @@ export default function MyBookings() {
         )}
       </AnimatePresence>
 
-      {/* Concierge Section */}
+      {/* Concierge */}
       <div className="max-w-7xl mx-auto px-6 mt-12">
         <div className="bg-gradient-to-r from-[#093A3E] to-[#0a4a52] text-white rounded-xl p-6 md:p-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
@@ -737,7 +818,7 @@ export default function MyBookings() {
               <div>
                 <h3 className="font-serif text-xl md:text-2xl">Need assistance with your stay?</h3>
                 <p className="text-white/80 text-sm mt-1">
-                  Our concierge team is here 24/7 to help with special requests or questions
+                  Our concierge team is here 24/7 to help with special requests or questions.
                 </p>
               </div>
             </div>

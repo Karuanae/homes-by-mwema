@@ -12,6 +12,28 @@ logger = logging.getLogger(__name__)
 
 # ==================== HELPER FUNCTIONS ====================
 
+def derive_display_status(booking, today):
+    """
+    Single source of truth for booking display status.
+    Call AFTER check_and_update_expired() has already run.
+    """
+    raw = booking.status          # value stored in DB
+    pay = booking.payment_status  # 'pending' | 'completed' | 'partial' | 'refunded'
+
+    if raw in ('pending', 'expired', 'cancelled'):
+        return raw                # these are exact — no override needed
+
+    # DB status is confirmed / upcoming / active — payment decides the rest
+    if pay == 'completed':
+        if booking.check_out < today:
+            return 'completed'        # stay is over
+        if booking.check_in <= today:
+            return 'active'           # guest is currently staying
+        return 'confirmed'            # paid, stay is upcoming
+
+    # Payment not yet confirmed but booking is acknowledged
+    return 'confirmed'
+
 def check_property_availability(property_id, check_in, check_out, exclude_booking_id=None):
     """
     SIMPLE availability check:
@@ -593,187 +615,190 @@ def check_availability():
 @booking_bp.route('/my-bookings', methods=['GET'])
 @jwt_required()
 def get_my_bookings():
-    """
-    Get all bookings for current user with REAL-TIME status
-    Includes pending, upcoming, past
-    """
+    """Get all bookings for the current user with real-time status."""
     try:
         user_id = get_jwt_identity()
-        
-        # Get all user bookings
+
         bookings = Booking.query.filter_by(user_id=user_id).order_by(
             Booking.created_at.desc()
         ).all()
-        
+
         result = []
-        now = datetime.now().date()
-        
+        now_dt = datetime.utcnow()
+        today  = now_dt.date()
+
         for booking in bookings:
             try:
-                # REAL-TIME EXPIRY CHECK for each pending booking
+                # Real-time expiry check for every pending booking
                 if booking.status == 'pending':
                     check_and_update_expired(booking)
-                
-                # Determine display status
-                display_status = booking.status
-                if booking.status == 'confirmed' and booking.check_out < now:
-                    display_status = 'completed'
-                elif booking.status == 'confirmed' and booking.check_in <= now <= booking.check_out:
-                    display_status = 'active'
-                
-                # Safely get property information
-                property_obj = booking.property
-                if not property_obj:
-                    logger.warning(f"Booking {booking.id} has no associated property")
+
+                prop = booking.property
+                if not prop:
+                    logger.warning(f"Booking {booking.id} has no property — skipping")
                     continue
-                
-                # Build property image URL instead of passing the ORM object
+
+                display_status = derive_display_status(booking, today)
+
+                # Cover image
                 property_image = None
-                if property_obj.images and len(property_obj.images) > 0:
-                    property_image = f"/api/admin/property-image/{property_obj.images[0].id}"
-                
-                # Calculate time left for pending bookings
+                if prop.images:
+                    property_image = f"/api/admin/property-image/{prop.images[0].id}"
+
+                # Time left (only meaningful while pending)
                 time_left = None
                 if booking.status == 'pending' and booking.expires_at:
-                    diff = booking.expires_at - datetime.utcnow()
+                    diff = booking.expires_at - now_dt
                     if diff.total_seconds() > 0:
                         time_left = {
-                            'minutes': diff.seconds // 60,
-                            'seconds': diff.seconds % 60
+                            'minutes': int(diff.total_seconds() // 60),
+                            'seconds': int(diff.total_seconds() % 60)
                         }
-                
+
+                # Refund info for cancelled bookings
+                refund_info = None
+                if display_status == 'cancelled':
+                    refund_info = {
+                        'refund_amount':    float(booking.refund_amount or 0),
+                        'cancellation_fee': float(booking.cancellation_fee or 0),
+                        'refund_processed': booking.refund_processed or False,
+                        'refund_processed_at': (
+                            booking.refund_processed_at.isoformat()
+                            if booking.refund_processed_at else None
+                        ),
+                        'cancelled_at': (
+                            booking.cancelled_at.isoformat()
+                            if booking.cancelled_at else None
+                        ),
+                    }
+
                 result.append({
-                    'id': booking.id,
-                    'property_id': booking.property_id,
-                    'property_name': property_obj.name,
-                    'property_location': property_obj.location,
-                    'property_image': property_image,
-                    'check_in': booking.check_in.strftime('%Y-%m-%d'),
-                    'check_out': booking.check_out.strftime('%Y-%m-%d'),
+                    'id':                booking.id,
+                    'property_id':       booking.property_id,
+                    'property_name':     prop.name,
+                    'property_location': prop.location,
+                    'property_image':    property_image,
+                    'property_latitude':  float(prop.latitude)  if prop.latitude  else None,
+                    'property_longitude': float(prop.longitude) if prop.longitude else None,
+                    'check_in':         booking.check_in.strftime('%Y-%m-%d'),
+                    'check_out':        booking.check_out.strftime('%Y-%m-%d'),
                     'check_in_display': booking.check_in.strftime('%b %d, %Y'),
-                    'check_out_display': booking.check_out.strftime('%b %d, %Y'),
-                    'nights': booking.nights,
-                    'guests': booking.guests,
-                    'total_amount': float(booking.total_amount),
-                    'paid_amount': float(booking.total_amount - booking.pending_amount),
-                    'pending_amount': float(booking.pending_amount) if booking.pending_amount else 0,
-                    'payment_status': booking.payment_status,
-                    'status': display_status,
-                    'original_status': booking.status,
-                    'expires_at': booking.expires_at.isoformat() if booking.expires_at else None,
-                    'time_left': time_left,
-                    'created_at': booking.created_at.isoformat() if booking.created_at else None,
-                    'can_cancel': booking.status in ['pending', 'confirmed'] and booking.check_in > now
+                    'check_out_display':booking.check_out.strftime('%b %d, %Y'),
+                    'nights':           booking.nights,
+                    'guests':           booking.guests,
+                    'total_amount':     float(booking.total_amount),
+                    'base_amount':      float(booking.base_amount),
+                    'paid_amount':      float(booking.total_amount - (booking.pending_amount or 0)),
+                    'pending_amount':   float(booking.pending_amount or 0),
+                    'payment_status':   booking.payment_status,
+                    'status':           display_status,
+                    'original_status':  booking.status,
+                    'expires_at':       booking.expires_at.isoformat() if booking.expires_at else None,
+                    'time_left':        time_left,
+                    'created_at':       booking.created_at.isoformat() if booking.created_at else None,
+                    'can_cancel': (
+                        booking.status in ['pending', 'confirmed', 'upcoming']
+                        and booking.check_in > today
+                    ),
+                    'refund_info': refund_info,
                 })
+
             except Exception as e:
                 logger.error(f"Error processing booking {booking.id}: {str(e)}")
                 continue
-        
+
         return jsonify(result), 200
+
     except Exception as e:
-        logger.error(f"Get my bookings error: {str(e)}")
-        return jsonify({
-            'error': 'Failed to fetch bookings',
-            'message': str(e)
-        }), 500
+        logger.error(f"get_my_bookings error: {str(e)}")
+        return jsonify({'error': 'Failed to fetch bookings', 'message': str(e)}), 500
 
 
 # ==================== CANCEL BOOKING ====================
 
 @booking_bp.route('/<int:booking_id>/cancel', methods=['POST'])
 @jwt_required()
-def cancel_booking():
-    """
-    Cancel a booking (user-initiated) with refund calculation
-    """
+def cancel_booking(booking_id):          # ← comes from URL, not request body
+    """Cancel a booking (user-initiated) with refund calculation."""
     try:
         user_id = get_jwt_identity()
-        data = request.get_json() or {}
-        booking_id = data.get('booking_id') or request.view_args.get('booking_id')
-        
-        if not booking_id:
-            return jsonify({'error': 'Booking ID is required'}), 400
-            
+
         booking = Booking.query.filter_by(id=booking_id, user_id=user_id).first()
-        
         if not booking:
             return jsonify({'error': 'Booking not found'}), 404
-        
-        # REAL-TIME EXPIRY CHECK - if expired, can't cancel
+
+        # Real-time expiry
         if check_and_update_expired(booking):
             return jsonify({
                 'success': False,
-                'error': 'Booking has expired and cannot be cancelled',
+                'error':   'Booking has expired and cannot be cancelled',
                 'expired': True
             }), 400
-        
-        # Check if already cancelled
+
         if booking.status == 'cancelled':
             return jsonify({'error': 'Booking already cancelled'}), 400
-        
-        # Check if booking can be cancelled (not started)
-        now = datetime.now().date()
-        if booking.check_in <= now:
+
+        today = datetime.now().date()
+        if booking.check_in <= today:
             return jsonify({
-                'success': False,
-                'error': 'Cannot cancel booking that has already started',
+                'success':    False,
+                'error':      'Cannot cancel a booking that has already started',
                 'can_cancel': False
             }), 400
-        
-        # Calculate cancellation deadlines if not set
-        if hasattr(booking, 'calculate_cancellation_deadlines') and (not booking.cancellation_deadline_30 or not booking.cancellation_deadline_14):
+
+        # Set deadlines if missing
+        if hasattr(booking, 'calculate_cancellation_deadlines') and (
+            not booking.cancellation_deadline_30 or not booking.cancellation_deadline_14
+        ):
             booking.calculate_cancellation_deadlines()
-        
-        # Calculate refund amount
+
+        # Refund calculation
         if hasattr(booking, 'calculate_refund_amount'):
             fee_amount, refund_amount = booking.calculate_refund_amount()
         else:
-            # Default if methods don't exist
-            days_until_checkin = (booking.check_in - now).days
-            if days_until_checkin >= 30:
-                fee_amount = 0
-                refund_amount = float(booking.total_amount)
-            elif days_until_checkin >= 14:
+            days = (booking.check_in - today).days
+            if days >= 30:
+                fee_amount, refund_amount = 0, float(booking.total_amount)
+            elif days >= 14:
                 fee_amount = float(booking.total_amount) * 0.5
                 refund_amount = float(booking.total_amount) * 0.5
             else:
-                fee_amount = float(booking.total_amount)
-                refund_amount = 0
-        
-        # Log the cancellation details
-        logger.info(f"Processing cancellation for booking {booking.id}:")
-        logger.info(f"  - Days until check-in: {(booking.check_in - now).days}")
-        logger.info(f"  - Fee amount: KES {fee_amount}")
-        logger.info(f"  - Refund amount: KES {refund_amount}")
-        
-        # Update booking status
-        booking.status = 'cancelled'
+                fee_amount, refund_amount = float(booking.total_amount), 0
+
+        logger.info(
+            f"Cancelling booking {booking.id}: "
+            f"fee={fee_amount}, refund={refund_amount}"
+        )
+
+        booking.status       = 'cancelled'
         booking.cancelled_at = datetime.utcnow()
+        booking.updated_at   = datetime.utcnow()
         if hasattr(booking, 'cancellation_fee'):
             booking.cancellation_fee = fee_amount
         if hasattr(booking, 'refund_amount'):
             booking.refund_amount = refund_amount
-        booking.updated_at = datetime.utcnow()
-        
+
         db.session.commit()
-        
-        # Prepare response message
+
         if refund_amount > 0:
-            if refund_amount == booking.total_amount:
-                message = 'Booking cancelled successfully. Full refund will be processed.'
+            if refund_amount == float(booking.total_amount):
+                message = 'Booking cancelled. Full refund will be processed within 5-7 business days.'
             else:
-                message = f'Booking cancelled successfully. Partial refund of KES {refund_amount:,.0f} will be processed.'
+                message = (
+                    f'Booking cancelled. Partial refund of KES {refund_amount:,.0f} '
+                    f'will be processed within 5-7 business days.'
+                )
         else:
-            message = 'Booking cancelled successfully. No refund applicable as per cancellation policy.'
-        
+            message = 'Booking cancelled. No refund applies per the cancellation policy.'
+
         return jsonify({
-            'success': True,
-            'message': message,
+            'success':       True,
+            'message':       message,
             'refund_amount': float(refund_amount) if refund_amount else 0,
-            'fee_amount': float(fee_amount) if fee_amount else 0,
-            'cancelled_at': booking.cancelled_at.isoformat() if booking.cancelled_at else None
+            'fee_amount':    float(fee_amount)    if fee_amount    else 0,
+            'cancelled_at':  booking.cancelled_at.isoformat()
         }), 200
-        
+
     except Exception as e:
         logger.error(f"Cancellation error: {str(e)}")
         db.session.rollback()
