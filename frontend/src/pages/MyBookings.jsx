@@ -147,23 +147,44 @@ export default function MyBookings() {
 
   // ── Real-time timer polling ─────────────────────────────────────────────────
   useEffect(() => {
-    const pendingIds = bookings
-      .filter((b) => b.status === "pending" && b.expiresAt)
-      .map((b) => b.id);
+    const pendingBookings = bookings.filter((b) => b.status === "pending" && b.expiresAt);
 
-    if (pendingIds.length === 0) return;
+    if (pendingBookings.length === 0) return;
 
     const tick = async () => {
+      const now = new Date();
+      let needsRefresh = false;
+      const newTimers  = {};
+
+      // First pass: client-side check — if any timer has already elapsed
+      // locally, trigger a refresh immediately without waiting for the API.
+      pendingBookings.forEach((b) => {
+        const expiry = new Date(b.expiresAt);
+        if (expiry <= now) {
+          needsRefresh = true;
+        } else {
+          const diff    = expiry - now;
+          const minutes = Math.floor(diff / 60000);
+          const seconds = Math.floor((diff % 60000) / 1000);
+          newTimers[b.id] = `${minutes}:${String(seconds).padStart(2, "0")}`;
+        }
+      });
+
+      if (needsRefresh) {
+        // Re-fetch from server so expired bookings get their correct status
+        await fetchBookings();
+        return;
+      }
+
+      // Second pass: ask server to confirm status (catches server-side expiry
+      // and any payment that completed since last poll)
       try {
         const responses = await Promise.all(
-          pendingIds.map((id) => api.bookings.getStatus(id))
+          pendingBookings.map((b) => api.bookings.getStatus(b.id))
         );
 
-        let needsRefresh = false;
-        const newTimers  = {};
-
         responses.forEach((res, i) => {
-          const id = pendingIds[i];
+          const id = pendingBookings[i].id;
           if (res.data.is_expired) {
             needsRefresh = true;
           } else if (res.data.time_left) {
@@ -175,6 +196,8 @@ export default function MyBookings() {
         if (needsRefresh) fetchBookings();
         else setTimers(newTimers);
       } catch (e) {
+        // If the API call fails, still update the local countdown
+        setTimers(newTimers);
         console.error("Timer poll error:", e);
       }
     };
@@ -548,7 +571,8 @@ export default function MyBookings() {
                         <div>
                           <p className="text-xs text-stone-500">Total amount</p>
                           <p className="text-xl font-serif text-stone-900">{formatCurrency(booking.totalAmount)}</p>
-                          {booking.pendingAmount > 0 && (
+                          {/* Balance due only shown while payment is still pending */}
+                          {booking.status === "pending" && booking.pendingAmount > 0 && (
                             <p className="text-xs text-amber-600">
                               Balance due: {formatCurrency(booking.pendingAmount)}
                             </p>
@@ -750,11 +774,18 @@ export default function MyBookings() {
                       <span>Total</span>
                       <span>{formatCurrency(selectedBooking.totalAmount)}</span>
                     </div>
+                    {/* Balance due only while actively pending payment — never on other statuses */}
+                    {selectedBooking.status === "pending" && selectedBooking.pendingAmount > 0 && (
+                      <div className="flex justify-between text-amber-600">
+                        <span>Balance due</span>
+                        <span>{formatCurrency(selectedBooking.pendingAmount)}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {/* Cancelled — refund details */}
-                {selectedBooking.status === "cancelled" && selectedBooking.refundInfo && (
+                {/* Cancelled — refund details only if a refund amount was actually set */}
+                {selectedBooking.status === "cancelled" && selectedBooking.refundInfo && selectedBooking.refundInfo.refund_amount > 0 && (
                   <div className="border-t border-stone-200 pt-4 mb-6">
                     <h4 className="font-medium mb-3">Cancellation & Refund</h4>
                     <div className="space-y-2 text-sm">

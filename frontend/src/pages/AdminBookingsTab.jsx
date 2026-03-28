@@ -29,32 +29,47 @@ const fmtTimeLeft = (expiresAt) => {
   return `${m}:${s.toString().padStart(2, "0")}`;
 };
 
-// ── Canonical status derivation (mirrors backend logic) ────────────────────────
+// Canonical status derivation
 //
-//   pending   → 15-min timer running, no payment
-//   expired   → timer ended, no payment
-//   confirmed → payment completed, check-in is in the future
-//   active    → payment completed, guest is currently staying
-//   completed → payment completed AND check_out has passed
-//   cancelled → cancelled by user (with or without payment)
+//   pending   -> timer still running, no confirmed payment
+//   expired   -> timer elapsed, no confirmed payment (IMMEDIATE, no scheduler wait)
+//   confirmed -> payment_status === 'completed', check-in in the future
+//   active    -> payment_status === 'completed', guest currently in-house
+//   completed -> payment_status === 'completed', check_out has passed
+//   cancelled -> cancelled at any stage
+//
+//   Self-contained: checks expires_at directly so a booking becomes 'expired'
+//   the instant the timer crosses zero, with no dependency on the scheduler.
 //
 function deriveDisplayStatus(b) {
-  const raw  = b.status;
-  const pay  = b.payment_status;
+  const raw   = b.status;
+  const pay   = b.payment_status;
+  const now   = new Date();
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // Timer-expired pending bookings
-  if (raw === "pending" && b.expires_at && new Date(b.expires_at) < new Date()) {
-    return "expired";
-  }
-
-  // Explicit terminal states
-  if (raw === "pending")   return "pending";
-  if (raw === "expired")   return "expired";
+  // Cancelled is always exact
   if (raw === "cancelled") return "cancelled";
 
-  // Payment-confirmed bookings — derive from dates
+  // Already marked expired in DB
+  if (raw === "expired") return "expired";
+
+  // For pending bookings: check the timer RIGHT NOW against expires_at
+  if (raw === "pending") {
+    if (pay === "completed") {
+      // Payment arrived just before expiry - fall through to confirmed logic
+    } else if (b.expires_at && new Date(b.expires_at) <= now) {
+      // Timer has elapsed with no payment - expired immediately
+      return "expired";
+    } else {
+      // Timer still running
+      return "pending";
+    }
+  }
+
+  // For all other DB statuses (confirmed / upcoming / active) and the
+  // edge case where raw==="pending" but pay==="completed":
+  // only confirmed/active/completed when payment is confirmed.
   if (pay === "completed") {
     const checkOut = b.check_out ? new Date(b.check_out) : null;
     const checkIn  = b.check_in  ? new Date(b.check_in)  : null;
@@ -63,8 +78,9 @@ function deriveDisplayStatus(b) {
     return "confirmed";
   }
 
-  // Fallback for DB values like "upcoming" that may exist
-  return "confirmed";
+  // payment_status not completed - check timer to decide pending vs expired
+  if (b.expires_at && new Date(b.expires_at) <= now) return "expired";
+  return "pending";
 }
 
 const STATUS_STYLE = {
@@ -140,7 +156,7 @@ const AdminBookingsTab = () => {
           refundAmount,
           netEarnings,
           needsRefund:
-            b.status === "cancelled" &&
+            displayStatus === "cancelled" &&
             refundAmount > 0 &&
             !b.refund_processed,
           profitMargin:
@@ -168,29 +184,34 @@ const AdminBookingsTab = () => {
     applyFilters(bookings, searchTerm, dateRange);
   }, [bookings, searchTerm, dateRange]);
 
-  // ── Stats ────────────────────────────────────────────────────────────────────
+  // ── Stats ─────────────────────────────────────────────────────────────────────
+  // All counts use displayStatus exclusively — the single source of truth.
+  // Raw DB fields (status, payment_status) are unreliable on their own:
+  // a booking is only "confirmed" when displayStatus === "confirmed", not
+  // when payment_status === "completed" (which can still be pending/expired).
   const computeStats = (data) => {
-    const paid      = data.filter((b) => b.payment_status === "completed");
-    const cancelled = data.filter((b) => b.status === "cancelled");
-    const completed = data.filter((b) => b.displayStatus === "completed");
-    const total     = data.length;
+    const confirmed  = data.filter((b) => b.displayStatus === "confirmed");
+    const active     = data.filter((b) => b.displayStatus === "active");
+    const completed  = data.filter((b) => b.displayStatus === "completed");
+    const cancelled  = data.filter((b) => b.displayStatus === "cancelled");
+    const paidStays  = [...confirmed, ...active, ...completed];
+    const total      = data.length;
 
-    const totalRevenue = paid.reduce((s, b) => s + Number(b.total_amount || 0), 0);
+    const totalRevenue = paidStays.reduce((s, b) => s + Number(b.total_amount || 0), 0);
     const totalRefunds = cancelled.reduce((s, b) => s + (b.refundAmount || 0), 0);
     const needRefund   = data.filter((b) => b.needsRefund);
 
     setStats({
       totalRevenue,
       totalRefunds,
-      netRevenue:         totalRevenue - totalRefunds,
-      pendingPayments:    data
-        .filter((b) => b.payment_status === "pending")
-        .reduce((s, b) => s + Number(b.pending_amount || b.total_amount || 0), 0),
-      averageBookingValue: paid.length > 0
-        ? paid.reduce((s, b) => s + Number(b.total_amount || 0), 0) / paid.length
-        : 0,
-      occupancyRate:  total > 0 ? ((completed.length / total) * 100).toFixed(1) : 0,
-      cancellationRate: total > 0 ? ((cancelled.length / total) * 100).toFixed(1) : 0,
+      netRevenue:          totalRevenue - totalRefunds,
+      // Pending payments = total value of bookings still in the 15-min window
+      pendingPayments:     data
+        .filter((b) => b.displayStatus === "pending")
+        .reduce((s, b) => s + Number(b.total_amount || 0), 0),
+      averageBookingValue: paidStays.length > 0 ? totalRevenue / paidStays.length : 0,
+      occupancyRate:       total > 0 ? ((completed.length / total) * 100).toFixed(1) : 0,
+      cancellationRate:    total > 0 ? ((cancelled.length / total) * 100).toFixed(1) : 0,
       pendingRefundsTotal: needRefund.reduce((s, b) => s + b.refundAmount, 0),
       pendingRefundsCount: needRefund.length,
     });
@@ -516,10 +537,12 @@ const AdminBookingsTab = () => {
                     <span className={`text-xs whitespace-nowrap ${payStyle(b.payment_status)}`}>
                       {b.payment_status}
                     </span>
-                    {b.pending_amount > 0 && (
+                    {/* Balance due only within the 15-min pending window */}
+                    {b.displayStatus === "pending" && b.pending_amount > 0 && (
                       <p className="text-[10px] text-amber-500 mt-0.5">Due: {fmt(b.pending_amount)}</p>
                     )}
-                    {b.status === "cancelled" && b.refundAmount > 0 && (
+                    {/* Refund note only on cancelled bookings that actually have a refund */}
+                    {b.displayStatus === "cancelled" && b.refundAmount > 0 && (
                       <p className={`text-[10px] mt-0.5 ${b.refund_processed ? "text-emerald-500" : "text-amber-500"}`}>
                         {b.refund_processed ? "✓ Refunded" : "⚠ Pending refund"}
                       </p>
@@ -707,16 +730,18 @@ const AdminBookingsTab = () => {
                       </>
                     )}
 
-                    {selectedBooking.paid_amount > 0 && (
+                    {/* Balance due only within the 15-min pending window */}
+                    {selectedBooking.displayStatus === "pending" && selectedBooking.pending_amount > 0 && (
+                      <div className="flex justify-between text-amber-600 pt-1">
+                        <span>Balance due</span>
+                        <span>{fmt(selectedBooking.pending_amount)}</span>
+                      </div>
+                    )}
+                    {/* Paid amount — only for confirmed / active / completed stays */}
+                    {selectedBooking.paid_amount > 0 && ["confirmed", "active", "completed"].includes(selectedBooking.displayStatus) && (
                       <div className="flex justify-between text-emerald-600 pt-1">
                         <span>Amount paid</span>
                         <span>{fmt(selectedBooking.paid_amount)}</span>
-                      </div>
-                    )}
-                    {selectedBooking.pending_amount > 0 && (
-                      <div className="flex justify-between text-amber-600">
-                        <span>Balance due</span>
-                        <span>{fmt(selectedBooking.pending_amount)}</span>
                       </div>
                     )}
                   </div>

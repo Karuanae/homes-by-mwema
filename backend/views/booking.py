@@ -15,24 +15,57 @@ logger = logging.getLogger(__name__)
 def derive_display_status(booking, today):
     """
     Single source of truth for booking display status.
-    Call AFTER check_and_update_expired() has already run.
+    This function is self-contained — it does NOT rely on the DB
+    status field already being 'expired'.  It checks expires_at
+    directly so expiry is instantaneous the moment the timer
+    crosses zero, regardless of whether the scheduler or
+    check_and_update_expired() has run yet.
+
+    Call this INSTEAD OF (or after) check_and_update_expired().
     """
-    raw = booking.status          # value stored in DB
-    pay = booking.payment_status  # 'pending' | 'completed' | 'partial' | 'refunded'
+    raw = booking.status
+    pay = booking.payment_status   # 'pending' | 'completed' | 'partial' | 'refunded'
+    now = datetime.utcnow()
 
-    if raw in ('pending', 'expired', 'cancelled'):
-        return raw                # these are exact — no override needed
+    # ── Cancelled is always exact — never override ──────────────
+    if raw == 'cancelled':
+        return 'cancelled'
 
-    # DB status is confirmed / upcoming / active — payment decides the rest
+    # ── Already marked expired in DB ───────────────────────────
+    if raw == 'expired':
+        return 'expired'
+
+    # ── Pending: check timer RIGHT NOW, not just via DB field ──
+    # A booking is only 'pending' while expires_at is in the future
+    # AND payment_status is not yet 'completed'.
+    # The instant expires_at passes, it becomes 'expired' — no
+    # need to wait for the scheduler or a separate API call.
+    if raw == 'pending':
+        if pay == 'completed':
+            # Payment arrived just before expiry — treat as confirmed below
+            pass
+        elif booking.expires_at and booking.expires_at <= now:
+            # Timer has elapsed, no confirmed payment → expired immediately
+            return 'expired'
+        else:
+            # Timer still running
+            return 'pending'
+
+    # ── For all other DB statuses (confirmed / upcoming / active)
+    # and for the edge case above where raw=='pending' but pay=='completed':
+    # a booking is only confirmed/active/completed when payment is confirmed.
     if pay == 'completed':
         if booking.check_out < today:
-            return 'completed'        # stay is over
+            return 'completed'     # stay is over
         if booking.check_in <= today:
-            return 'active'           # guest is currently staying
-        return 'confirmed'            # paid, stay is upcoming
+            return 'active'        # guest is currently in-house
+        return 'confirmed'         # paid, upcoming stay
 
-    # Payment not yet confirmed but booking is acknowledged
-    return 'confirmed'
+    # payment_status is NOT 'completed' — not confirmed regardless of DB status.
+    # Treat conservatively: if timer still running → pending, else → expired.
+    if booking.expires_at and booking.expires_at <= now:
+        return 'expired'
+    return 'pending'
 
 def check_property_availability(property_id, check_in, check_out, exclude_booking_id=None):
     """
@@ -629,16 +662,20 @@ def get_my_bookings():
 
         for booking in bookings:
             try:
-                # Real-time expiry check for every pending booking
-                if booking.status == 'pending':
-                    check_and_update_expired(booking)
-
                 prop = booking.property
                 if not prop:
                     logger.warning(f"Booking {booking.id} has no property — skipping")
                     continue
 
                 display_status = derive_display_status(booking, today)
+
+                # If derive_display_status decided this booking is expired but the
+                # DB still says 'pending', write the update now so every future
+                # query sees the correct state without waiting for the scheduler.
+                if display_status == 'expired' and booking.status == 'pending':
+                    booking.status = 'expired'
+                    db.session.add(booking)
+                    logger.info(f"⚡ Real-time expiry (my-bookings): Booking {booking.id} expired")
 
                 # Cover image
                 property_image = None
@@ -689,7 +726,11 @@ def get_my_bookings():
                     'total_amount':     float(booking.total_amount),
                     'base_amount':      float(booking.base_amount),
                     'paid_amount':      float(booking.total_amount - (booking.pending_amount or 0)),
-                    'pending_amount':   float(booking.pending_amount or 0),
+                    # pending_amount is ONLY meaningful while status == 'pending'
+                    # (inside the 15-min payment window). Zero it out for everything else
+                    # so the frontend never accidentally renders a "balance due" on a
+                    # confirmed, cancelled, or expired booking.
+                    'pending_amount':   float(booking.pending_amount or 0) if display_status == 'pending' else 0,
                     'payment_status':   booking.payment_status,
                     'status':           display_status,
                     'original_status':  booking.status,
@@ -706,6 +747,13 @@ def get_my_bookings():
             except Exception as e:
                 logger.error(f"Error processing booking {booking.id}: {str(e)}")
                 continue
+
+        # Flush any expiry writes accumulated during the loop
+        try:
+            db.session.commit()
+        except Exception as e:
+            logger.warning(f"Could not flush expiry writes: {str(e)}")
+            db.session.rollback()
 
         return jsonify(result), 200
 

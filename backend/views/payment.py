@@ -207,11 +207,13 @@ def mpesa_callback():
                     booking.payment_status = 'completed'
                     booking.status = 'confirmed'
                     booking.confirmation = 'confirmed'
+                    booking.pending_amount = Decimal('0')   # ← ADDED THIS LINE
                     logger.info(f"✅ Booking {booking.id} fully paid — KES {total_paid}")
                 elif total_paid >= (booking.total_amount - booking.pending_amount):
                     booking.payment_status = 'partial'
                     booking.status = 'confirmed'
                     booking.confirmation = 'confirmed'
+                    # partial: keep pending_amount as-is (remainder still owed)
                     logger.info(f"✅ Booking {booking.id} partially paid — KES {total_paid}")
 
                 booking.expires_at = None
@@ -493,6 +495,7 @@ def capture_paypal_order():
                 booking.payment_status = 'completed'
                 booking.confirmation = 'confirmed'
                 booking.payment_method = 'paypal'
+                booking.pending_amount = Decimal('0')    # ← ADDED THIS LINE (full payment)
 
                 if booking.payment_type == 'partial':
                     paid_amount = db.session.query(
@@ -503,9 +506,11 @@ def capture_paypal_order():
                         Payment.method != 'refund'
                     ).scalar() or Decimal('0')
 
-                    booking.pending_amount = booking.total_amount - paid_amount
-                    if booking.pending_amount > 0:
+                    remaining = booking.total_amount - paid_amount
+                    if remaining > 0:
+                        booking.pending_amount = remaining   # partial: restore remainder
                         booking.payment_status = 'partial'
+                    # if remaining <= 0: pending_amount stays 0 (set above)
 
                 booking.expires_at = None
 
@@ -612,6 +617,7 @@ def paypal_webhook():
                     if booking:
                         booking.payment_status = 'completed'
                         booking.confirmation = 'confirmed'
+                        booking.pending_amount = Decimal('0')  # ← ADDED THIS LINE
                         booking.expires_at = None
                     db.session.commit()
 
