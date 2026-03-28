@@ -3,12 +3,14 @@ import usePlacesAutocomplete from 'use-places-autocomplete';
 import { useState, useEffect } from 'react';
 import { Search, MapPin, Loader2 } from 'lucide-react';
 
-const libraries = ['places'];
+// ✅ FIX: Move libraries OUTSIDE the component
+const GOOGLE_MAPS_LIBRARIES = ['places'];
 
 export default function LocationAutocomplete({ onSelect, initialValue, placeholder = "Search for location..." }) {
+  // ✅ FIX: Use the stable constant reference
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
-    libraries,
+    libraries: GOOGLE_MAPS_LIBRARIES,  // ← stable reference, never changes
   });
 
   const {

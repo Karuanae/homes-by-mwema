@@ -2,6 +2,9 @@ import { useLoadScript, GoogleMap as GoogleMapComponent, Marker, InfoWindow } fr
 import { useState, useMemo, useCallback } from 'react';
 import { MapPin, Navigation, Maximize2 } from 'lucide-react';
 
+// ✅ FIX: Move libraries OUTSIDE the component (created once, stable reference)
+const GOOGLE_MAPS_LIBRARIES = ['places'];
+
 const mapContainerStyle = {
   width: '100%',
   height: '100%',
@@ -24,9 +27,10 @@ const mapOptions = {
 };
 
 export default function GoogleMap({ location, propertyTitle, coordinates }) {
+  // ✅ FIX: Use the stable constant reference, not inline array
   const { isLoaded, loadError } = useLoadScript({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
-    libraries: ['places'],
+    libraries: GOOGLE_MAPS_LIBRARIES,  // ← stable reference, never changes
   });
 
   const [selectedMarker, setSelectedMarker] = useState(null);

@@ -2,13 +2,13 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  FaMapMarkerAlt, FaStar, FaDownload, FaWhatsapp,
-  FaPhone, FaQuestionCircle, FaBed, FaSearch,
-  FaFilter, FaChevronRight, FaCalendarAlt, FaHistory,
+  FaMapMarkerAlt, FaStar, FaDownload,
+  FaPhone, FaSearch,
+  FaFilter, FaCalendarAlt, FaHistory,
   FaExclamationTriangle, FaEye, FaTimes,
-  FaCheck, FaClock, FaSpinner, FaUserCircle, FaChevronDown,
-  FaCreditCard, FaRegClock, FaCalendarCheck, FaChartLine,
-  FaMap, FaGlobe, FaPlane, FaHotel, FaHeart, FaShareAlt,
+  FaCheck, FaClock, FaSpinner, FaUserCircle,
+  FaCreditCard, FaRegClock, FaCalendarCheck,
+  FaMap, FaGlobe, FaHotel,
   FaDoorOpen,
 } from "react-icons/fa";
 import api, { IMAGE_BASE_URL } from "../services/api";
@@ -16,20 +16,19 @@ import GoogleMap from "../components/GoogleMap";
 
 // ─── Status helpers ───────────────────────────────────────────────────────────
 //
-//  pending   → 15-min timer running, no payment
-//  confirmed → payment done, check-in is in the future
-//  active    → payment done, guest is currently staying
-//  completed → payment done AND check-out has passed
-//  cancelled → cancelled by user; may have refund
+//  pending   → 15-min timer running, no payment yet
+//  confirmed → payment done, check-in in the future
+//  active    → payment done, guest currently staying
+//  completed → payment done, check-out has passed
+//  cancelled → cancelled; may have refund
 //
 const STATUS_STYLE = {
-  pending:   "bg-amber-100   text-amber-700   border-amber-200",
-  confirmed: "bg-green-100   text-green-700   border-green-200",
-  active:    "bg-purple-100  text-purple-700  border-purple-200",
-  completed: "bg-stone-100   text-stone-500   border-stone-200",
-  cancelled: "bg-red-50      text-red-700     border-red-200",
+  pending:   "bg-amber-100  text-amber-700  border-amber-200",
+  confirmed: "bg-green-100  text-green-700  border-green-200",
+  active:    "bg-purple-100 text-purple-700 border-purple-200",
+  completed: "bg-stone-100  text-stone-500  border-stone-200",
+  cancelled: "bg-red-50     text-red-700    border-red-200",
 };
-
 const STATUS_TEXT = {
   pending:   "Pending Payment",
   confirmed: "Confirmed",
@@ -37,16 +36,12 @@ const STATUS_TEXT = {
   completed: "Completed",
   cancelled: "Cancelled",
 };
-
 const getStatusStyle = (s) => STATUS_STYLE[s] || STATUS_STYLE.confirmed;
 const getStatusText  = (s) => STATUS_TEXT[s]  || s;
 
-// Which statuses count as "upcoming / current"
 const CURRENT_STATUSES = ["pending", "confirmed", "active"];
-// Which statuses count as history
 const HISTORY_STATUSES = ["completed", "cancelled"];
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 const formatCurrency = (n) => `KSh ${Number(n || 0).toLocaleString()}`;
 const formatDate = (d) => {
   if (!d) return "";
@@ -54,14 +49,6 @@ const formatDate = (d) => {
     day: "numeric", month: "long", year: "numeric",
   });
 };
-
-function calculateTimeLeft(expiresAt) {
-  const diff = new Date(expiresAt) - new Date();
-  if (diff <= 0) return null;
-  const m = Math.floor(diff / 60000);
-  const s = Math.floor((diff % 60000) / 1000);
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function MyBookings() {
@@ -81,48 +68,58 @@ export default function MyBookings() {
   const [cancelCalc,      setCancelCalc]      = useState(null);
   const [viewMode,        setViewMode]        = useState("list");
   const [mapCenter,       setMapCenter]       = useState({ lat: -1.286389, lng: 36.817223 });
-  const [timers,          setTimers]          = useState({});
 
-  // ✅ FIX: Add refs to prevent infinite loops
-  const bookingsRef = useRef(bookings);
-  const fetchInProgressRef = useRef(false);
+  // ── Timer state — managed entirely outside React state to avoid re-renders ──
+  // We use a ref-based map so the countdown never causes component re-renders
+  // (which is what was causing the infinite fetch loop).
+  const [timers, setTimers] = useState({});
 
-  // ── Fetch bookings with protection against concurrent calls ─────────────────
+  // Refs — never stale, never cause re-renders when mutated
+  const bookingsRef        = useRef([]);
+  const fetchingRef        = useRef(false);   // prevents concurrent fetches
+  const refreshScheduled   = useRef(false);   // prevents stacking refresh callbacks
+  const mountedRef         = useRef(true);    // prevents state updates after unmount
+
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
+
+  // ── fetchBookings — stable, never recreated ─────────────────────────────────
+  // IMPORTANT: this function must NOT be in the dependency array of the timer
+  // effect, otherwise every fetch → setState → effect restart → fetch loop.
   const fetchBookings = useCallback(async () => {
-    // ✅ Prevent concurrent fetches
-    if (fetchInProgressRef.current) {
-      return;
-    }
-    
-    fetchInProgressRef.current = true;
-    
+    if (fetchingRef.current || !mountedRef.current) return;
+    fetchingRef.current = true;
+
     try {
-      setLoading(true);
+      if (mountedRef.current) setLoading(true);
       const { data = [] } = await api.bookings.getUserBookings();
+      if (!mountedRef.current) return;
 
       const transformed = data.map((b) => ({
-        id:               b.id,
-        propertyName:     b.property_name     || "Unknown Property",
-        propertyLocation: b.property_location || "Nairobi",
-        propertyImage:    b.property_image,
-        propertyLatitude: b.property_latitude  || b.latitude,
-        propertyLongitude:b.property_longitude || b.longitude,
-        checkIn:          b.check_in,
-        checkOut:         b.check_out,
-        nights:           b.nights || 0,
-        guests:           b.guests || { adults: 1, children: 0 },
-        totalAmount:      b.total_amount  || 0,
-        baseAmount:       b.base_amount   || 0,
-        pendingAmount:    b.pending_amount || 0,
-        paidAmount:       (b.total_amount || 0) - (b.pending_amount || 0),
-        status:           b.status        || "pending",
-        paymentStatus:    b.payment_status || "pending",
-        createdAt:        b.created_at,
-        expiresAt:        b.expires_at,
-        canCancel:        b.can_cancel,
-        refundInfo:       b.refund_info || null,
+        id:                b.id,
+        propertyName:      b.property_name     || "Unknown Property",
+        propertyLocation:  b.property_location || "Nairobi",
+        propertyImage:     b.property_image,
+        propertyLatitude:  b.property_latitude  || b.latitude,
+        propertyLongitude: b.property_longitude || b.longitude,
+        checkIn:           b.check_in,
+        checkOut:          b.check_out,
+        nights:            b.nights || 0,
+        guests:            b.guests || { adults: 1, children: 0 },
+        totalAmount:       b.total_amount  || 0,
+        baseAmount:        b.base_amount   || 0,
+        // pending_amount is only meaningful while status === 'pending'
+        pendingAmount:     b.status === "pending" ? (b.pending_amount || 0) : 0,
+        paidAmount:        b.status !== "pending" ? (b.total_amount || 0) : 0,
+        status:            b.status        || "pending",
+        paymentStatus:     b.payment_status || "pending",
+        createdAt:         b.created_at,
+        expiresAt:         b.expires_at,
+        canCancel:         b.can_cancel,
+        refundInfo:        b.refund_info || null,
       }));
 
+      // Keep ref in sync — this is what the timer reads
+      bookingsRef.current = transformed;
       setBookings(transformed);
 
       // Map centre
@@ -133,126 +130,142 @@ export default function MyBookings() {
         setMapCenter({ lat, lng });
       }
 
-      // Initial timers
+      // Seed timers from fresh data
       const init = {};
       transformed.forEach((b) => {
         if (b.status === "pending" && b.expiresAt) {
-          init[b.id] = calculateTimeLeft(b.expiresAt);
+          const diff = new Date(b.expiresAt) - new Date();
+          if (diff > 0) {
+            const m = Math.floor(diff / 60000);
+            const s = Math.floor((diff % 60000) / 1000);
+            init[b.id] = `${m}:${String(s).padStart(2, "0")}`;
+          }
+          // If diff <= 0 the backend will have deleted it; don't seed a timer
         }
       });
       setTimers(init);
+
     } catch (err) {
       console.error("fetchBookings error:", err);
     } finally {
-      setLoading(false);
-      fetchInProgressRef.current = false;
+      if (mountedRef.current) setLoading(false);
+      fetchingRef.current  = false;
+      refreshScheduled.current = false;
     }
-  }, []);
+  }, []); // ← empty deps: this function never changes identity
 
-  // ✅ FIX: Sync ref with bookings state
-  useEffect(() => {
-    bookingsRef.current = bookings;
-  }, [bookings]);
-
-  // ── Initial fetch ──────────────────────────────────────────────────────────
+  // ── Initial load ────────────────────────────────────────────────────────────
   useEffect(() => {
     setUser(JSON.parse(localStorage.getItem("user") || "null"));
     fetchBookings();
   }, [fetchBookings]);
 
-  // ── Real-time timer polling (SMOOTH & ACCURATE) ─────────────────────────────
+  // ── Timer effect — runs ONCE on mount, reads bookings via ref ───────────────
+  //
+  // The root cause of the infinite loop:
+  //   fetchBookings → setBookings → [bookings] in dep array → effect restarts
+  //   → updateLocalTimers runs → timer already elapsed → fetchBookings → loop
+  //
+  // Fix: the effect has NO state in its dependency array.  It reads bookings
+  // through bookingsRef (a ref, not state) so it NEVER needs to restart.
+  // fetchBookings is stable (useCallback with []) so it's safe in deps.
+  //
   useEffect(() => {
-    let localTimerInterval = null;
-    let serverCheckInterval = null;
+    // Track which booking IDs already triggered a refresh this cycle
+    // so we don't call fetchBookings multiple times for the same expiry.
+    const alreadyRefreshed = new Set();
 
-    const updateLocalTimers = () => {
-      // Use ref to get current bookings without triggering re-renders
-      const currentBookings = bookingsRef.current;
-      const pendingBookings = currentBookings.filter((b) => b.status === "pending" && b.expiresAt);
+    const tickLocalTimers = () => {
+      const pending = bookingsRef.current.filter(
+        (b) => b.status === "pending" && b.expiresAt
+      );
 
-      if (pendingBookings.length === 0) {
+      if (pending.length === 0) {
         setTimers({});
         return;
       }
 
-      const now = new Date();
+      const now      = new Date();
       const newTimers = {};
-      let needsServerRefresh = false;
+      let   needsFetch = false;
 
-      pendingBookings.forEach((b) => {
+      pending.forEach((b) => {
         const expiry = new Date(b.expiresAt);
-        if (expiry <= now) {
-          needsServerRefresh = true;
+        const diff   = expiry - now;
+
+        if (diff <= 0) {
+          // Timer just hit zero — backend will delete it on next fetch.
+          // Only schedule ONE refresh per booking (not every tick).
+          if (!alreadyRefreshed.has(b.id)) {
+            alreadyRefreshed.add(b.id);
+            needsFetch = true;
+          }
+          // Don't add to newTimers — card will vanish after refresh
         } else {
-          const diff = expiry - now;
-          const minutes = Math.floor(diff / 60000);
-          const seconds = Math.floor((diff % 60000) / 1000);
-          newTimers[b.id] = `${minutes}:${String(seconds).padStart(2, "0")}`;
+          const m = Math.floor(diff / 60000);
+          const s = Math.floor((diff % 60000) / 1000);
+          newTimers[b.id] = `${m}:${String(s).padStart(2, "0")}`;
         }
       });
 
       setTimers(newTimers);
 
-      // Only trigger server refresh when a timer actually hits zero
-      if (needsServerRefresh && !fetchInProgressRef.current) {
-        fetchBookings();
+      // Debounced fetch — only if not already in flight or scheduled
+      if (needsFetch && !fetchingRef.current && !refreshScheduled.current) {
+        refreshScheduled.current = true;
+        // Small delay so the UI shows "0:00" briefly before the card disappears
+        setTimeout(() => {
+          if (mountedRef.current) fetchBookings();
+        }, 800);
       }
     };
 
-    const checkServerStatus = async () => {
-      const currentBookings = bookingsRef.current;
-      const pendingBookings = currentBookings.filter((b) => b.status === "pending" && b.expiresAt);
-      
-      if (pendingBookings.length === 0) return;
+    // Smooth 1-second countdown
+    const localInterval = setInterval(tickLocalTimers, 1000);
 
-      // Check with server every 30 seconds for status updates
+    // Periodic server sync every 30 s — catches payment completion
+    // Uses allSettled so a single 404 (deleted booking) doesn't throw
+    const serverInterval = setInterval(async () => {
+      const pending = bookingsRef.current.filter(
+        (b) => b.status === "pending" && b.expiresAt
+      );
+      if (pending.length === 0 || fetchingRef.current) return;
+
       try {
         const results = await Promise.allSettled(
-          pendingBookings.map((b) => api.bookings.getStatus(b.id))
+          pending.map((b) => api.bookings.getStatus(b.id))
         );
 
-        let needsRefresh = false;
-        results.forEach((result, i) => {
-          const id = pendingBookings[i].id;
-          if (result.status === "rejected" || result.value?.data?.is_expired) {
-            needsRefresh = true;
-          }
-        });
+        const anyGoneOrPaid = results.some(
+          (r) => r.status === "rejected" ||
+                 r.value?.data?.is_expired ||
+                 r.value?.data?.payment_status === "completed"
+        );
 
-        if (needsRefresh && !fetchInProgressRef.current) {
-          await fetchBookings();
+        if (anyGoneOrPaid && !fetchingRef.current) {
+          fetchBookings();
         }
       } catch (e) {
-        console.error("Server status check error:", e);
+        console.error("Server sync error:", e);
       }
-    };
+    }, 30000);
 
-    // Start local timer that updates EVERY SECOND (smooth countdown)
-    localTimerInterval = setInterval(updateLocalTimers, 1000);
-    
-    // Check with server every 30 seconds (reduces API calls by 83%)
-    serverCheckInterval = setInterval(checkServerStatus, 30000);
+    tickLocalTimers(); // immediate first tick
 
-    // Initial update
-    updateLocalTimers();
-
-    // Cleanup on unmount
     return () => {
-      if (localTimerInterval) clearInterval(localTimerInterval);
-      if (serverCheckInterval) clearInterval(serverCheckInterval);
+      clearInterval(localInterval);
+      clearInterval(serverInterval);
     };
-  }, [fetchBookings]);
+  }, [fetchBookings]); // fetchBookings is stable — this effect runs exactly once
 
-  // ── Cancel helpers ──────────────────────────────────────────────────────────
+  // ── Cancel helpers ───────────────────────────────────────────────────────────
   const handleCancelClick = (booking, e) => {
     e.stopPropagation();
     setCancelBooking(booking);
 
-    const today        = new Date();
-    const checkIn      = new Date(booking.checkIn);
-    const daysUntil    = Math.ceil((checkIn - today) / 86400000);
-    let refundAmount   = 0;
-    let message        = "";
+    const daysUntil = Math.ceil((new Date(booking.checkIn) - new Date()) / 86400000);
+    let refundAmount = 0;
+    let message      = "";
 
     if (daysUntil >= 30) {
       refundAmount = booking.totalAmount;
@@ -284,22 +297,18 @@ export default function MyBookings() {
     }
   };
 
-  // ── "Return to payment" — fetch booking from API if needed ────────────────
+  // ── Return to payment ────────────────────────────────────────────────────────
   const handlePayNow = async (booking) => {
     try {
-      // Ask the backend for the full booking object (contains expires_at, total_amount, etc.)
       const res = await api.bookings.getById(booking.id);
-      navigate(`/payment/${booking.id}`, {
-        state: { bookingDetails: res.data },
-      });
+      navigate(`/payment/${booking.id}`, { state: { bookingDetails: res.data } });
     } catch (err) {
       console.error("handlePayNow error:", err);
-      // Fallback: navigate anyway and let PaymentPage fetch it
       navigate(`/payment/${booking.id}`);
     }
   };
 
-  // ── Derived data ────────────────────────────────────────────────────────────
+  // ── Derived data ─────────────────────────────────────────────────────────────
   const filteredBookings = bookings.filter((b) => {
     if (activeTab === "current" && !CURRENT_STATUSES.includes(b.status)) return false;
     if (activeTab === "history" && !HISTORY_STATUSES.includes(b.status)) return false;
@@ -309,23 +318,21 @@ export default function MyBookings() {
   });
 
   const stats = {
-    upcomingNights:    bookings.filter((b) => ["confirmed", "active"].includes(b.status))
-                               .reduce((s, b) => s + (b.nights || 0), 0),
-    completedStays:    bookings.filter((b) => b.status === "completed").length,
-    pendingPayments:   bookings.filter((b) => b.status === "pending").length,
-    activeStays:       bookings.filter((b) => b.status === "active").length,
-    favoriteDestination: getFavoriteDestination(bookings),
+    upcomingNights:     bookings.filter((b) => ["confirmed", "active"].includes(b.status))
+                                .reduce((s, b) => s + (b.nights || 0), 0),
+    completedStays:     bookings.filter((b) => b.status === "completed").length,
+    pendingPayments:    bookings.filter((b) => b.status === "pending").length,
+    activeStays:        bookings.filter((b) => b.status === "active").length,
+    favoriteDestination: (() => {
+      const locs = bookings.filter((b) => b.status === "completed").map((b) => b.propertyLocation);
+      if (!locs.length) return "Nairobi";
+      const counts = {};
+      locs.forEach((l) => (counts[l] = (counts[l] || 0) + 1));
+      return Object.keys(counts).reduce((a, b) => (counts[a] > counts[b] ? a : b));
+    })(),
   };
 
-  function getFavoriteDestination(bks) {
-    const locs = bks.filter((b) => b.status === "completed").map((b) => b.propertyLocation);
-    if (!locs.length) return "Nairobi";
-    const counts = {};
-    locs.forEach((l) => (counts[l] = (counts[l] || 0) + 1));
-    return Object.keys(counts).reduce((a, b) => (counts[a] > counts[b] ? a : b));
-  }
-
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // ── Loading ──────────────────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="min-h-screen bg-[#f5f2ee] flex flex-col items-center justify-center">
@@ -337,6 +344,7 @@ export default function MyBookings() {
     );
   }
 
+  // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-[#f5f2ee] text-stone-900 pb-20 pt-8">
 
@@ -538,25 +546,19 @@ export default function MyBookings() {
                       <div className={`absolute top-3 left-3 px-2 py-1 text-[10px] font-medium rounded border ${getStatusStyle(booking.status)}`}>
                         {getStatusText(booking.status)}
                       </div>
-                      {/* Active stay pulse badge */}
+
                       {booking.status === "active" && (
                         <div className="absolute top-3 right-3 bg-purple-600 text-white px-2 py-1 rounded text-[10px] font-medium flex items-center gap-1">
                           <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse inline-block" />
                           Staying now
                         </div>
                       )}
-                      {/* Timer with smooth animation */}
+
                       {booking.status === "pending" && timers[booking.id] && (
-                        <motion.div
-                          key={timers[booking.id]}
-                          initial={{ scale: 0.95, opacity: 0.5 }}
-                          animate={{ scale: 1, opacity: 1 }}
-                          transition={{ duration: 0.2 }}
-                          className="absolute top-3 right-3 bg-amber-500 text-white px-2 py-1 rounded text-[10px] font-mono"
-                        >
-                          <FaClock className="inline mr-1" size={10} />
+                        <div className="absolute top-3 right-3 bg-amber-500 text-white px-2 py-1 rounded text-[10px] font-mono flex items-center gap-1">
+                          <FaClock size={10} />
                           {timers[booking.id]}
-                        </motion.div>
+                        </div>
                       )}
                     </div>
 
@@ -595,18 +597,16 @@ export default function MyBookings() {
                         </div>
                       </div>
 
-                      {/* Cancelled — show refund info if any */}
+                      {/* Cancelled — refund info */}
                       {booking.status === "cancelled" && booking.refundInfo && booking.refundInfo.refund_amount > 0 && (
                         <div className={`mb-3 px-3 py-2 rounded-lg text-xs flex items-center gap-2 ${
                           booking.refundInfo.refund_processed
                             ? "bg-green-50 text-green-700"
                             : "bg-amber-50 text-amber-700"
                         }`}>
-                          {booking.refundInfo.refund_processed ? (
-                            <><FaCheck size={10} /> Refund of {formatCurrency(booking.refundInfo.refund_amount)} processed</>
-                          ) : (
-                            <><FaClock size={10} /> Refund of {formatCurrency(booking.refundInfo.refund_amount)} pending</>
-                          )}
+                          {booking.refundInfo.refund_processed
+                            ? <><FaCheck size={10} /> Refund of {formatCurrency(booking.refundInfo.refund_amount)} processed</>
+                            : <><FaClock size={10} /> Refund of {formatCurrency(booking.refundInfo.refund_amount)} pending</>}
                         </div>
                       )}
 
@@ -614,7 +614,7 @@ export default function MyBookings() {
                         <div>
                           <p className="text-xs text-stone-500">Total amount</p>
                           <p className="text-xl font-serif text-stone-900">{formatCurrency(booking.totalAmount)}</p>
-                          {/* Balance due only shown while payment is still pending */}
+                          {/* Balance due ONLY while actively pending — never on any other status */}
                           {booking.status === "pending" && booking.pendingAmount > 0 && (
                             <p className="text-xs text-amber-600">
                               Balance due: {formatCurrency(booking.pendingAmount)}
@@ -623,7 +623,6 @@ export default function MyBookings() {
                         </div>
 
                         <div className="flex gap-2 flex-wrap">
-                          {/* Details */}
                           <button
                             onClick={() => setSelectedBooking(booking)}
                             className="px-4 py-2 border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors text-sm flex items-center gap-2"
@@ -631,7 +630,6 @@ export default function MyBookings() {
                             <FaEye size={14} /> Details
                           </button>
 
-                          {/* Pay Now — only for pending bookings */}
                           {booking.status === "pending" && (
                             <button
                               onClick={() => handlePayNow(booking)}
@@ -641,7 +639,6 @@ export default function MyBookings() {
                             </button>
                           )}
 
-                          {/* Cancel — pending or confirmed (not active, not completed) */}
                           {["pending", "confirmed"].includes(booking.status) && booking.canCancel && (
                             <button
                               onClick={(e) => handleCancelClick(booking, e)}
@@ -661,7 +658,7 @@ export default function MyBookings() {
         )}
       </div>
 
-      {/* ── Cancel Modal ────────────────────────────────────────── */}
+      {/* Cancel Modal */}
       <AnimatePresence>
         {showCancelModal && cancelBooking && (
           <motion.div
@@ -686,13 +683,11 @@ export default function MyBookings() {
                     <FaTimes />
                   </button>
                 </div>
-
                 <h3 className="font-serif text-xl mb-2">Cancel Booking?</h3>
                 <p className="text-stone-500 text-sm mb-6">
                   Are you sure you want to cancel your stay at{" "}
                   <span className="font-medium text-stone-900">{cancelBooking.propertyName}</span>?
                 </p>
-
                 <div className="bg-stone-50 p-4 rounded-lg mb-6 space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-stone-600">Check-in</span>
@@ -707,7 +702,6 @@ export default function MyBookings() {
                     <span className="font-medium">{formatCurrency(cancelBooking.totalAmount)}</span>
                   </div>
                 </div>
-
                 <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
                   <p className="text-sm text-amber-800 mb-2">⚠️ Refund Policy</p>
                   <p className="text-xs text-amber-700">{cancelCalc?.message}</p>
@@ -717,7 +711,6 @@ export default function MyBookings() {
                     </p>
                   )}
                 </div>
-
                 <div className="flex gap-3">
                   <button
                     onClick={() => { setShowCancelModal(false); setCancelBooking(null); }}
@@ -741,7 +734,7 @@ export default function MyBookings() {
         )}
       </AnimatePresence>
 
-      {/* ── Details Modal ────────────────────────────────────────── */}
+      {/* Details Modal */}
       <AnimatePresence>
         {selectedBooking && (
           <motion.div
@@ -817,7 +810,6 @@ export default function MyBookings() {
                       <span>Total</span>
                       <span>{formatCurrency(selectedBooking.totalAmount)}</span>
                     </div>
-                    {/* Balance due only while actively pending payment — never on other statuses */}
                     {selectedBooking.status === "pending" && selectedBooking.pendingAmount > 0 && (
                       <div className="flex justify-between text-amber-600">
                         <span>Balance due</span>
@@ -827,33 +819,26 @@ export default function MyBookings() {
                   </div>
                 </div>
 
-                {/* Cancelled — refund details only if a refund amount was actually set */}
                 {selectedBooking.status === "cancelled" && selectedBooking.refundInfo && selectedBooking.refundInfo.refund_amount > 0 && (
                   <div className="border-t border-stone-200 pt-4 mb-6">
                     <h4 className="font-medium mb-3">Cancellation & Refund</h4>
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
                         <span className="text-stone-600">Cancellation fee</span>
-                        <span className="text-red-600">
-                          {formatCurrency(selectedBooking.refundInfo.cancellation_fee)}
-                        </span>
+                        <span className="text-red-600">{formatCurrency(selectedBooking.refundInfo.cancellation_fee)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-stone-600">Refund amount</span>
-                        <span className="text-green-600">
-                          {formatCurrency(selectedBooking.refundInfo.refund_amount)}
-                        </span>
+                        <span className="text-green-600">{formatCurrency(selectedBooking.refundInfo.refund_amount)}</span>
                       </div>
                       <div className={`mt-2 px-3 py-2 rounded-lg text-xs flex items-center gap-2 ${
                         selectedBooking.refundInfo.refund_processed
                           ? "bg-green-50 text-green-700"
                           : "bg-amber-50 text-amber-700"
                       }`}>
-                        {selectedBooking.refundInfo.refund_processed ? (
-                          <><FaCheck size={10} /> Refund processed{selectedBooking.refundInfo.refund_processed_at && ` on ${formatDate(selectedBooking.refundInfo.refund_processed_at)}`}</>
-                        ) : (
-                          <><FaClock size={10} /> Refund pending — will be processed within 5-7 business days</>
-                        )}
+                        {selectedBooking.refundInfo.refund_processed
+                          ? <><FaCheck size={10} /> Refund processed{selectedBooking.refundInfo.refund_processed_at && ` on ${formatDate(selectedBooking.refundInfo.refund_processed_at)}`}</>
+                          : <><FaClock size={10} /> Refund pending — will be processed within 5-7 business days</>}
                       </div>
                     </div>
                   </div>

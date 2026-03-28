@@ -207,8 +207,8 @@ def create_booking():
         )
         
         # Calculate and store cancellation deadlines
-        booking.cancellation_deadline_30 = check_in - timedelta(days=30)
-        booking.cancellation_deadline_14 = check_in - timedelta(days=14)
+        if hasattr(booking, 'calculate_cancellation_deadlines'):
+            booking.calculate_cancellation_deadlines()
         
         db.session.add(booking)
         db.session.commit()
@@ -241,8 +241,8 @@ def create_booking():
                 'status': booking.status,
                 'expires_at': booking.expires_at.isoformat(),
                 'expires_in_minutes': timeout_minutes,
-                'cancellation_deadline_30': booking.cancellation_deadline_30.isoformat() if booking.cancellation_deadline_30 else None,
-                'cancellation_deadline_14': booking.cancellation_deadline_14.isoformat() if booking.cancellation_deadline_14 else None,
+                'cancellation_deadline_30': booking.cancellation_deadline_30.isoformat() if hasattr(booking, 'cancellation_deadline_30') and booking.cancellation_deadline_30 else None,
+                'cancellation_deadline_14': booking.cancellation_deadline_14.isoformat() if hasattr(booking, 'cancellation_deadline_14') and booking.cancellation_deadline_14 else None,
             }
         }), 201
         
@@ -366,8 +366,8 @@ def create_booking_from_session():
         )
         
         # Set cancellation deadlines
-        booking.cancellation_deadline_30 = check_in - timedelta(days=30)
-        booking.cancellation_deadline_14 = check_in - timedelta(days=14)
+        if hasattr(booking, 'calculate_cancellation_deadlines'):
+            booking.calculate_cancellation_deadlines()
         
         db.session.add(booking)
         db.session.commit()
@@ -396,8 +396,8 @@ def create_booking_from_session():
                 'status': booking.status,
                 'expires_at': booking.expires_at.isoformat(),
                 'expires_in_minutes': timeout_minutes,
-                'cancellation_deadline_30': booking.cancellation_deadline_30.isoformat() if booking.cancellation_deadline_30 else None,
-                'cancellation_deadline_14': booking.cancellation_deadline_14.isoformat() if booking.cancellation_deadline_14 else None,
+                'cancellation_deadline_30': booking.cancellation_deadline_30.isoformat() if hasattr(booking, 'cancellation_deadline_30') and booking.cancellation_deadline_30 else None,
+                'cancellation_deadline_14': booking.cancellation_deadline_14.isoformat() if hasattr(booking, 'cancellation_deadline_14') and booking.cancellation_deadline_14 else None,
             }
         }), 201
         
@@ -734,7 +734,7 @@ def cancel_booking(booking_id):
         return jsonify({'error': 'Failed to cancel booking'}), 500
 
 
-# ==================== SCHEDULER: expire_old_pending_bookings ====================
+# ==================== SCHEDULER ====================
 
 def expire_old_pending_bookings():
     """
@@ -777,3 +777,49 @@ def expire_old_pending_bookings():
         logger.error(f"Error in expire_old_pending_bookings: {str(e)}")
         db.session.rollback()
         return 0
+
+
+# ==================== ONE-TIME CLEANUP ENDPOINT ====================
+# Call this ONCE after deploying this patch to delete all stale
+# pending/expired bookings that existed before the delete-on-expiry
+# logic was introduced.
+# Hit: POST /api/bookings/admin/cleanup-stale  (admin only)
+
+@booking_bp.route('/admin/cleanup-stale', methods=['POST'])
+@jwt_required()
+def cleanup_stale_bookings():
+    """
+    One-time admin endpoint: permanently delete all bookings that are
+    still in 'pending' or 'expired' status with an elapsed expires_at.
+    Safe to call multiple times — idempotent.
+    """
+    user_id = get_jwt_identity()
+    user    = User.query.get(user_id)
+    if not user or user.role != 'admin':
+        return jsonify({'error': 'Admin access required'}), 403
+
+    try:
+        stale = Booking.query.filter(
+            Booking.status.in_(['pending', 'expired']),
+            Booking.payment_status != 'completed',
+            Booking.expires_at < datetime.utcnow()
+        ).all()
+
+        count = len(stale)
+        for b in stale:
+            logger.info(f"Cleanup: deleting stale booking {b.id} (status={b.status})")
+            db.session.delete(b)
+
+        db.session.commit()
+        logger.info(f"Cleanup complete: deleted {count} stale bookings")
+
+        return jsonify({
+            'success': True,
+            'deleted': count,
+            'message': f'Deleted {count} stale booking(s) with elapsed timers.'
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Cleanup error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
