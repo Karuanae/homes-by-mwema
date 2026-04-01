@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import db, User, Consultation
+from models import db, User, Property, Booking, Payment, Consultation
 from datetime import datetime
 import logging
 import traceback
@@ -635,19 +635,36 @@ def admin_get_stats():
         if not is_admin():
             return jsonify({'error': 'Admin access required'}), 403
 
-        total     = Consultation.query.count()
-        pending   = Consultation.query.filter_by(status='pending').count()
-        confirmed = Consultation.query.filter_by(status='confirmed').count()
-        completed = Consultation.query.filter_by(status='completed').count()
-        cancelled = Consultation.query.filter_by(status='cancelled').count()
-        rejected  = Consultation.query.filter_by(status='rejected').count()
+        total_consultations     = Consultation.query.count()
+        pending_consultations   = Consultation.query.filter_by(status='pending').count()
+        confirmed_consultations = Consultation.query.filter_by(status='confirmed').count()
+        completed_consultations = Consultation.query.filter_by(status='completed').count()
+        cancelled_consultations = Consultation.query.filter_by(status='cancelled').count()
+        rejected_consultations  = Consultation.query.filter_by(status='rejected').count()
+
+        total_properties = Property.query.count()
+        total_users = User.query.count()
+        active_bookings = Booking.query.filter(Booking.status.in_(['pending', 'confirmed', 'upcoming', 'active'])).count()
+        completed_bookings = Booking.query.filter_by(status='completed').count()
+        total_revenue = db.session.query(db.func.coalesce(db.func.sum(Payment.amount), 0)).scalar() or 0
+        pending_payments = db.session.query(db.func.coalesce(db.func.sum(Payment.amount), 0)).filter(Payment.status != 'completed').scalar() or 0
 
         recent = Consultation.query.order_by(Consultation.created_at.desc()).limit(5).all()
 
         return jsonify({
             'stats': {
-                'total': total, 'pending': pending, 'confirmed': confirmed,
-                'completed': completed, 'cancelled': cancelled, 'rejected': rejected
+                'total_properties': total_properties,
+                'total_users': total_users,
+                'active_bookings': active_bookings,
+                'completed_bookings': completed_bookings,
+                'total_revenue': float(total_revenue),
+                'pending_payments': float(pending_payments),
+                'consultation_total': total_consultations,
+                'consultation_pending': pending_consultations,
+                'consultation_confirmed': confirmed_consultations,
+                'consultation_completed': completed_consultations,
+                'consultation_cancelled': cancelled_consultations,
+                'consultation_rejected': rejected_consultations
             },
             'recent': [c.to_dict() for c in recent]
         }), 200
