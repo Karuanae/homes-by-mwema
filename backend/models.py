@@ -165,7 +165,7 @@ class Booking(db.Model):
     status = db.Column(db.String(20), default='upcoming')
     message_to_host = db.Column(db.Text)
     idempotency_key = db.Column(db.String(100), unique=True, nullable=True)
-    expires_at = db.Column(db.DateTime, nullable=True)
+    expires_at = db.Column(db.DateTime, default=lambda: datetime.utcnow() + timedelta(minutes=15))
     booking_metadata = db.Column(db.JSON, default={})
     
     # NEW CANCELLATION FIELDS

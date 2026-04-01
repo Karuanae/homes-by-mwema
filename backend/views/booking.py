@@ -742,23 +742,47 @@ def expire_old_pending_bookings():
     has elapsed with no confirmed payment.  Runs every minute via
     APScheduler as a safety net; delete_if_timer_elapsed() handles
     most cases the moment a user or admin touches the booking.
+    
+    Handles both:
+    - Bookings with expires_at set (new bookings)
+    - Bookings with NULL expires_at (legacy bookings created before this field)
     """
     try:
-        elapsed = Booking.query.filter(
+        now = datetime.utcnow()
+        timeout_minutes = current_app.config.get('BOOKING_TIMEOUT_MINUTES', 15)
+        
+        # Find pending bookings that should expire
+        # Case 1: expires_at is set and has passed
+        expired_with_expiry = Booking.query.filter(
             Booking.status == 'pending',
             Booking.payment_status != 'completed',
-            Booking.expires_at < datetime.utcnow()
+            Booking.expires_at.isnot(None),
+            Booking.expires_at < now
         ).all()
-
+        
+        # Case 2: expires_at is NULL (legacy bookings) - use created_at as reference
+        # These bookings are older than timeout_minutes, so expire them
+        expired_without_expiry = Booking.query.filter(
+            Booking.status == 'pending',
+            Booking.payment_status != 'completed',
+            Booking.expires_at.is_(None),
+            Booking.created_at < now - timedelta(minutes=timeout_minutes)
+        ).all()
+        
+        all_expired = expired_with_expiry + expired_without_expiry
         count = 0
-        for booking in elapsed:
-            logger.info(f"Scheduler deleting elapsed booking {booking.id}")
+        
+        for booking in all_expired:
+            reason = "expires_at elapsed" if booking.expires_at and booking.expires_at < now else "old pending booking (no expires_at set)"
+            logger.info(f"🗑️  Scheduler deleting pending booking {booking.id} ({reason})")
             db.session.delete(booking)
             count += 1
 
         if count > 0:
             db.session.commit()
-            logger.info(f"Scheduler deleted {count} elapsed pending bookings")
+            logger.info(f"✅ Scheduler deleted {count} expired pending bookings")
+        else:
+            logger.debug("✅ No expired pending bookings to delete")
 
         # Also delete any bookings already marked 'expired' from before
         # this change was deployed (one-time cleanup).
@@ -769,12 +793,14 @@ def expire_old_pending_bookings():
             for b in old_expired:
                 db.session.delete(b)
             db.session.commit()
-            logger.info(f"Cleaned up {len(old_expired)} legacy 'expired' bookings")
+            logger.info(f"🗑️  Cleaned up {len(old_expired)} legacy 'expired' bookings")
 
         return count
 
     except Exception as e:
-        logger.error(f"Error in expire_old_pending_bookings: {str(e)}")
+        logger.error(f"❌ Error in expire_old_pending_bookings: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
         db.session.rollback()
         return 0
 
@@ -791,6 +817,7 @@ def cleanup_stale_bookings():
     """
     One-time admin endpoint: permanently delete all bookings that are
     still in 'pending' or 'expired' status with an elapsed expires_at.
+    Also handles legacy bookings with NULL expires_at created > 15 mins ago.
     Safe to call multiple times — idempotent.
     """
     user_id = get_jwt_identity()
@@ -799,27 +826,119 @@ def cleanup_stale_bookings():
         return jsonify({'error': 'Admin access required'}), 403
 
     try:
-        stale = Booking.query.filter(
+        now = datetime.utcnow()
+        timeout_minutes = current_app.config.get('BOOKING_TIMEOUT_MINUTES', 15)
+        
+        # Find stale bookings with expires_at set
+        stale_with_expiry = Booking.query.filter(
             Booking.status.in_(['pending', 'expired']),
             Booking.payment_status != 'completed',
-            Booking.expires_at < datetime.utcnow()
+            Booking.expires_at.isnot(None),
+            Booking.expires_at < now
         ).all()
-
-        count = len(stale)
-        for b in stale:
-            logger.info(f"Cleanup: deleting stale booking {b.id} (status={b.status})")
+        
+        # Find stale bookings without expires_at (legacy)
+        stale_without_expiry = Booking.query.filter(
+            Booking.status.in_(['pending', 'expired']),
+            Booking.payment_status != 'completed',
+            Booking.expires_at.is_(None),
+            Booking.created_at < now - timedelta(minutes=timeout_minutes)
+        ).all()
+        
+        all_stale = stale_with_expiry + stale_without_expiry
+        count = len(all_stale)
+        
+        for b in all_stale:
+            reason = "status='expired'" if b.status == 'expired' else "expired timer"
+            logger.info(f"Cleanup: deleting stale booking {b.id} ({reason})")
             db.session.delete(b)
 
-        db.session.commit()
-        logger.info(f"Cleanup complete: deleted {count} stale bookings")
+        if count > 0:
+            db.session.commit()
+        
+        logger.info(f"✅ Cleanup complete: deleted {count} stale bookings")
 
         return jsonify({
             'success': True,
             'deleted': count,
-            'message': f'Deleted {count} stale booking(s) with elapsed timers.'
+            'with_expiry_field': len(stale_with_expiry),
+            'without_expiry_field': len(stale_without_expiry),
+            'message': f'Deleted {count} stale booking(s). ({len(stale_with_expiry)} with expires_at set, {len(stale_without_expiry)} legacy bookings without expires_at field)'
         }), 200
 
     except Exception as e:
         db.session.rollback()
         logger.error(f"Cleanup error: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== DIAGNOSTIC ENDPOINT ====================
+
+@booking_bp.route('/admin/pending-status', methods=['GET'])
+@jwt_required()
+def get_pending_bookings_status():
+    """
+    Admin diagnostic endpoint: show pending bookings status,
+    how many are actually expired but not yet deleted.
+    Helps identify why bookings aren't expiring.
+    """
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if not user or user.role != 'admin':
+        return jsonify({'error': 'Admin access required'}), 403
+
+    try:
+        now = datetime.utcnow()
+        timeout_minutes = current_app.config.get('BOOKING_TIMEOUT_MINUTES', 15)
+        
+        # Total pending bookings
+        all_pending = Booking.query.filter(
+            Booking.status == 'pending'
+        ).all()
+        
+        # Pending bookings that SHOULD still be valid (not expired)
+        valid_pending = [b for b in all_pending if b.expires_at and b.expires_at > now]
+        
+        # Pending bookings that SHOULD be deleted (expired)
+        expired_with_timer = [b for b in all_pending if b.expires_at and b.expires_at <= now]
+        
+        # Pending bookings with NULL expires_at (legacy)
+        legacy_pending = [b for b in all_pending if not b.expires_at]
+        
+        # Within legacy: how many are actually old enough to delete
+        old_legacy = [b for b in legacy_pending if b.created_at < now - timedelta(minutes=timeout_minutes)]
+        
+        return jsonify({
+            'success': True,
+            'timestamp': now.isoformat(),
+            'config': {
+                'booking_timeout_minutes': timeout_minutes
+            },
+            'summary': {
+                'total_pending': len(all_pending),
+                'valid_pending': len(valid_pending),
+                'expired_should_delete': len(expired_with_timer),
+                'legacy_bookings': len(legacy_pending),
+                'legacy_old_enough': len(old_legacy),
+            },
+            'expired_bookings': [
+                {
+                    'id': b.id,
+                    'user_id': b.user_id,
+                    'created': b.created_at.isoformat(),
+                    'expires_at': b.expires_at.isoformat() if b.expires_at else None,
+                    'payment_status': b.payment_status,
+                    'reason': f"expires_at={b.expires_at.isoformat()} (passed)" if b.expires_at else f"legacy (created {(now - b.created_at).total_seconds() / 60:.1f} mins ago)"
+                }
+                for b in expired_with_timer + old_legacy
+            ][:20],  # Limit to 20 for reasonable response size
+            'message': 'This shows pending bookings that should have been deleted. If non-zero, run /api/bookings/admin/cleanup-stale'
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Diagnostic error: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500

@@ -192,13 +192,16 @@ socketio = SocketIO(
 # Import and start the scheduler
 from scheduler import init_scheduler
 
-# Only start scheduler in production or when not in debug mode
-if not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+# ALWAYS start scheduler (needed for booking expirations, payment cleanup, etc)
+# Avoid starting twice in Werkzeug reloader by checking environment
+if os.environ.get('WERKZEUG_RUN_MAIN') != 'false':
     try:
         init_scheduler(app)
         logger.info("✅ APScheduler initialized successfully")
     except Exception as e:
         logger.error(f"❌ Failed to initialize APScheduler: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
 
 # JWT token blocklist callback
 @jwt.token_in_blocklist_loader
