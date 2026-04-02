@@ -66,6 +66,8 @@ export default function AdminDashboard() {
     total: 0, pending: 0, confirmed: 0, completed: 0,
   });
 
+  const [adminNotifications, setAdminNotifications] = useState({ total: 0, unread: 0 });
+  const [newUsersLast7Days, setNewUsersLast7Days] = useState(0);
   const [loadingMessages, setLoadingMessages] = useState(false);
 
   const [unreadCount,     setUnreadCount]     = useState(0);
@@ -87,7 +89,7 @@ export default function AdminDashboard() {
   // ── Init ─────────────────────────────────────────────────────────────────────
   useEffect(() => {
     fetchStats(); fetchProperties(); fetchBookings(); fetchCustomers();
-    fetchConsultSummary();
+    fetchConsultSummary(); fetchAdminNotifications();
     if (user?.role === "admin") initializeSocket();
     return () => {
       socketService.off("socket_connected");
@@ -139,16 +141,20 @@ export default function AdminDashboard() {
   // ── Fetchers ──────────────────────────────────────────────────────────────────
   const fetchStats = async () => {
     try {
-      const [statsRes, bookingsRes, propertiesRes] = await Promise.all([
+      const [statsRes, bookingsRes, propertiesRes, chatsRes] = await Promise.all([
         api.admin.getStats(),
         api.admin.getBookings(),
-        api.properties.getAll()
+        api.properties.getAll(),
+        api.chats.getAll(),
       ]);
       
       const bookingsData = bookingsRes.data || [];
       const propertiesData = propertiesRes.data || [];
       const statsData = statsRes.data || {};
-      
+      const chatsData = chatsRes.data || [];
+
+      const totalUnreadChat = chatsData.reduce((sum, c) => sum + (c.unread_count || 0), 0);
+      setUnreadCount(totalUnreadChat);      
       // Calculate real stats
       const totalRevenue = bookingsData
         .filter(b => b.payment_status === 'completed')
@@ -204,7 +210,29 @@ export default function AdminDashboard() {
     try {
       const users = (await api.admin.getUsers()).data || [];
       setCustomers(users.filter(u => u.role !== "admin"));
+
+      const now = new Date();
+      const oneWeekAgo = new Date(now);
+      oneWeekAgo.setDate(now.getDate() - 7);
+      setNewUsersLast7Days(
+        users.filter(u => {
+          if (!u.created_at) return false;
+          const createdAt = new Date(u.created_at);
+          return createdAt >= oneWeekAgo;
+        }).length
+      );
     } catch(e){}
+  };
+
+  const fetchAdminNotifications = async () => {
+    try {
+      const res = await api.settings.getAdminNotifications();
+      const list = res.data || [];
+      const unread = list.filter(n => !n.is_read).length;
+      setAdminNotifications({ total: list.length, unread });
+    } catch (e) {
+      console.error('Failed to load admin notifications:', e);
+    }
   };
   const fetchMessages = async () => {
     setLoadingMessages(true);
@@ -569,12 +597,16 @@ export default function AdminDashboard() {
         {/* ══ DASHBOARD - Updated with real stats ══ */}
         {activeTab === "dashboard" && (
           <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} transition={{duration:0.6}} className="space-y-8 md:space-y-12">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-8">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-8">
               {[
-                { label:"Total Properties",    value: stats.total_properties, icon: FaBuilding, color: "text-[#093A3E]" },
-                { label:"Active Bookings",     value: stats.active_bookings,  icon: FaCalendarAlt, color: "text-amber-600" },
-                { label:"Completed Bookings",  value: stats.completed_bookings, icon: FaCalendarCheck, color: "text-green-600" },
-                { label:"Total Revenue",       value: `Ksh ${stats.total_revenue.toLocaleString()}`, icon: FaMoneyBillWave, color: "text-[#093A3E]" },
+                { label:"Total Properties",      value: stats.total_properties, icon: FaBuilding, color: "text-[#093A3E]" },
+                { label:"Active Bookings",       value: stats.active_bookings, icon: FaCalendarAlt, color: "text-amber-600" },
+                { label:"Completed Bookings",    value: stats.completed_bookings, icon: FaCalendarCheck, color: "text-green-600" },
+                { label:"Total Revenue",         value: `Ksh ${stats.total_revenue.toLocaleString()}`, icon: FaMoneyBillWave, color: "text-[#093A3E]" },
+                { label:"New Users (7d)",        value: newUsersLast7Days, icon: FaUser, color: "text-[#ED9B40]" },
+                { label:"Pending Consultations", value: consultSummary.pending, icon: FaCalendarAlt, color: "text-violet-600" },
+                { label:"Unread Chat Messages",  value: unreadCount || 0, icon: FaComments, color: "text-indigo-600" },
+                { label:"Unread Alerts",         value: adminNotifications.unread, icon: FaBell, color: "text-red-600" },
               ].map((s,i) => (
                 <div key={i} className="bg-white p-5 md:p-8 border border-stone-100 shadow-sm hover:shadow-md transition-shadow">
                   <div className="flex justify-between items-start mb-3 md:mb-4">

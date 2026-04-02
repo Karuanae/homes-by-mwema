@@ -1,4 +1,3 @@
-// context/AuthContext.jsx
 import { createContext, useContext, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
@@ -8,14 +7,14 @@ const AuthContext = createContext({});
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser]       = useState(null);
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const navigate              = useNavigate();
+  const navigate = useNavigate();
 
   // ── Restore session from localStorage on first load ───────────────────────
   const refreshUserFromStorage = () => {
     const storedUser = localStorage.getItem('user');
-    const token      = localStorage.getItem('token');
+    const token = localStorage.getItem('token');
 
     if (storedUser && token) {
       try {
@@ -44,7 +43,7 @@ export const AuthProvider = ({ children }) => {
     const response = await api.auth.login(credentials.email, credentials.password);
     const { user: userData, token } = response.data;
 
-    localStorage.setItem('user',  JSON.stringify(userData));
+    localStorage.setItem('user', JSON.stringify(userData));
     localStorage.setItem('token', token);
     setUser(userData);
     window.dispatchEvent(new CustomEvent('auth-update'));
@@ -52,26 +51,13 @@ export const AuthProvider = ({ children }) => {
     return { user: userData, token };
   };
 
-  // ── Signup (email + password) ─────────────────────────────────────────────
-  // The backend NEVER returns a token for a new registration because the
-  // account starts unverified.  We deliberately do NOT set user/token here —
-  // the user must click the verification link first, then log in normally.
+  // ── Signup (email + password) - FIXED ─────────────────────────────────────
+  // Returns the full response data including requires_verification and user_id
   const signup = async (userData) => {
     const response = await api.auth.register(userData);
-    const { user: newUser } = response.data;
-
-    // Safety check: if somehow the backend returns a verified user + token
-    // (e.g. an admin account being created programmatically), handle it.
-    if (newUser?.email_verified && response.data.token) {
-      localStorage.setItem('user',  JSON.stringify(newUser));
-      localStorage.setItem('token', response.data.token);
-      setUser(newUser);
-      window.dispatchEvent(new CustomEvent('auth-update'));
-    }
-    // In the normal case (email_verified: false) we do nothing with state —
-    // Register.jsx will show the "check your inbox" panel instead.
-
-    return { user: newUser };
+    // Return the entire response data so Register component can access
+    // requires_verification, user_id, email, etc.
+    return response.data;
   };
 
   // ── Logout ────────────────────────────────────────────────────────────────
@@ -93,7 +79,7 @@ export const AuthProvider = ({ children }) => {
     window.dispatchEvent(new CustomEvent('auth-update'));
   };
 
-  const getToken       = () => localStorage.getItem('token');
+  const getToken = () => localStorage.getItem('token');
   const isAuthenticated = !!user && !!localStorage.getItem('token');
 
   return (

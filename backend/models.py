@@ -4,6 +4,8 @@ from sqlalchemy import MetaData
 from werkzeug.security import generate_password_hash, check_password_hash
 import json
 import secrets
+import random
+import string
 
 metadata = MetaData()
 db = SQLAlchemy(metadata=metadata)
@@ -20,10 +22,18 @@ class User(db.Model):
     is_guest = db.Column(db.Boolean, default=False)
     avatar_url = db.Column(db.String(500))
     
-    # Email verification fields
+    # Email verification fields - TOKEN based (legacy, kept for compatibility)
     email_verified = db.Column(db.Boolean, default=False)
     email_verification_token = db.Column(db.String(100), unique=True)
     email_verification_expires = db.Column(db.DateTime)
+    
+    # NEW: 6-digit code verification fields
+    email_verification_code = db.Column(db.String(10), nullable=True)
+    email_verification_code_expires = db.Column(db.DateTime, nullable=True)
+    
+    # Auth provider tracking
+    auth_provider = db.Column(db.String(20), default='email')
+    google_id = db.Column(db.String(100), unique=True, nullable=True)
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -40,12 +50,18 @@ class User(db.Model):
         return check_password_hash(self.password_hash, password)
     
     def generate_verification_token(self):
-        """Generate a secure verification token"""
+        """Generate a secure verification token (legacy)"""
         self.email_verification_token = secrets.token_urlsafe(32)
         self.email_verification_expires = datetime.utcnow() + timedelta(hours=24)
     
+    def generate_verification_code(self):
+        """Generate a 6-digit numeric verification code"""
+        self.email_verification_code = ''.join(random.choices(string.digits, k=6))
+        self.email_verification_code_expires = datetime.utcnow() + timedelta(minutes=10)
+        return self.email_verification_code
+    
     def verify_email(self, token):
-        """Verify email with token"""
+        """Verify email with token (legacy)"""
         if (self.email_verification_token == token and 
             self.email_verification_expires > datetime.utcnow()):
             self.email_verified = True
@@ -53,6 +69,18 @@ class User(db.Model):
             self.email_verification_expires = None
             return True
         return False
+    
+    def verify_email_with_code(self, code):
+        """Verify email with 6-digit code"""
+        if (self.email_verification_code == code and 
+            self.email_verification_code_expires and 
+            self.email_verification_code_expires > datetime.utcnow()):
+            self.email_verified = True
+            self.email_verification_code = None
+            self.email_verification_code_expires = None
+            return True
+        return False
+
 
 class Property(db.Model):
     __tablename__ = 'properties'

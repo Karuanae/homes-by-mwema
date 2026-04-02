@@ -370,7 +370,6 @@ class EmailService:
         name = user.name or "there"
         props = popular_properties or []
 
-        # Build property cards
         if props:
             prop_rows = ""
             for p in props[:3]:
@@ -379,7 +378,7 @@ class EmailService:
                     f"<strong style='font-size:15px'>{p['name']}</strong><br>"
                     f"<span style='font-size:13px;color:#78716c'>{p['location']}</span><br>"
                     f"<span style='font-size:13px;color:#093A3E;font-weight:600'>KES {float(p['price']):,.0f} / night</span>"
-                    f"</td></tr>"
+                    f"</td></td>"
                 )
             properties_block = (
                 f"<h2 style='margin-top:28px'>Most popular properties</h2>"
@@ -447,7 +446,7 @@ class EmailService:
 
     def send_email_verification(self, user) -> Dict[str, Any]:
         """
-        Send email verification link to new users.
+        Send email verification link to new users (legacy - kept for compatibility).
         """
         name = user.name or "there"
         verification_url = f"https://homesbymwema.com/verify-email?token={user.email_verification_token}"
@@ -478,6 +477,45 @@ class EmailService:
             to      = user.email,
             subject = "Verify Your Email — Homes by Mwema",
             html    = _base("Verify Your Email", body),
+        )
+
+    # ==================== NEW: 6-DIGIT VERIFICATION CODE ====================
+
+    def send_verification_code(self, user, code: str) -> Dict[str, Any]:
+        """
+        Send a 6-digit verification code to the user's email.
+        This is used for immediate verification during registration.
+        """
+        name = user.name or "there"
+
+        body = (
+            f"<h2>Welcome to Homes by Mwema, {name}!</h2>"
+            f"<p>Thank you for registering with us. Use the 6-digit code below to verify your email address and complete your registration.</p>"
+            f"<div style='text-align:center;margin:32px 0'>"
+            f"<div style='background:#093A3E;color:white;font-size:36px;font-weight:bold;letter-spacing:8px;"
+            f"padding:20px 32px;border-radius:8px;display:inline-block;font-family:monospace;'>"
+            f"{code}"
+            f"</div>"
+            f"</div>"
+            f"<p><strong>This code will expire in 10 minutes.</strong></p>"
+            f"<p>If you didn't create an account with us, you can safely ignore this email.</p>"
+            f"<div class='detail-box'>"
+            f"<p><strong>What happens after verification:</strong></p>"
+            f"<ul style='margin:8px 0;padding-left:20px'>"
+            f"<li>You'll be automatically logged in</li>"
+            f"<li>Browse our curated collection of premium properties</li>"
+            f"<li>Book stays with instant confirmation</li>"
+            f"<li>Schedule consultations with our property experts</li>"
+            f"</ul>"
+            f"</div>"
+            f"<p>Questions? Contact us at <a href='mailto:info@homesbymwema.com'>info@homesbymwema.com</a>.</p>"
+            f"<p>Best regards,<br><strong>The Homes by Mwema Team</strong></p>"
+        )
+
+        return self._send(
+            to      = user.email,
+            subject = "Your Verification Code — Homes by Mwema",
+            html    = _base("Your Verification Code", body),
         )
 
     def send_admin_chat_notification(self, chat, user) -> Dict[str, Any]:
@@ -573,9 +611,6 @@ class EmailService:
 
 
 # ─── singleton ──────────────────────────────────────────────────────────────────
-# Initialised without a mail instance here.
-# In app.py, after mail = Mail(app), call: email_service.attach_mail(mail)
-# OR simply pass it at startup: email_service = EmailService(mail)
 
 email_service = EmailService()
 

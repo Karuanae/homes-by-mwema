@@ -5,7 +5,7 @@ from datetime import datetime
 import logging
 
 # Import database models
-from models import db, Chat, ChatMessage, User
+from models import db, Chat, ChatMessage, User, Notification
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -187,7 +187,28 @@ def register_chat_events(socketio):
                     'timestamp': datetime.utcnow().isoformat()
                 }
                 emit('chat_notification', notification, room="admin_broadcast")
-            
+
+                # Persist a notification in the database for admin dashboard
+                try:
+                    from views.email_service import email_service
+                    admin_users = User.query.filter_by(role='admin').all()
+                    for admin in admin_users:
+                        notif = Notification(
+                            user_id=admin.id,
+                            type='chat',
+                            title='New Chat Message',
+                            message=f'New message from {sender_name} in chat #{chat_id}',
+                            related_id=chat_id,
+                            priority='high'
+                        )
+                        db.session.add(notif)
+                    db.session.commit()
+
+                    sender_user = User.query.get(user_id)
+                    email_service.send_admin_chat_notification(chat, sender_user)
+                except Exception as e:
+                    logger.error(f'❌ Error creating/sending admin notification for chat message: {str(e)}')
+
             logger.info(f'💬 Message sent in chat {chat_id} by user {user_id}')
             
         except Exception as e:

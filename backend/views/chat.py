@@ -1,6 +1,9 @@
 from flask import Blueprint, request, jsonify
 from models import db, Chat, ChatMessage, User
 from datetime import datetime
+import logging
+
+logger = logging.getLogger(__name__)
 
 chat_bp = Blueprint('chats', __name__)
 
@@ -74,6 +77,11 @@ def start_chat():
             status='active',
             last_active=datetime.utcnow()
         )
+
+        user_obj = User.query.get(user_id)
+        user_name = user_obj.name if user_obj else f'User {user_id}'
+        user_email = user_obj.email if user_obj else 'N/A'
+        user_phone = user_obj.phone if user_obj else 'N/A'
         db.session.add(chat)
         db.session.commit()
         
@@ -189,6 +197,35 @@ def post_message(chat_id):
 
         db.session.commit()
         
+        # Notify admins when a guest/regular user sends a message
+        if not is_host:
+            try:
+                from models import Notification, User
+                from views.email_service import email_service
+
+                admin_users = User.query.filter_by(role='admin').all()
+                for admin in admin_users:
+                    notification = Notification(
+                        user_id=admin.id,
+                        type='chat',
+                        title='New Chat Message',
+                        message=f'New message from {sender_name} in chat #{chat_id}',
+                        related_id=chat_id,
+                        priority='high'
+                    )
+                    db.session.add(notification)
+
+                db.session.commit()
+
+                sender_user = User.query.get(sender_id)
+                email_service.send_admin_chat_notification(chat, sender_user)
+
+                logger.info(f"Admin notifications created for new message in chat {chat_id}")
+
+            except Exception as notif_err:
+                logger.error(f"Failed to create admin notification for message in chat {chat_id}: {notif_err}")
+                db.session.rollback()
+
         print(f"✅ Message saved: {msg.id}")
         return jsonify(serialize_message(msg)), 201
         

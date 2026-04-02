@@ -19,7 +19,6 @@ const Login                   = lazy(() => import("./pages/Login"));
 const Register                = lazy(() => import("./pages/Register"));
 const ForgotPassword          = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword           = lazy(() => import("./pages/ResetPassword"));
-const VerifyEmail             = lazy(() => import("./pages/VerifyEmail"));
 
 // Booking & payment
 const BookingPage             = lazy(() => import("./pages/BookingPage"));
@@ -137,10 +136,6 @@ function AppContent() {
             <Page><Register /></Page>
             <Footer />
           </>
-        } />
-
-        <Route path="/verify-email" element={
-          <VerifyEmail />
         } />
 
         <Route path="/forgot-password" element={
