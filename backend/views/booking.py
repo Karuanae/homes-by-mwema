@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import db, Booking, Property, User
+from models import db, Booking, Property, User, Notification
 from sqlalchemy import and_, or_
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -212,6 +212,21 @@ def create_booking():
         
         db.session.add(booking)
         db.session.commit()
+        
+        # Create notification for the user
+        try:
+            notification = Notification(
+                user_id=user_id,
+                type='booking',
+                title='Booking Confirmed',
+                message=f'Your booking at {property.name} has been confirmed',
+                related_id=booking.id,
+                priority='normal'
+            )
+            db.session.add(notification)
+            db.session.commit()
+        except Exception as notif_err:
+            logger.warning(f"⚠️ Failed to create user notification: {notif_err}")
         
         logger.info(f"✅ Booking created successfully with ID: {booking.id}")
 

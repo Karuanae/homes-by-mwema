@@ -100,11 +100,42 @@ const Navbar = () => {
 
         if (user.role === 'admin') {
           try {
+            // Fetch admin notifications from the database
+            const notifRes = await api.settings.getAdminNotifications();
+            const dbNotifications = notifRes.data || [];
+            
+            // Convert database notifications to the expected format
+            dbNotifications.forEach(notification => {
+              let route = '/admin';
+              let action = 'View Details';
+              
+              if (notification.type === 'chat') {
+                route = '/admin/messages';
+                action = 'View Messages';
+              } else if (notification.type === 'consultation') {
+                route = '/admin/consultations';
+                action = 'View Consultation';
+              }
+              
+              notificationsList.push({
+                id: notification.id,
+                type: notification.type,
+                title: notification.title,
+                message: notification.message,
+                icon: notification.type === 'chat' ? 'message' : notification.type === 'consultation' ? 'calendar' : 'bell',
+                action: action,
+                route: route,
+                timestamp: new Date(notification.created_at),
+                isRead: notification.is_read
+              });
+            });
+
+            // Also check for unread chat count (legacy system)
             const chatRes = await api.chats.getUnreadCount();
             const unreadCount = chatRes.data?.unread_count ?? chatRes.data?.count ?? chatRes.data?.unread ?? 0;
             if (unreadCount > 0) {
               notificationsList.push({
-                id: 'chat-' + Date.now(),
+                id: 'chat-legacy-' + Date.now(),
                 type: 'message',
                 title: 'New Guest Messages',
                 message: `You have ${unreadCount} unread message${unreadCount > 1 ? 's' : ''} from guests.`,
@@ -115,29 +146,40 @@ const Navbar = () => {
               });
             }
           } catch (err) {
-            console.error('Chat fetch error', err);
+            console.error('Admin notification fetch error', err);
           }
         }
 
         if (user.role !== 'admin') {
           try {
-            const bookingsRes = await api.bookings.getUserBookings();
-            const upcomingBookings = bookingsRes.data?.filter(b => b.status === 'upcoming').slice(0, 1);
-            if (upcomingBookings && upcomingBookings.length > 0) {
-              const booking = upcomingBookings[0];
+            // Fetch user notifications from the database
+            const notifRes = await api.settings.getNotifications();
+            const dbNotifications = notifRes.data || [];
+            
+            // Convert database notifications to the expected format
+            dbNotifications.forEach(notification => {
+              let route = '/my-bookings';
+              let action = 'View Details';
+              
+              if (notification.type === 'booking') {
+                route = '/my-bookings';
+                action = 'View Booking';
+              }
+              
               notificationsList.push({
-                id: 'booking-' + booking.id,
-                type: 'booking',
-                title: 'Upcoming Booking',
-                message: `Your booking at ${booking.propertyName} is coming up on ${new Date(booking.checkIn).toLocaleDateString()}.`,
-                icon: 'calendar',
-                action: 'View Booking',
-                route: '/my-bookings',
-                timestamp: new Date(),
+                id: notification.id,
+                type: notification.type,
+                title: notification.title,
+                message: notification.message,
+                icon: notification.type === 'booking' ? 'calendar' : 'bell',
+                action: action,
+                route: route,
+                timestamp: new Date(notification.created_at),
+                isRead: notification.is_read
               });
-            }
+            });
           } catch (err) {
-            console.error('Booking fetch error', err);
+            console.error('User notification fetch error', err);
           }
         }
 
@@ -209,7 +251,21 @@ const Navbar = () => {
     }
   };
 
-  const dismissNotification = (id) => {
+  const dismissNotification = async (id) => {
+    // If it's a database notification (has numeric ID), mark as read
+    if (typeof id === 'number' || (typeof id === 'string' && !isNaN(id))) {
+      try {
+        if (user?.role === 'admin') {
+          await api.settings.markAdminNotificationRead(id);
+        } else {
+          await api.settings.markNotificationRead(id);
+        }
+      } catch (err) {
+        console.error('Failed to mark notification as read:', err);
+      }
+    }
+    
+    // Remove from local state
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
@@ -500,9 +556,9 @@ const Navbar = () => {
                     title={notifications.length > 0 ? `${notifications.length} notification${notifications.length > 1 ? 's' : ''}` : 'No new notifications'}
                   >
                     <Bell size={16} strokeWidth={1.5} />
-                    {notifications.length > 0 && (
+                    {notifications.filter(n => !n.isRead).length > 0 && (
                       <span className="absolute top-0 right-0 w-4 h-4 bg-[#ED9B40] text-[#093A3E] text-[9px] font-bold rounded-full flex items-center justify-center">
-                        {notifications.length > 9 ? '9+' : notifications.length}
+                        {notifications.filter(n => !n.isRead).length > 9 ? '9+' : notifications.filter(n => !n.isRead).length}
                       </span>
                     )}
                   </button>

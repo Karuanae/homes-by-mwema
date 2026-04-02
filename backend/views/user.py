@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import db, User, Favorite, Property
+from models import db, User, Favorite, Property, Notification
 from werkzeug.exceptions import BadRequest
 from datetime import datetime
 import re
@@ -352,3 +352,48 @@ def check_favorite(property_id):
     except Exception as e:
         logger.error(f"Error checking favorite: {str(e)}")
         return jsonify({'error': 'Failed to check favorite'}), 500
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# NOTIFICATION MANAGEMENT
+# ═════════════════════════════════════════════════════════════════════════════
+
+@user_bp.route('/notifications', methods=['GET'])
+@jwt_required()
+def get_notifications():
+    """Get current user's notifications"""
+    try:
+        user_id = get_jwt_identity()
+        
+        # Get all notifications for the user
+        notifications = Notification.query.filter_by(user_id=user_id).order_by(Notification.created_at.desc()).all()
+        
+        result = []
+        for notification in notifications:
+            result.append(notification.to_dict())
+        
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error getting notifications: {str(e)}")
+        return jsonify({'error': 'Failed to get notifications'}), 500
+
+
+@user_bp.route('/notifications/<int:notification_id>/read', methods=['PUT'])
+@jwt_required()
+def mark_notification_read(notification_id):
+    """Mark a notification as read"""
+    try:
+        user_id = get_jwt_identity()
+        
+        notification = Notification.query.filter_by(id=notification_id, user_id=user_id).first()
+        if not notification:
+            return jsonify({'error': 'Notification not found'}), 404
+        
+        notification.is_read = True
+        db.session.commit()
+        
+        return jsonify({'message': 'Notification marked as read'})
+    except Exception as e:
+        logger.error(f"Error marking notification as read: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': 'Failed to mark notification as read'}), 500

@@ -670,12 +670,12 @@ export const adminAPI = {
 // ==================== USER PROFILE API ====================
 export const userAPI = {
   getProfile: async () => {
-    const response = await api.get('/user/profile');
+    const response = await api.get('/users/profile');
     return response;
   },
 
   updateProfile: async (profileData) => {
-    const response = await api.put('/user/profile', profileData);
+    const response = await api.put('/users/profile', profileData);
     // Update localStorage if needed
     if (response.data.user) {
       localStorage.setItem('user', JSON.stringify(response.data.user));
@@ -684,17 +684,17 @@ export const userAPI = {
   },
 
   changePassword: async (passwordData) => {
-    const response = await api.post('/user/change-password', passwordData);
+    const response = await api.post('/users/change-password', passwordData);
     return response;
   },
 
   deleteAccount: async (data) => {
-    const response = await api.delete('/user/delete-account', { data });
+    const response = await api.delete('/users/delete-account', { data });
     return response;
   },
 
   getStats: async () => {
-    const response = await api.get('/user/stats');
+    const response = await api.get('/users/stats');
     return response;
   },
 
@@ -769,11 +769,22 @@ export const settingsAPI = {
   },
 
   getNotifications: async () => {
-    const response = await api.get('/admin/notifications');
+    const response = await api.get('/users/notifications');
     return response;
   },
 
   markNotificationRead: async (notificationId) => {
+    const response = await api.put(`/users/notifications/${notificationId}/read`);
+    return response;
+  },
+
+  // Admin notification endpoints
+  getAdminNotifications: async () => {
+    const response = await api.get('/admin/notifications');
+    return response;
+  },
+
+  markAdminNotificationRead: async (notificationId) => {
     const response = await api.put(`/admin/notifications/${notificationId}/read`);
     return response;
   },

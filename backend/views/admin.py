@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import db, User, Property, Booking, Payment, Lead, HomepageContent, AdminStats, PropertyImage, Chat, ChatMessage, ImageCategory
+from models import db, User, Property, Booking, Payment, Lead, HomepageContent, AdminStats, PropertyImage, Chat, ChatMessage, ImageCategory, Notification
 from werkzeug.exceptions import Forbidden
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -1154,3 +1154,39 @@ def admin_get_homepage():
         'testimonials': content.testimonials or [],
         'faqs': content.faqs or []
     })
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# NOTIFICATION MANAGEMENT
+# ═════════════════════════════════════════════════════════════════════════════
+
+@admin_bp.route('/notifications', methods=['GET'])
+@jwt_required()
+def admin_get_notifications():
+    require_admin()
+    user_id = get_jwt_identity()
+    
+    # Get all notifications for the admin user
+    notifications = Notification.query.filter_by(user_id=user_id).order_by(Notification.created_at.desc()).all()
+    
+    result = []
+    for notification in notifications:
+        result.append(notification.to_dict())
+    
+    return jsonify(result)
+
+
+@admin_bp.route('/notifications/<int:notification_id>/read', methods=['PUT'])
+@jwt_required()
+def admin_mark_notification_read(notification_id):
+    require_admin()
+    user_id = get_jwt_identity()
+    
+    notification = Notification.query.filter_by(id=notification_id, user_id=user_id).first()
+    if not notification:
+        return jsonify({'error': 'Notification not found'}), 404
+    
+    notification.is_read = True
+    db.session.commit()
+    
+    return jsonify({'message': 'Notification marked as read'})

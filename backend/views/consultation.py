@@ -1,11 +1,12 @@
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import db, User, Property, Booking, Payment, Consultation
+from models import db, User, Property, Booking, Payment, Consultation, Notification
 from datetime import datetime
 import logging
 import traceback
 import resend
 import os
+from views.email_service import email_service
 
 logger = logging.getLogger(__name__)
 consultation_bp = Blueprint('consultation', __name__)
@@ -48,64 +49,28 @@ def format_datetime_for_email(consultation):
 def _notify_admin_new_consultation(consultation, user=None):
     """Send email to admin when a new consultation is booked using Resend API"""
     try:
-        # Initialize Resend with API key from environment
-        resend.api_key = os.environ.get('RESEND_API_KEY')
-        if not resend.api_key:
-            logger.error("❌ RESEND_API_KEY not set in environment")
-            return
-
-        admin_email = current_app.config.get('MAIL_USERNAME', 'homesbymwema@gmail.com')
-        date_str, time_str = format_datetime_for_email(consultation)
-
-        client_name  = consultation.name  or (user.name  if user else 'Unknown')
-        client_email = consultation.email or (user.email if user else 'N/A')
-        client_phone = consultation.phone or (user.phone if user else 'N/A')
-
-        html_body = f"""
-        <div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; background: #f9f8f6; padding: 24px;">
-          <div style="background: #1C2321; color: white; padding: 24px; margin-bottom: 0;">
-            <p style="color: #D4AF37; font-size: 11px; text-transform: uppercase; letter-spacing: 0.2em; margin: 0 0 8px;">Homes by Mwema</p>
-            <h1 style="font-size: 22px; margin: 0; font-weight: normal;">New Consultation Request</h1>
-          </div>
-          <div style="background: white; border: 1px solid #ebe5de; padding: 24px; margin-bottom: 16px;">
-            <p style="color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; margin: 0 0 16px;">Client Details</p>
-            <table style="width: 100%; border-collapse: collapse;">
-              <tr><td style="padding: 6px 0; color: #888; font-size: 13px; width: 100px;">Name</td><td style="padding: 6px 0; font-size: 14px; color: #1C1917;">{client_name}</td></tr>
-              <tr><td style="padding: 6px 0; color: #888; font-size: 13px;">Email</td><td style="padding: 6px 0; font-size: 14px; color: #1C1917;">{client_email}</td></tr>
-              <tr><td style="padding: 6px 0; color: #888; font-size: 13px;">Phone</td><td style="padding: 6px 0; font-size: 14px; color: #1C1917;">{client_phone}</td></tr>
-            </table>
-          </div>
-          <div style="background: white; border: 1px solid #ebe5de; padding: 24px; margin-bottom: 16px;">
-            <p style="color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; margin: 0 0 16px;">Appointment</p>
-            <table style="width: 100%; border-collapse: collapse;">
-              <tr><td style="padding: 6px 0; color: #888; font-size: 13px; width: 100px;">Date</td><td style="padding: 6px 0; font-size: 14px; color: #1C1917; font-weight: bold;">{date_str}</td></tr>
-              <tr><td style="padding: 6px 0; color: #888; font-size: 13px;">Time</td><td style="padding: 6px 0; font-size: 14px; color: #1C1917; font-weight: bold;">{time_str}</td></tr>
-              <tr><td style="padding: 6px 0; color: #888; font-size: 13px;">Fee</td><td style="padding: 6px 0; font-size: 14px; color: #1C1917;">KSh 20,000</td></tr>
-              <tr><td style="padding: 6px 0; color: #888; font-size: 13px;">Topic</td><td style="padding: 6px 0; font-size: 13px; color: #555;">{consultation.topic or 'General Inquiry'}</td></tr>
-              <tr><td style="padding: 6px 0; color: #888; font-size: 13px;">Notes</td><td style="padding: 6px 0; font-size: 13px; color: #666; font-style: italic;">{consultation.notes or 'None'}</td></tr>
-            </table>
-          </div>
-          <div style="text-align: center; padding: 16px;">
-            <a href="https://homesbymwema.com/admin" style="background: #1C2321; color: white; padding: 12px 28px; text-decoration: none; font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase;">
-              Review in Dashboard →
-            </a>
-          </div>
-          <p style="color: #aaa; font-size: 11px; text-align: center; margin-top: 16px;">Consultation #{consultation.id} · Homes by Mwema</p>
-        </div>
-        """
-
-        params = {
-            "from": "Homes by Mwema <noreply@homesbymwema.com>",  # Updated to verified domain
-            "to": [admin_email],
-            "subject": f"New Consultation Request – {date_str} at {time_str}",
-            "html": html_body,
-        }
+        # Create admin notification in database
+        admin_users = User.query.filter_by(role='admin').all()
+        for admin in admin_users:
+            notification = Notification(
+                user_id=admin.id,
+                type='consultation',
+                title='New Consultation Request',
+                message=f'New consultation request from {consultation.name or "Anonymous"}',
+                related_id=consultation.id,
+                priority='normal'
+            )
+            db.session.add(notification)
         
-        email = resend.Emails.send(params)
-        logger.info(f"✅ Admin notified of consultation #{consultation.id} via Resend (ID: {email['id']})")
+        # Send email notification to admin
+        email_service.send_admin_consultation_notification(consultation, user)
         
+        db.session.commit()
+        logger.info(f"Admin notifications created and email sent for consultation {consultation.id}")
+
     except Exception as e:
         logger.error(f"❌ Admin notification error: {e}")
+        db.session.rollback()
         # Don't raise - non-fatal error
 
 

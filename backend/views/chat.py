@@ -77,6 +77,37 @@ def start_chat():
         db.session.add(chat)
         db.session.commit()
         
+        # Create admin notification
+        try:
+            from models import Notification, User
+            from views.email_service import email_service
+            
+            # Get all admin users
+            admin_users = User.query.filter_by(role='admin').all()
+            
+            # Create notifications for all admins
+            for admin in admin_users:
+                notification = Notification(
+                    user_id=admin.id,
+                    type='chat',
+                    title='New Chat Inquiry',
+                    message=f'New chat inquiry from {user_name}',
+                    related_id=chat.id,
+                    priority='normal'
+                )
+                db.session.add(notification)
+            
+            # Send email notification to admin
+            user_obj = User.query.get(user_id)
+            email_service.send_admin_chat_notification(chat, user_obj)
+            
+            db.session.commit()
+            logger.info(f"Admin notifications created for chat {chat.id}")
+            
+        except Exception as e:
+            logger.error(f"Failed to create admin notification for chat {chat.id}: {str(e)}")
+            db.session.rollback()
+        
         print(f"✅ Created new chat: {chat.id}")
         return jsonify({'chat': serialize_chat(chat)}), 201
         

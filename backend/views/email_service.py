@@ -411,6 +411,131 @@ class EmailService:
             html    = _base("Welcome Back", body),
         )
 
+    def send_welcome_email(self, user) -> Dict[str, Any]:
+        """
+        Send a welcome email to new users upon registration.
+        """
+        name = user.name or "there"
+
+        body = (
+            f"<h2>Welcome to Homes by Mwema, {name}!</h2>"
+            f"<p>Thank you for joining our community of discerning travelers. "
+            f"We're excited to help you discover exceptional properties across Kenya.</p>"
+            f"<div class='detail-box'>"
+            f"<p><strong>What you can do now:</strong></p>"
+            f"<ul style='margin:8px 0;padding-left:20px'>"
+            f"<li>Browse our curated collection of premium properties</li>"
+            f"<li>Book stays with instant confirmation</li>"
+            f"<li>Schedule consultations with our property experts</li>"
+            f"<li>Chat with hosts and get personalized recommendations</li>"
+            f"</ul>"
+            f"</div>"
+            f"<div style='text-align:center;margin:28px 0'>"
+            f"<a href='https://homesbymwema.com/properties' class='btn'>Explore Properties</a>"
+            f"</div>"
+            f"<p>Have questions? Our team is here to help. Reach out anytime at "
+            f"<a href='mailto:info@homesbymwema.com'>info@homesbymwema.com</a>.</p>"
+            f"<p>Welcome aboard!</p>"
+            f"<p>Warm regards,<br><strong>The Homes by Mwema Team</strong></p>"
+        )
+
+        return self._send(
+            to      = user.email,
+            subject = "Welcome to Homes by Mwema — Your Journey Begins",
+            html    = _base("Welcome to Homes by Mwema", body),
+        )
+
+    def send_admin_chat_notification(self, chat, user) -> Dict[str, Any]:
+        """
+        Send email notification to admin when a new chat inquiry is started.
+        """
+        user_name = user.name if user else "Unknown User"
+        user_email = user.email if user else "N/A"
+        user_phone = user.phone if user else "N/A"
+
+        property_name = "General Inquiry"
+        if chat.property_id:
+            from models import Property
+            prop = Property.query.get(chat.property_id)
+            property_name = prop.name if prop else f"Property #{chat.property_id}"
+
+        body = (
+            f"<h2>New Chat Inquiry</h2>"
+            f"<p>A new chat inquiry has been started and requires your attention.</p>"
+            f"<div class='detail-box'>"
+            f"<p><strong>Client Details:</strong></p>"
+            f"<p>Name: {user_name}</p>"
+            f"<p>Email: {user_email}</p>"
+            f"<p>Phone: {user_phone}</p>"
+            f"<p><strong>Property:</strong> {property_name}</p>"
+            f"<p><strong>Chat Type:</strong> {chat.chat_type}</p>"
+            f"<p><strong>Started:</strong> {chat.created_at.strftime('%B %d, %Y at %I:%M %p') if chat.created_at else 'N/A'}</p>"
+            f"</div>"
+            f"<div style='text-align:center;margin:28px 0'>"
+            f"<a href='https://homesbymwema.com/admin' class='btn'>Respond in Dashboard</a>"
+            f"</div>"
+            f"<p>Please respond to this inquiry as soon as possible to provide excellent customer service.</p>"
+            f"<p>Best regards,<br><strong>Homes by Mwema System</strong></p>"
+        )
+
+        admin_email = os.environ.get('MAIL_USERNAME', 'homesbymwema@gmail.com')
+        return self._send(
+            to      = admin_email,
+            subject = f"New Chat Inquiry — {user_name}",
+            html    = _base("New Chat Inquiry", body),
+        )
+
+    def send_admin_consultation_notification(self, consultation, user=None) -> Dict[str, Any]:
+        """
+        Send email notification to admin when a new consultation is scheduled.
+        """
+        client_name = consultation.name or (user.name if user else 'Unknown')
+        client_email = consultation.email or (user.email if user else 'N/A')
+        client_phone = consultation.phone or (user.phone if user else 'N/A')
+
+        date_str = consultation.date.strftime('%B %d, %Y') if consultation.date else 'TBD'
+        time_str = f"{consultation.hour or 0}:{str(consultation.minute or 0).zfill(2)}" + (" PM" if (consultation.hour or 0) >= 12 else " AM")
+
+        html_body = f"""
+        <div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; background: #f9f8f6; padding: 24px;">
+          <div style="background: #1C2321; color: white; padding: 24px; margin-bottom: 0;">
+            <p style="color: #D4AF37; font-size: 11px; text-transform: uppercase; letter-spacing: 0.2em; margin: 0 0 8px;">Homes by Mwema</p>
+            <h1 style="font-size: 22px; margin: 0; font-weight: normal;">New Consultation Request</h1>
+          </div>
+          <div style="background: white; border: 1px solid #ebe5de; padding: 24px; margin-bottom: 16px;">
+            <p style="color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; margin: 0 0 16px;">Client Details</p>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr><td style="padding: 6px 0; color: #888; font-size: 13px; width: 100px;">Name</td><td style="padding: 6px 0; font-size: 14px; color: #1C1917;">{client_name}</td></tr>
+              <tr><td style="padding: 6px 0; color: #888; font-size: 13px;">Email</td><td style="padding: 6px 0; font-size: 14px; color: #1C1917;">{client_email}</td></tr>
+              <tr><td style="padding: 6px 0; color: #888; font-size: 13px;">Phone</td><td style="padding: 6px 0; font-size: 14px; color: #1C1917;">{client_phone}</td></tr>
+            </table>
+          </div>
+          <div style="background: white; border: 1px solid #ebe5de; padding: 24px; margin-bottom: 16px;">
+            <p style="color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; margin: 0 0 16px;">Appointment</p>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr><td style="padding: 6px 0; color: #888; font-size: 13px; width: 100px;">Date</td><td style="padding: 6px 0; font-size: 14px; color: #1C1917; font-weight: bold;">{date_str}</td></tr>
+              <tr><td style="padding: 6px 0; color: #888; font-size: 13px;">Time</td><td style="padding: 6px 0; font-size: 14px; color: #1C1917; font-weight: bold;">{time_str}</td></tr>
+              <tr><td style="padding: 6px 0; color: #888; font-size: 13px;">Fee</td><td style="padding: 6px 0; font-size: 14px; color: #1C1917;">KSh 20,000</td></tr>
+              <tr><td style="padding: 6px 0; color: #888; font-size: 13px;">Topic</td><td style="padding: 6px 0; font-size: 13px; color: #555;">{consultation.topic or 'General Inquiry'}</td></tr>
+              <tr><td style="padding: 6px 0; color: #888; font-size: 13px;">Notes</td><td style="padding: 6px 0; font-size: 13px; color: #666; font-style: italic;">{consultation.notes or 'None'}</td></tr>
+            </table>
+          </div>
+          <div style="text-align: center; padding: 16px;">
+            <a href="https://homesbymwema.com/admin" style="background: #1C2321; color: white; padding: 12px 28px; text-decoration: none; font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase;">
+              Review in Dashboard →
+            </a>
+          </div>
+          <p style="color: #aaa; font-size: 11px; text-align: center; margin-top: 16px;">Consultation #{consultation.id} · Homes by Mwema</p>
+        </div>
+        """
+
+        admin_email = os.environ.get('MAIL_USERNAME', 'homesbymwema@gmail.com')
+        return self._send(
+            to      = admin_email,
+            subject = f"New Consultation Request – {date_str} at {time_str}",
+            html    = html_body,
+        )
+
 
 # ─── singleton ──────────────────────────────────────────────────────────────────
 # Initialised without a mail instance here.

@@ -94,6 +94,14 @@ def register():
         
         logger.info(f"User created successfully: {email}")
         
+        # Send welcome email to new user
+        try:
+            from views.email_service import email_service
+            email_service.send_welcome_email(new_user)
+            logger.info(f"Welcome email sent to: {email}")
+        except Exception as e:
+            logger.error(f"Failed to send welcome email to {email}: {str(e)}")
+        
         # Create access token (expires in 7 days)
         access_token = create_access_token(
             identity=new_user.id,
