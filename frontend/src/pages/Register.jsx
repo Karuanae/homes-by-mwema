@@ -13,28 +13,27 @@ export default function Register() {
   const [formData, setFormData] = useState({
     name: '', email: '', password: '', confirmPassword: '', phone: '',
   });
-  const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  
-  // NEW: Terms & Policy state
-  const [termsAccepted, setTermsAccepted] = useState(false);
-  const [termsError, setTermsError] = useState('');
+  const [showPassword, setShowPassword]     = useState(false);
+  const [isLoading, setIsLoading]           = useState(false);
+  const [error, setError]                   = useState('');
+  const [termsAccepted, setTermsAccepted]   = useState(false);
+  const [termsError, setTermsError]         = useState('');
+
+  // ── After successful registration (unverified) ───────────────────────────
+  // Show this panel instead of the form so the user knows to check their email
+  const [pendingEmail, setPendingEmail]     = useState('');
+  const [resendLoading, setResendLoading]   = useState(false);
+  const [resendMessage, setResendMessage]   = useState('');
 
   // Redirect if already logged in
   useEffect(() => {
     if (!loading && user) {
-      console.log('✅ User already logged in, redirecting:', user);
-      
-      // Check for consultation intent
       const consultIntent = localStorage.getItem('consultationIntent');
       if (consultIntent) {
         localStorage.removeItem('consultationIntent');
         navigate('/dashboard?tab=consultations');
         return;
       }
-      
       navigate(user?.role === 'admin' ? '/admin' : '/');
     }
   }, [user, loading, navigate]);
@@ -48,31 +47,19 @@ export default function Register() {
   }
 
   const redirectAfterAuth = (userData) => {
-    console.log('🔄 Redirecting after auth:', userData);
-    
-    // Check for chat intent (from booking page message button)
     const chatIntent = localStorage.getItem('chatIntent');
-    if (chatIntent) {
-      console.log('💬 Found chat intent, redirecting to:', chatIntent);
-      setTimeout(() => navigate(chatIntent), 1200);
-      return;
-    }
-    
-    // Check for wishlist intent (from booking page save button)
+    if (chatIntent) { setTimeout(() => navigate(chatIntent), 1200); return; }
+
     const wishlistIntent = localStorage.getItem('wishlistIntent');
-    if (wishlistIntent) {
-      setTimeout(() => navigate(`/booking/${wishlistIntent}`), 1200);
-      return;
-    }
-    
-    // Check for consultation intent
+    if (wishlistIntent) { setTimeout(() => navigate(`/booking/${wishlistIntent}`), 1200); return; }
+
     const consultIntent = localStorage.getItem('consultationIntent');
     if (consultIntent) {
       localStorage.removeItem('consultationIntent');
       setTimeout(() => navigate('/dashboard?tab=consultations'), 1200);
       return;
     }
-    
+
     if (userData?.role === 'admin') {
       window.location.href = '/admin';
     } else {
@@ -81,7 +68,7 @@ export default function Register() {
     }
   };
 
-  // ── Standard registration ─────────────────────────────────────────────────
+  // ── Form helpers ──────────────────────────────────────────────────────────
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
     setError('');
@@ -101,16 +88,14 @@ export default function Register() {
       setError('Passwords do not match.');
       return false;
     }
-    
-    // NEW: Validate terms acceptance
     if (!termsAccepted) {
       setTermsError('You must accept the Terms & Policy to register.');
       return false;
     }
-    
     return true;
   };
 
+  // ── Email + password registration ─────────────────────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) return;
@@ -118,97 +103,76 @@ export default function Register() {
     setIsLoading(true);
     setError('');
     setTermsError('');
-    
+
     try {
       const response = await signup({
-        name: formData.name,
-        email: formData.email,
+        name:     formData.name,
+        email:    formData.email,
         password: formData.password,
-        phone: formData.phone || '',
+        phone:    formData.phone || '',
       });
-      
-      // Check if registration requires email verification
+
+      // Backend always returns email_verified: false for new registrations.
+      // Show the "check your inbox" panel — do NOT log the user in.
       if (response.user && !response.user.email_verified) {
-        setSuccess('Registration successful! Please check your email to verify your account before logging in.');
-        // Don't redirect - user needs to verify email first
-        setTimeout(() => {
-          navigate('/login');
-        }, 3000);
+        setPendingEmail(formData.email);
       } else {
-        setSuccess('Account created.');
+        // Fallback: shouldn't happen, but handle gracefully
         redirectAfterAuth(response.user);
       }
     } catch (err) {
-      console.error('❌ Registration error:', err);
-      setError(err.response?.data?.error || 'Registration failed.');
+      setError(err.response?.data?.error || 'Registration failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
+  // ── Resend verification email ─────────────────────────────────────────────
+  const handleResend = async () => {
+    setResendLoading(true);
+    setResendMessage('');
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL || 'https://flask-app-production-c760.up.railway.app/api'}/auth/resend-verification`,
+        {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ email: pendingEmail }),
+        }
+      );
+      const data = await res.json();
+      setResendMessage(data.message || 'Verification email sent!');
+    } catch {
+      setResendMessage('Failed to resend. Please try again.');
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
   // ── Google Sign-Up ────────────────────────────────────────────────────────
-  const handleGoogleSuccess = async (data) => {
-    console.log('✅ Google auth success - received data:', data);
-    
+  const handleGoogleSuccess = async () => {
     setIsLoading(false);
-    setSuccess('Account created.');
-    
-    // Check if user was saved
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
-      console.log('✅ User saved to localStorage, refreshing AuthContext...');
-      
       const refreshed = refreshUserFromStorage();
-      
       if (refreshed) {
-        console.log('✅ AuthContext refreshed, redirecting...');
-        
-        // Check for chat intent
-        const chatIntent = localStorage.getItem('chatIntent');
-        if (chatIntent) {
-          console.log('💬 Found chat intent, redirecting to:', chatIntent);
-          setTimeout(() => navigate(chatIntent), 50);
-          return;
-        }
-        
-        // Check for wishlist intent
-        const wishlistIntent = localStorage.getItem('wishlistIntent');
-        if (wishlistIntent) {
-          setTimeout(() => navigate(`/booking/${wishlistIntent}`), 50);
-          return;
-        }
-        
-        // Check for consultation intent
-        const consultIntent = localStorage.getItem('consultationIntent');
-        if (consultIntent) {
-          localStorage.removeItem('consultationIntent');
-          setTimeout(() => navigate('/dashboard?tab=consultations'), 50);
-          return;
-        }
-        
-        setTimeout(() => {
-          redirectAfterAuth(JSON.parse(savedUser));
-        }, 50);
+        setTimeout(() => redirectAfterAuth(JSON.parse(savedUser)), 50);
       } else {
-        console.log('⚠️ AuthContext refresh failed, reloading page...');
         window.location.reload();
       }
     } else {
-      console.error('❌ User not saved to localStorage!');
-      setError('Authentication succeeded but failed to save session');
+      setError('Authentication succeeded but failed to save session. Please try again.');
     }
   };
 
   const handleGoogleError = (err) => {
-    console.error('❌ Google auth error:', err);
     setIsLoading(false);
-    setError(err.message || 'Google authentication failed.');
+    setError(err.message || 'Google authentication failed. Please try again.');
   };
 
   const handleGoogleClick = async () => {
     setError('');
     setIsLoading(true);
-
     try {
       await socialAuth.triggerGoogleSignIn(handleGoogleSuccess, handleGoogleError);
     } catch (err) {
@@ -216,6 +180,65 @@ export default function Register() {
     }
   };
 
+  // ── "Check your inbox" panel (shown after successful registration) ─────────
+  if (pendingEmail) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-stone-50 p-6 pt-20">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          className="w-full max-w-md bg-white border border-stone-200 shadow-2xl p-12 relative text-center"
+        >
+          <div className="absolute top-0 left-0 right-0 h-1 bg-[#093A3E]" />
+
+          {/* Envelope icon */}
+          <div className="w-16 h-16 bg-[#093A3E]/10 rounded-full flex items-center justify-center mx-auto mb-6">
+            <svg className="w-8 h-8 text-[#093A3E]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </div>
+
+          <p className="text-xs uppercase tracking-widest text-stone-400 mb-2">Almost there</p>
+          <h2 className="text-2xl font-serif italic text-[#093A3E] mb-4">Check your inbox</h2>
+
+          <p className="text-sm text-stone-600 leading-relaxed mb-2">
+            We've sent a verification link to
+          </p>
+          <p className="font-medium text-[#093A3E] mb-6">{pendingEmail}</p>
+
+          <p className="text-xs text-stone-500 leading-relaxed mb-8">
+            Click the link in that email to activate your account. If you don't see it,
+            check your <strong>spam or junk</strong> folder.
+          </p>
+
+          {resendMessage && (
+            <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded p-3 mb-4">
+              {resendMessage}
+            </p>
+          )}
+
+          <button
+            onClick={handleResend}
+            disabled={resendLoading}
+            className="text-xs text-[#093A3E] underline underline-offset-2 hover:text-[#0c4e52]
+                       disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {resendLoading ? 'Sending…' : "Didn't receive it? Resend verification email"}
+          </button>
+
+          <div className="mt-8 pt-6 border-t border-stone-100">
+            <Link to="/login" className="text-xs text-stone-500 hover:text-[#093A3E] transition-colors">
+              ← Back to login
+            </Link>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // ── Main registration form ────────────────────────────────────────────────
   return (
     <div className="min-h-screen flex items-center justify-center bg-stone-50 font-sans text-stone-900 p-6 pt-20">
       <motion.div
@@ -236,79 +259,65 @@ export default function Register() {
             {error}
           </div>
         )}
-        
-        {success && (
-          <div className="mb-8 p-4 bg-stone-50 border-l-2 border-green-900 text-green-900 text-xs tracking-wide">
-            {success}
-          </div>
-        )}
 
         <form onSubmit={handleSubmit} className="space-y-8">
+          {/* Full Name */}
           <div>
             <label htmlFor="name" className="block text-xs uppercase tracking-widest text-stone-500 mb-2">
-              Full Name
+              Full Name <span className="text-red-500">*</span>
             </label>
             <input
-              type="text"
-              id="name"
-              name="name"
-              value={formData.name}
-              onChange={handleChange}
-              required
-              className="w-full px-4 py-3 border border-stone-200 rounded bg-stone-50 focus:outline-none focus:border-stone-400 text-sm"
+              type="text" id="name" name="name"
+              value={formData.name} onChange={handleChange} required
+              className="w-full px-4 py-3 border border-stone-200 rounded bg-stone-50
+                         focus:outline-none focus:border-stone-400 text-sm"
             />
           </div>
 
+          {/* Email */}
           <div>
             <label htmlFor="email" className="block text-xs uppercase tracking-widest text-stone-500 mb-2">
-              Email
+              Email <span className="text-red-500">*</span>
             </label>
             <input
-              type="email"
-              id="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              required
-              autoComplete="email"
-              className="w-full px-4 py-3 border border-stone-200 rounded bg-stone-50 focus:outline-none focus:border-stone-400 text-sm"
+              type="email" id="email" name="email"
+              value={formData.email} onChange={handleChange} required autoComplete="email"
+              className="w-full px-4 py-3 border border-stone-200 rounded bg-stone-50
+                         focus:outline-none focus:border-stone-400 text-sm"
             />
           </div>
 
+          {/* Phone */}
           <div>
             <label htmlFor="phone" className="block text-xs uppercase tracking-widest text-stone-500 mb-2">
               Phone (optional)
             </label>
             <input
-              type="tel"
-              id="phone"
-              name="phone"
-              value={formData.phone}
-              onChange={handleChange}
-              className="w-full px-4 py-3 border border-stone-200 rounded bg-stone-50 focus:outline-none focus:border-stone-400 text-sm"
+              type="tel" id="phone" name="phone"
+              value={formData.phone} onChange={handleChange}
+              className="w-full px-4 py-3 border border-stone-200 rounded bg-stone-50
+                         focus:outline-none focus:border-stone-400 text-sm"
             />
           </div>
 
+          {/* Password */}
           <div>
             <label htmlFor="password" className="block text-xs uppercase tracking-widest text-stone-500 mb-2">
-              Password
+              Password <span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <input
                 type={showPassword ? 'text' : 'password'}
-                id="password"
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                required
-                autoComplete="new-password"
-                className="w-full px-4 py-3 border border-stone-200 rounded bg-stone-50 focus:outline-none focus:border-stone-400 text-sm pr-10"
+                id="password" name="password"
+                value={formData.password} onChange={handleChange}
+                required autoComplete="new-password"
+                className="w-full px-4 py-3 border border-stone-200 rounded bg-stone-50
+                           focus:outline-none focus:border-stone-400 text-sm pr-10"
               />
               <button
-                type="button"
-                tabIndex={-1}
+                type="button" tabIndex={-1}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-[#093A3E]"
-                onClick={() => setShowPassword((v) => !v)}
+                onClick={() => setShowPassword(v => !v)}
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
               >
                 {showPassword ? <FaEyeSlash /> : <FaEye />}
@@ -316,85 +325,67 @@ export default function Register() {
             </div>
           </div>
 
+          {/* Confirm Password */}
           <div>
             <label htmlFor="confirmPassword" className="block text-xs uppercase tracking-widest text-stone-500 mb-2">
-              Confirm Password
+              Confirm Password <span className="text-red-500">*</span>
             </label>
-            <div className="relative">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                id="confirmPassword"
-                name="confirmPassword"
-                value={formData.confirmPassword}
-                onChange={handleChange}
-                required
-                autoComplete="new-password"
-                className="w-full px-4 py-3 border border-stone-200 rounded bg-stone-50 focus:outline-none focus:border-stone-400 text-sm pr-10"
-              />
-            </div>
+            <input
+              type={showPassword ? 'text' : 'password'}
+              id="confirmPassword" name="confirmPassword"
+              value={formData.confirmPassword} onChange={handleChange}
+              required autoComplete="new-password"
+              className="w-full px-4 py-3 border border-stone-200 rounded bg-stone-50
+                         focus:outline-none focus:border-stone-400 text-sm"
+            />
           </div>
 
-          {/* NEW: Terms & Policy Checkbox */}
-          <div className="space-y-2">
+          {/* Terms */}
+          <div className="space-y-1">
             <div className="flex items-start gap-3">
               <input
-                type="checkbox"
-                id="terms"
+                type="checkbox" id="terms"
                 checked={termsAccepted}
-                onChange={(e) => {
-                  setTermsAccepted(e.target.checked);
-                  setTermsError('');
-                }}
+                onChange={(e) => { setTermsAccepted(e.target.checked); setTermsError(''); }}
                 className="w-4 h-4 mt-1 accent-[#093A3E] flex-shrink-0"
               />
               <label htmlFor="terms" className="text-xs text-stone-600 leading-relaxed">
                 I agree to the{' '}
-                <Link 
-                  to="/terms" 
-                  target="_blank"
-                  className="text-[#093A3E] font-medium hover:underline"
-                >
+                <Link to="/terms" target="_blank" className="text-[#093A3E] font-medium hover:underline">
                   Terms of Service
                 </Link>{' '}
                 and{' '}
-                <Link 
-                  to="/privacy" 
-                  target="_blank"
-                  className="text-[#093A3E] font-medium hover:underline"
-                >
+                <Link to="/privacy" target="_blank" className="text-[#093A3E] font-medium hover:underline">
                   Privacy Policy
                 </Link>
               </label>
             </div>
-            
-            {/* Terms Error Message */}
-            {termsError && (
-              <p className="text-xs text-red-600 pl-7">{termsError}</p>
-            )}
+            {termsError && <p className="text-xs text-red-600 pl-7">{termsError}</p>}
           </div>
 
           <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full py-3 bg-[#093A3E] text-white uppercase tracking-widest text-xs font-bold rounded hover:bg-[#0c4e52] transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
+            type="submit" disabled={isLoading}
+            className="w-full py-3 bg-[#093A3E] text-white uppercase tracking-widest text-xs font-bold
+                       rounded hover:bg-[#0c4e52] transition-colors flex items-center justify-center
+                       gap-2 disabled:opacity-60"
           >
             {isLoading ? <FaSpinner className="animate-spin" /> : 'Create Account'}
           </button>
         </form>
 
+        {/* Google option */}
         <div className="mt-10 pt-6 border-t border-stone-100 text-center">
-          <div className="mb-6">
-            <button
-              type="button"
-              onClick={handleGoogleClick}
-              disabled={isLoading}
-              className="w-full py-3 border border-stone-200 text-[10px] uppercase tracking-widest hover:bg-stone-50 transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
-            >
-              <FaGoogle className="text-lg" /> Register with Google
-            </button>
-          </div>
+          <p className="text-xs text-stone-400 mb-4 uppercase tracking-widest">or</p>
+          <button
+            type="button" onClick={handleGoogleClick} disabled={isLoading}
+            className="w-full py-3 border border-stone-200 text-[10px] uppercase tracking-widest
+                       hover:bg-stone-50 transition-colors flex items-center justify-center
+                       gap-2 disabled:opacity-60"
+          >
+            <FaGoogle className="text-lg" /> Register with Google
+          </button>
 
-          <p className="text-stone-500 font-serif text-sm">
+          <p className="text-stone-500 font-serif text-sm mt-6">
             Already have an account?{' '}
             <Link
               to="/login"

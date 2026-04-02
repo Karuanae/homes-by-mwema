@@ -8,28 +8,21 @@ const AuthContext = createContext({});
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+  const [user, setUser]       = useState(null);
   const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
+  const navigate              = useNavigate();
 
-  // Function to refresh user from localStorage
+  // ── Restore session from localStorage on first load ───────────────────────
   const refreshUserFromStorage = () => {
     const storedUser = localStorage.getItem('user');
-    const token = localStorage.getItem('token');
-    
-    console.log('🔄 Refreshing user from storage:', {
-      hasUser: !!storedUser,
-      hasToken: !!token
-    });
-    
+    const token      = localStorage.getItem('token');
+
     if (storedUser && token) {
       try {
-        const parsedUser = JSON.parse(storedUser);
-        setUser(parsedUser);
-        console.log('✅ AuthContext refreshed with user:', parsedUser.email);
+        const parsed = JSON.parse(storedUser);
+        setUser(parsed);
         return true;
-      } catch (e) {
-        console.error('❌ Failed to parse stored user:', e);
+      } catch {
         localStorage.removeItem('user');
         localStorage.removeItem('token');
         setUser(null);
@@ -42,80 +35,65 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    // Check for stored user and token on initial load
     refreshUserFromStorage();
     setLoading(false);
   }, []);
 
+  // ── Login (email + password) ──────────────────────────────────────────────
   const login = async (credentials) => {
-    try {
-      const response = await api.auth.login(credentials.email, credentials.password);
-      const { user: userData, token } = response.data;
-      
-      console.log('📝 Login API response:', { userData, token: token ? 'received' : 'missing' });
-      
-      // Store both user data and token
-      localStorage.setItem('user', JSON.stringify(userData));
-      localStorage.setItem('token', token);
-      
-      // Update state
-      setUser(userData);
-      
-      // Dispatch custom event for same-tab updates
-      window.dispatchEvent(new CustomEvent('auth-update'));
-      
-      return { user: userData, token };
-    } catch (error) {
-      throw error;
-    }
+    const response = await api.auth.login(credentials.email, credentials.password);
+    const { user: userData, token } = response.data;
+
+    localStorage.setItem('user',  JSON.stringify(userData));
+    localStorage.setItem('token', token);
+    setUser(userData);
+    window.dispatchEvent(new CustomEvent('auth-update'));
+
+    return { user: userData, token };
   };
 
+  // ── Signup (email + password) ─────────────────────────────────────────────
+  // The backend NEVER returns a token for a new registration because the
+  // account starts unverified.  We deliberately do NOT set user/token here —
+  // the user must click the verification link first, then log in normally.
   const signup = async (userData) => {
-    try {
-      const response = await api.auth.register(userData);
-      const { user: newUser, token } = response.data;
-      
-      localStorage.setItem('user', JSON.stringify(newUser));
-      localStorage.setItem('token', token);
-      
+    const response = await api.auth.register(userData);
+    const { user: newUser } = response.data;
+
+    // Safety check: if somehow the backend returns a verified user + token
+    // (e.g. an admin account being created programmatically), handle it.
+    if (newUser?.email_verified && response.data.token) {
+      localStorage.setItem('user',  JSON.stringify(newUser));
+      localStorage.setItem('token', response.data.token);
       setUser(newUser);
-      
-      // Dispatch custom event for same-tab updates
       window.dispatchEvent(new CustomEvent('auth-update'));
-      
-      return { user: newUser, token };
-    } catch (error) {
-      throw error;
     }
+    // In the normal case (email_verified: false) we do nothing with state —
+    // Register.jsx will show the "check your inbox" panel instead.
+
+    return { user: newUser };
   };
 
+  // ── Logout ────────────────────────────────────────────────────────────────
   const logout = () => {
-    // Clear all auth-related data
     localStorage.removeItem('user');
     localStorage.removeItem('token');
-    // Clear legacy chat keys
     localStorage.removeItem('bookingChatId');
     localStorage.removeItem('paymentChatId');
-    
     setUser(null);
-    
-    // Dispatch custom event
     window.dispatchEvent(new CustomEvent('auth-update'));
-    
     navigate('/');
   };
 
-  const updateUser = (updatedUserData) => {
-    const currentUser = { ...user, ...updatedUserData };
-    localStorage.setItem('user', JSON.stringify(currentUser));
-    setUser(currentUser);
+  // ── Update stored user (e.g. after profile edit) ──────────────────────────
+  const updateUser = (updatedData) => {
+    const merged = { ...user, ...updatedData };
+    localStorage.setItem('user', JSON.stringify(merged));
+    setUser(merged);
     window.dispatchEvent(new CustomEvent('auth-update'));
   };
 
-  const getToken = () => {
-    return localStorage.getItem('token');
-  };
-
+  const getToken       = () => localStorage.getItem('token');
   const isAuthenticated = !!user && !!localStorage.getItem('token');
 
   return (
@@ -128,7 +106,7 @@ export const AuthProvider = ({ children }) => {
       getToken,
       isAuthenticated,
       loading,
-      refreshUserFromStorage, // Expose this method
+      refreshUserFromStorage,
     }}>
       {children}
     </AuthContext.Provider>
