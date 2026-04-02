@@ -18,6 +18,12 @@ class User(db.Model):
     role = db.Column(db.String(20), default='user')
     is_guest = db.Column(db.Boolean, default=False)
     avatar_url = db.Column(db.String(500))
+    
+    # Email verification fields
+    email_verified = db.Column(db.Boolean, default=False)
+    email_verification_token = db.Column(db.String(100), unique=True)
+    email_verification_expires = db.Column(db.DateTime)
+    
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -31,6 +37,21 @@ class User(db.Model):
     
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+    
+    def generate_verification_token(self):
+        """Generate a secure verification token"""
+        self.email_verification_token = secrets.token_urlsafe(32)
+        self.email_verification_expires = datetime.utcnow() + timedelta(hours=24)
+    
+    def verify_email(self, token):
+        """Verify email with token"""
+        if (self.email_verification_token == token and 
+            self.email_verification_expires > datetime.utcnow()):
+            self.email_verified = True
+            self.email_verification_token = None
+            self.email_verification_expires = None
+            return True
+        return False
 
 class Property(db.Model):
     __tablename__ = 'properties'

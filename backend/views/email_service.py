@@ -445,6 +445,41 @@ class EmailService:
             html    = _base("Welcome to Homes by Mwema", body),
         )
 
+    def send_email_verification(self, user) -> Dict[str, Any]:
+        """
+        Send email verification link to new users.
+        """
+        name = user.name or "there"
+        verification_url = f"https://homesbymwema.com/verify-email?token={user.email_verification_token}"
+
+        body = (
+            f"<h2>Welcome to Homes by Mwema, {name}!</h2>"
+            f"<p>Thank you for registering with us. To complete your account setup and start exploring our premium properties, please verify your email address.</p>"
+            f"<div style='text-align:center;margin:32px 0'>"
+            f"<a href='{verification_url}' class='btn' style='background:#093A3E;color:white;padding:14px 32px;text-decoration:none;border-radius:4px;display:inline-block;font-weight:bold;'>Verify Your Email</a>"
+            f"</div>"
+            f"<p><strong>Important:</strong> This verification link will expire in 24 hours. If you didn't create this account, you can safely ignore this email.</p>"
+            f"<p>If the button doesn't work, copy and paste this link into your browser:</p>"
+            f"<p style='word-break:break-all;color:#666;font-size:12px'>{verification_url}</p>"
+            f"<div class='detail-box'>"
+            f"<p><strong>What happens after verification:</strong></p>"
+            f"<ul style='margin:8px 0;padding-left:20px'>"
+            f"<li>You can sign in to your account</li>"
+            f"<li>Browse our curated collection of premium properties</li>"
+            f"<li>Book stays with instant confirmation</li>"
+            f"<li>Schedule consultations with our property experts</li>"
+            f"</ul>"
+            f"</div>"
+            f"<p>Questions? Contact us at <a href='mailto:info@homesbymwema.com'>info@homesbymwema.com</a>.</p>"
+            f"<p>Best regards,<br><strong>The Homes by Mwema Team</strong></p>"
+        )
+
+        return self._send(
+            to      = user.email,
+            subject = "Verify Your Email — Homes by Mwema",
+            html    = _base("Verify Your Email", body),
+        )
+
     def send_admin_chat_notification(self, chat, user) -> Dict[str, Any]:
         """
         Send email notification to admin when a new chat inquiry is started.

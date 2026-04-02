@@ -85,39 +85,36 @@ def register():
             name=name,
             email=email,
             phone=phone,
-            role='user'
+            role='user',
+            email_verified=False
         )
         new_user.set_password(password)
+        new_user.generate_verification_token()
         
         db.session.add(new_user)
         db.session.commit()
         
         logger.info(f"User created successfully: {email}")
         
-        # Send welcome email to new user
+        # Send email verification instead of welcome email
         try:
-            from views.email_service import email_service
-            email_service.send_welcome_email(new_user)
-            logger.info(f"Welcome email sent to: {email}")
+            email_service.send_email_verification(new_user)
+            logger.info(f"Verification email sent to: {email}")
         except Exception as e:
-            logger.error(f"Failed to send welcome email to {email}: {str(e)}")
+            logger.error(f"Failed to send verification email to {email}: {str(e)}")
+            # Don't fail registration if email fails, but user won't be able to verify
         
-        # Create access token (expires in 7 days)
-        access_token = create_access_token(
-            identity=new_user.id,
-            expires_delta=timedelta(days=7)
-        )
-        
-        # Prepare user data for response
-        user_data = {
-            'id': new_user.id,
-            'name': new_user.name,
-            'email': new_user.email,
-            'phone': new_user.phone,
-            'role': new_user.role,
-            'avatar_url': new_user.avatar_url,
-            'created_at': new_user.created_at.isoformat() if new_user.created_at else None
-        }
+        return jsonify({
+            'message': 'Registration successful! Please check your email to verify your account.',
+            'user': {
+                'id': new_user.id,
+                'name': new_user.name,
+                'email': new_user.email,
+                'phone': new_user.phone,
+                'role': new_user.role,
+                'email_verified': new_user.email_verified
+            }
+        }), 201
         
         return jsonify({
             'message': 'Registration successful',
@@ -167,6 +164,14 @@ def login():
         if not user or not user.check_password(password):
             logger.warning(f"Invalid login attempt for email: {email}")
             return jsonify({'error': 'Invalid credentials'}), 401
+        
+        # Check if email is verified
+        if not user.email_verified:
+            logger.warning(f"Unverified email login attempt for: {email}")
+            return jsonify({
+                'error': 'Please verify your email before logging in. Check your inbox for the verification link.',
+                'needs_verification': True
+            }), 403
         
         logger.info(f"Login successful for user: {email}")
         
@@ -231,6 +236,102 @@ def logout():
         
     except Exception as e:
         logger.error(f"Logout error: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+@auth_bp.route('/verify-email', methods=['POST'])
+def verify_email():
+    """
+    Verify user email with token
+    Expected JSON: {
+        "token": "verification_token_here"
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or 'token' not in data:
+            return jsonify({'error': 'Verification token is required'}), 400
+        
+        token = data['token'].strip()
+        
+        # Find user with this token
+        user = User.query.filter_by(email_verification_token=token).first()
+        
+        if not user:
+            return jsonify({'error': 'Invalid or expired verification token'}), 400
+        
+        # Verify the email
+        if user.verify_email(token):
+            db.session.commit()
+            logger.info(f"Email verified for user: {user.email}")
+            
+            # Send welcome email now that email is verified
+            try:
+                email_service.send_welcome_email(user)
+                logger.info(f"Welcome email sent to verified user: {user.email}")
+            except Exception as e:
+                logger.error(f"Failed to send welcome email to {user.email}: {str(e)}")
+            
+            return jsonify({
+                'message': 'Email verified successfully! You can now log in.',
+                'user': {
+                    'id': user.id,
+                    'name': user.name,
+                    'email': user.email,
+                    'email_verified': user.email_verified
+                }
+            }), 200
+        else:
+            return jsonify({'error': 'Invalid or expired verification token'}), 400
+            
+    except Exception as e:
+        logger.error(f"Email verification error: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': 'Internal server error'}), 500
+
+@auth_bp.route('/resend-verification', methods=['POST'])
+def resend_verification():
+    """
+    Resend email verification
+    Expected JSON: {
+        "email": "user@example.com"
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or 'email' not in data:
+            return jsonify({'error': 'Email is required'}), 400
+        
+        email = data['email'].strip().lower()
+        
+        # Find user
+        user = User.query.filter_by(email=email).first()
+        
+        if not user:
+            # Don't reveal if email exists or not for security
+            return jsonify({'message': 'If the email exists, a verification link has been sent.'}), 200
+        
+        if user.email_verified:
+            return jsonify({'message': 'Email is already verified.'}), 200
+        
+        # Generate new verification token
+        user.generate_verification_token()
+        db.session.commit()
+        
+        # Send verification email
+        try:
+            email_service.send_email_verification(user)
+            logger.info(f"Verification email resent to: {email}")
+        except Exception as e:
+            logger.error(f"Failed to resend verification email to {email}: {str(e)}")
+            return jsonify({'error': 'Failed to send verification email'}), 500
+        
+        return jsonify({'message': 'Verification email sent successfully.'}), 200
+        
+    except Exception as e:
+        logger.error(f"Resend verification error: {str(e)}")
+        db.session.rollback()
         return jsonify({'error': 'Internal server error'}), 500
 
 @auth_bp.route('/refresh', methods=['POST'])

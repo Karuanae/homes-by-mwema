@@ -133,6 +133,7 @@ def google_login():
                 phone='',
                 role='user',
                 avatar_url=picture or None,
+                email_verified=True  # Google emails are pre-verified
             )
             user.set_password(_random_password())
             db.session.add(user)

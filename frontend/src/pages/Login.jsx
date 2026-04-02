@@ -15,6 +15,9 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showResendVerification, setShowResendVerification] = useState(false);
+  const [resendEmail, setResendEmail] = useState('');
+  const [resendLoading, setResendLoading] = useState(false);
 
   // Redirect if already logged in
   useEffect(() => {
@@ -136,6 +139,35 @@ export default function Login() {
   // ── Standard email/password login ────────────────────────────────────────
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
+  const handleResendVerification = async () => {
+    if (!resendEmail) return;
+    
+    setResendLoading(true);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://flask-app-production-c760.up.railway.app/api'}/auth/resend-verification`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: resendEmail }),
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        setError('Verification email sent! Please check your inbox.');
+        setShowResendVerification(false);
+      } else {
+        setError(data.error || 'Failed to send verification email.');
+      }
+    } catch (err) {
+      console.error('Resend verification error:', err);
+      setError('Failed to send verification email. Please try again.');
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -145,7 +177,15 @@ export default function Login() {
       redirectAfterLogin(response.user);
     } catch (err) {
       console.error('❌ Login error:', err);
-      setError(err.response?.data?.error || 'Authentication failed.');
+      
+      const errorData = err.response?.data;
+      if (errorData?.needs_verification) {
+        setError('Please verify your email before logging in. Check your inbox for the verification link.');
+        setShowResendVerification(true);
+        setResendEmail(formData.email);
+      } else {
+        setError(errorData?.error || 'Authentication failed.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -276,6 +316,18 @@ export default function Login() {
         {error && (
           <div className="mb-8 p-4 bg-stone-50 border-l-2 border-red-900 text-red-900 text-xs tracking-wide whitespace-pre-wrap">
             {error}
+            {showResendVerification && (
+              <div className="mt-3 pt-3 border-t border-red-200">
+                <button
+                  type="button"
+                  onClick={handleResendVerification}
+                  disabled={resendLoading}
+                  className="text-xs text-red-700 hover:text-red-900 underline disabled:opacity-50"
+                >
+                  {resendLoading ? 'Sending...' : 'Resend verification email'}
+                </button>
+              </div>
+            )}
           </div>
         )}
 

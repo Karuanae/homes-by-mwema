@@ -120,14 +120,24 @@ export default function Register() {
     setTermsError('');
     
     try {
-      const { user } = await signup({
+      const response = await signup({
         name: formData.name,
         email: formData.email,
         password: formData.password,
         phone: formData.phone || '',
       });
-      setSuccess('Account created.');
-      redirectAfterAuth(user);
+      
+      // Check if registration requires email verification
+      if (response.user && !response.user.email_verified) {
+        setSuccess('Registration successful! Please check your email to verify your account before logging in.');
+        // Don't redirect - user needs to verify email first
+        setTimeout(() => {
+          navigate('/login');
+        }, 3000);
+      } else {
+        setSuccess('Account created.');
+        redirectAfterAuth(response.user);
+      }
     } catch (err) {
       console.error('❌ Registration error:', err);
       setError(err.response?.data?.error || 'Registration failed.');
