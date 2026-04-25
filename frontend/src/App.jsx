@@ -10,6 +10,7 @@ import PublicRoute from "./components/PublicRoute";
 import Header from "./components/Navbar";
 import Footer from "./components/Footer";
 import ScrollToTop from "./components/ScrollToTop";
+import SeoManager from "./components/SeoManager";
 
 // ── Lazy-loaded pages (each becomes its own JS chunk) ──────────────────────
 // Core
@@ -94,6 +95,7 @@ function AppContent() {
   return (
     <>
       <ScrollToTop />
+      <SeoManager />
       <AuthSync />
       <Routes>
 
