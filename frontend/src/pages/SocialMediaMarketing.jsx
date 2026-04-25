@@ -6,8 +6,6 @@ import {
   FaFacebookF,
   FaTiktok,
   FaYoutube,
-  FaLinkedinIn,
-  FaTwitter,
   FaHashtag,
   FaCamera,
   FaVideo,
@@ -43,6 +41,7 @@ import {
   MdOutlineInsights
 } from 'react-icons/md';
 import { BiLike, BiComment, BiShare } from 'react-icons/bi';
+import { SOCIAL_LINKS, SOCIAL_BRAND_COLORS } from '../constants/socialLinks';
 
 const SocialMediaMarketing = () => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -168,6 +167,13 @@ const SocialMediaMarketing = () => {
       platforms: ["All Platforms"]
     }
   ];
+
+  const serviceIconColors = {
+    Instagram: SOCIAL_BRAND_COLORS.instagram,
+    TikTok: SOCIAL_BRAND_COLORS.tiktok,
+    Facebook: SOCIAL_BRAND_COLORS.facebook,
+    YouTube: SOCIAL_BRAND_COLORS.youtube
+  };
 
   const contentPillars = [
     {
@@ -314,11 +320,18 @@ const SocialMediaMarketing = () => {
 
             {/* Social Platform Icons */}
             <div className="flex gap-4 mt-12">
-              <FaInstagram className="text-2xl text-white/60 hover:text-[#ED9B40] transition-colors cursor-pointer" />
-              <FaTiktok className="text-2xl text-white/60 hover:text-[#ED9B40] transition-colors cursor-pointer" />
-              <FaFacebookF className="text-2xl text-white/60 hover:text-[#ED9B40] transition-colors cursor-pointer" />
-              <FaYoutube className="text-2xl text-white/60 hover:text-[#ED9B40] transition-colors cursor-pointer" />
-              <FaTwitter className="text-2xl text-white/60 hover:text-[#ED9B40] transition-colors cursor-pointer" />
+              <a href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="transition-opacity hover:opacity-80" style={{ color: SOCIAL_BRAND_COLORS.instagram }}>
+                <FaInstagram className="text-2xl" />
+              </a>
+              <a href={SOCIAL_LINKS.tiktokMarketing} target="_blank" rel="noopener noreferrer" aria-label="TikTok" className="transition-opacity hover:opacity-80" style={{ color: SOCIAL_BRAND_COLORS.tiktok }}>
+                <FaTiktok className="text-2xl" />
+              </a>
+              <a href={SOCIAL_LINKS.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="transition-opacity hover:opacity-80" style={{ color: SOCIAL_BRAND_COLORS.facebook }}>
+                <FaFacebookF className="text-2xl" />
+              </a>
+              <a href={SOCIAL_LINKS.youtube} target="_blank" rel="noopener noreferrer" aria-label="YouTube" className="transition-opacity hover:opacity-80" style={{ color: SOCIAL_BRAND_COLORS.youtube }}>
+                <FaYoutube className="text-2xl" />
+              </a>
             </div>
           </motion.div>
         </div>
@@ -492,7 +505,15 @@ const SocialMediaMarketing = () => {
                 transition={{ delay: index * 0.1 }}
                 className="bg-[#f5f2ee] p-6 rounded-sm border border-stone-200 hover:shadow-xl transition-all"
               >
-                <service.icon className="text-3xl text-[#ED9B40] mb-4" />
+                <service.icon
+                  className="text-3xl mb-4"
+                  style={{
+                    color:
+                      service.platforms.find((platform) => serviceIconColors[platform])
+                        ? serviceIconColors[service.platforms.find((platform) => serviceIconColors[platform])]
+                        : '#ED9B40'
+                  }}
+                />
                 <h3 className="text-lg font-bold text-[#0F4C55] mb-3">{service.title}</h3>
                 <ul className="space-y-2 mb-4">
                   {service.features.map((feature, i) => (
@@ -646,22 +667,22 @@ const SocialMediaMarketing = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="p-4">
-              <FaInstagram className="text-4xl text-[#ED9B40] mx-auto mb-3" />
+              <FaInstagram className="text-4xl mx-auto mb-3" style={{ color: SOCIAL_BRAND_COLORS.instagram }} />
               <h3 className="font-bold mb-2">Instagram</h3>
               <p className="text-sm text-white/70">Visual storytelling, Reels, Stories, and aesthetic feeds</p>
             </div>
             <div className="p-4">
-              <FaTiktok className="text-4xl text-[#ED9B40] mx-auto mb-3" />
+              <FaTiktok className="text-4xl mx-auto mb-3" style={{ color: SOCIAL_BRAND_COLORS.tiktok }} />
               <h3 className="font-bold mb-2">TikTok</h3>
               <p className="text-sm text-white/70">Trend-driven, entertaining, viral-ready short videos</p>
             </div>
             <div className="p-4">
-              <FaFacebookF className="text-4xl text-[#ED9B40] mx-auto mb-3" />
+              <FaFacebookF className="text-4xl mx-auto mb-3" style={{ color: SOCIAL_BRAND_COLORS.facebook }} />
               <h3 className="font-bold mb-2">Facebook</h3>
               <p className="text-sm text-white/70">Community building, targeted ads, event promotion</p>
             </div>
             <div className="p-4">
-              <FaYoutube className="text-4xl text-[#ED9B40] mx-auto mb-3" />
+              <FaYoutube className="text-4xl mx-auto mb-3" style={{ color: SOCIAL_BRAND_COLORS.youtube }} />
               <h3 className="font-bold mb-2">YouTube</h3>
               <p className="text-sm text-white/70">In-depth property tours, SEO-optimized content</p>
             </div>
@@ -746,11 +767,17 @@ const SocialMediaMarketing = () => {
             <a href="mailto:social@homesbymwema.com" className="text-white/60 hover:text-[#ED9B40] transition-colors">
               <FaEnvelope size={20} />
             </a>
-            <a href="#" className="text-white/60 hover:text-[#ED9B40] transition-colors">
+            <a href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="transition-opacity hover:opacity-80" style={{ color: SOCIAL_BRAND_COLORS.instagram }}>
               <FaInstagram size={20} />
             </a>
-            <a href="#" className="text-white/60 hover:text-[#ED9B40] transition-colors">
+            <a href={SOCIAL_LINKS.tiktokMarketing} target="_blank" rel="noopener noreferrer" aria-label="TikTok" className="transition-opacity hover:opacity-80" style={{ color: SOCIAL_BRAND_COLORS.tiktok }}>
               <FaTiktok size={20} />
+            </a>
+            <a href={SOCIAL_LINKS.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="transition-opacity hover:opacity-80" style={{ color: SOCIAL_BRAND_COLORS.facebook }}>
+              <FaFacebookF size={20} />
+            </a>
+            <a href={SOCIAL_LINKS.youtube} target="_blank" rel="noopener noreferrer" aria-label="YouTube" className="transition-opacity hover:opacity-80" style={{ color: SOCIAL_BRAND_COLORS.youtube }}>
+              <FaYoutube size={20} />
             </a>
           </div>
         </div>

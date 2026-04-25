@@ -50,6 +50,7 @@ import {
 } from 'react-icons/fa';
 import { BiSolidCar, BiSolidTaxi } from 'react-icons/bi';
 import { RiCustomerService2Fill, RiFlightTakeoffLine, RiFlightLandLine } from 'react-icons/ri';
+import { SOCIAL_LINKS, SOCIAL_BRAND_COLORS } from '../constants/socialLinks';
 
 const AirportSGRTransfers = () => {
   const [activeTab, setActiveTab] = useState('airport');
@@ -794,7 +795,7 @@ const AirportSGRTransfers = () => {
             <a href="mailto:transfers@homesbymwema.com" className="text-white/60 hover:text-[#ED9B40] transition-colors">
               <FaEnvelope size={20} />
             </a>
-            <a href="#" className="text-white/60 hover:text-[#ED9B40] transition-colors">
+            <a href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="transition-opacity hover:opacity-80" style={{ color: SOCIAL_BRAND_COLORS.instagram }}>
               <FaInstagram size={20} />
             </a>
           </div>

@@ -9,8 +9,6 @@ import {
   FaInstagram,
   FaTiktok,
   FaYoutube,
-  FaLinkedinIn,
-  FaTwitter,
   FaFacebookF,
   FaClock,
   FaUserTie,
@@ -24,6 +22,7 @@ import {
 } from 'react-icons/fa';
 import { MdOutlineEmail, MdOutlineLocationOn, MdOutlinePhone, MdOutlineWatchLater } from 'react-icons/md';
 import { BiSend } from 'react-icons/bi';
+import { SOCIAL_LINKS, SOCIAL_BRAND_COLORS } from '../constants/socialLinks';
 
 const Contact = () => {
   const [formData, setFormData] = useState({
@@ -453,20 +452,17 @@ const Contact = () => {
               <div className="bg-[#f5f2ee] p-8 rounded-sm border border-stone-200">
                 <h3 className="text-xl font-serif text-[#0F4C55] mb-4">Follow Us</h3>
                 <div className="flex gap-4">
-                  <a href="#" className="w-10 h-10 bg-[#0F4C55] text-white rounded-full flex items-center justify-center hover:bg-[#ED9B40] transition-colors">
+                  <a href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="w-10 h-10 text-white rounded-full flex items-center justify-center transition-opacity hover:opacity-80" style={{ backgroundColor: SOCIAL_BRAND_COLORS.instagram }}>
                     <FaInstagram />
                   </a>
-                  <a href="#" className="w-10 h-10 bg-[#0F4C55] text-white rounded-full flex items-center justify-center hover:bg-[#ED9B40] transition-colors">
+                  <a href={SOCIAL_LINKS.tiktok} target="_blank" rel="noopener noreferrer" aria-label="TikTok" className="w-10 h-10 text-white rounded-full flex items-center justify-center transition-opacity hover:opacity-80" style={{ backgroundColor: SOCIAL_BRAND_COLORS.tiktok }}>
                     <FaTiktok />
                   </a>
-                  <a href="#" className="w-10 h-10 bg-[#0F4C55] text-white rounded-full flex items-center justify-center hover:bg-[#ED9B40] transition-colors">
+                  <a href={SOCIAL_LINKS.youtube} target="_blank" rel="noopener noreferrer" aria-label="YouTube" className="w-10 h-10 text-white rounded-full flex items-center justify-center transition-opacity hover:opacity-80" style={{ backgroundColor: SOCIAL_BRAND_COLORS.youtube }}>
                     <FaYoutube />
                   </a>
-                  <a href="#" className="w-10 h-10 bg-[#0F4C55] text-white rounded-full flex items-center justify-center hover:bg-[#ED9B40] transition-colors">
-                    <FaLinkedinIn />
-                  </a>
-                  <a href="#" className="w-10 h-10 bg-[#0F4C55] text-white rounded-full flex items-center justify-center hover:bg-[#ED9B40] transition-colors">
-                    <FaTwitter />
+                  <a href={SOCIAL_LINKS.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="w-10 h-10 text-white rounded-full flex items-center justify-center transition-opacity hover:opacity-80" style={{ backgroundColor: SOCIAL_BRAND_COLORS.facebook }}>
+                    <FaFacebookF />
                   </a>
                 </div>
               </div>

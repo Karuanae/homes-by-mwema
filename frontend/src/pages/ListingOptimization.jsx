@@ -28,6 +28,7 @@ import {
   FaWhatsapp
 } from 'react-icons/fa';
 import { MdOutlineAnalytics, MdRateReview, MdTrendingUp } from 'react-icons/md';
+import { SOCIAL_LINKS, SOCIAL_BRAND_COLORS } from '../constants/socialLinks';
 
 const ListingOptimization = () => {
   const [activeTab, setActiveTab] = useState('descriptions');
@@ -596,13 +597,13 @@ const ListingOptimization = () => {
           </div>
 
           <div className="flex justify-center gap-8 mt-12">
-            <a href="#" className="text-stone-400 hover:text-[#ED9B40] transition-colors">
+            <a href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="transition-opacity hover:opacity-80" style={{ color: SOCIAL_BRAND_COLORS.instagram }}>
               <FaInstagram size={24} />
             </a>
-            <a href="#" className="text-stone-400 hover:text-[#ED9B40] transition-colors">
+            <a href={SOCIAL_LINKS.tiktok} target="_blank" rel="noopener noreferrer" aria-label="TikTok" className="transition-opacity hover:opacity-80" style={{ color: SOCIAL_BRAND_COLORS.tiktok }}>
               <FaTiktok size={24} />
             </a>
-            <a href="#" className="text-stone-400 hover:text-[#ED9B40] transition-colors">
+            <a href={SOCIAL_LINKS.youtube} target="_blank" rel="noopener noreferrer" aria-label="YouTube" className="transition-opacity hover:opacity-80" style={{ color: SOCIAL_BRAND_COLORS.youtube }}>
               <FaYoutube size={24} />
             </a>
           </div>
@@ -649,7 +650,7 @@ const ListingOptimization = () => {
             <a href="mailto:optimize@homesbymwema.com" className="text-white/60 hover:text-[#ED9B40] transition-colors">
               <FaEnvelope size={20} />
             </a>
-            <a href="#" className="text-white/60 hover:text-[#ED9B40] transition-colors">
+            <a href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="transition-opacity hover:opacity-80" style={{ color: SOCIAL_BRAND_COLORS.instagram }}>
               <FaInstagram size={20} />
             </a>
           </div>

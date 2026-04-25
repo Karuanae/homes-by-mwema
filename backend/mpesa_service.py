@@ -110,18 +110,21 @@ class MPesaService:
             'Content-Type': 'application/json'
         }
         
-        # Request payload
+                # Correct for Bank PayBill setup
+        bank_paybill = '542542' 
+        your_bank_account = '008814'
+
         payload = {
-            'BusinessShortCode': self.business_short_code,
+            'BusinessShortCode': bank_paybill,
             'Password': password,
             'Timestamp': timestamp,
             'TransactionType': 'CustomerPayBillOnline',
             'Amount': int(amount),
             'PartyA': phone_number,
-            'PartyB': self.business_short_code,
+            'PartyB': bank_paybill,  # MUST be the bank's PayBill number
             'PhoneNumber': phone_number,
             'CallBackURL': self.callback_url,
-            'AccountReference': account_reference,
+            'AccountReference': your_bank_account, # YOUR 008814 number goes here!
             'TransactionDesc': transaction_desc
         }
         

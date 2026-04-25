@@ -9,7 +9,7 @@ import {
   FaCheck, FaClock, FaSpinner, FaUserCircle,
   FaCreditCard, FaRegClock, FaCalendarCheck,
   FaMap, FaGlobe, FaHotel,
-  FaDoorOpen,
+  FaDoorOpen, FaSync,
 } from "react-icons/fa";
 import api, { IMAGE_BASE_URL } from "../services/api";
 import GoogleMap from "../components/GoogleMap";
@@ -154,10 +154,27 @@ export default function MyBookings() {
     }
   }, []); // ← empty deps: this function never changes identity
 
-  // ── Initial load ────────────────────────────────────────────────────────────
+  // ── Initial load + refresh on visibility change + payment return flag ──────
   useEffect(() => {
     setUser(JSON.parse(localStorage.getItem("user") || "null"));
     fetchBookings();
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchBookings();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    const shouldRefresh = sessionStorage.getItem('refreshBookings');
+    if (shouldRefresh === 'true') {
+      sessionStorage.removeItem('refreshBookings');
+      fetchBookings();
+    }
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [fetchBookings]);
 
   // ── Timer effect — runs ONCE on mount, reads bookings via ref ───────────────
@@ -434,6 +451,13 @@ export default function MyBookings() {
               className="px-4 py-2 border border-stone-200 bg-white hover:bg-stone-50 rounded-lg text-sm flex items-center gap-2"
             >
               <FaFilter size={14} /> Filter
+            </button>
+            <button
+              onClick={() => fetchBookings()}
+              className="px-3 py-2 border border-stone-200 bg-white rounded-lg hover:bg-stone-50"
+              title="Refresh bookings"
+            >
+              <FaSync className="text-sm text-stone-500" />
             </button>
             <button
               onClick={() => setViewMode(viewMode === "list" ? "map" : "list")}

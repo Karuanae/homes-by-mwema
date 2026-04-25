@@ -112,10 +112,10 @@ app.config['MIN_NIGHTS_BOOKING'] = int(os.environ.get('MIN_NIGHTS_BOOKING', 1))
 app.config['MAX_NIGHTS_BOOKING'] = int(os.environ.get('MAX_NIGHTS_BOOKING', 30))
 
 # ===== M-PESA DARAJA API CONFIGURATION =====
-app.config['MPESA_ENVIRONMENT'] = os.environ.get('MPESA_ENVIRONMENT', 'sandbox')
+app.config['MPESA_ENVIRONMENT'] = os.environ.get('MPESA_ENVIRONMENT', 'production')
 app.config['MPESA_CONSUMER_KEY'] = os.environ.get('MPESA_CONSUMER_KEY', '')
 app.config['MPESA_CONSUMER_SECRET'] = os.environ.get('MPESA_CONSUMER_SECRET', '')
-app.config['MPESA_BUSINESS_SHORT_CODE'] = os.environ.get('MPESA_BUSINESS_SHORT_CODE', '174379')
+app.config['MPESA_BUSINESS_SHORT_CODE'] = os.environ.get('MPESA_BUSINESS_SHORT_CODE', '008814')
 app.config['MPESA_PASSKEY'] = os.environ.get('MPESA_PASSKEY', '')
 app.config['MPESA_CALLBACK_URL'] = os.environ.get('MPESA_CALLBACK_URL', '')
 app.config['MPESA_SECRET'] = os.environ.get('MPESA_SECRET', '')  # For webhook verification

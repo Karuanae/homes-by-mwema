@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { SOCIAL_LINKS } from "../constants/socialLinks";
 
 export default function Footer() {
   const currentYear = new Date().getFullYear();
@@ -113,9 +114,11 @@ export default function Footer() {
             <Link to="/terms" className="hover:text-[#ED9B40] transition-colors">Terms</Link>
             <Link to="/privacy" className="hover:text-[#ED9B40] transition-colors">Privacy</Link>
             <Link to="/cookie-policy" className="hover:text-[#ED9B40] transition-colors">Cookies</Link>
-            <a href="#" className="hover:text-[#ED9B40] transition-colors">Instagram</a>
-            <a href="#" className="hover:text-[#ED9B40] transition-colors">LinkedIn</a>
-            <a href="#" className="hover:text-[#ED9B40] transition-colors">TikTok</a>
+            <a href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer" className="hover:text-[#ED9B40] transition-colors">Instagram</a>
+            <a href={SOCIAL_LINKS.facebook} target="_blank" rel="noopener noreferrer" className="hover:text-[#ED9B40] transition-colors">Facebook</a>
+            <a href={SOCIAL_LINKS.youtube} target="_blank" rel="noopener noreferrer" className="hover:text-[#ED9B40] transition-colors">YouTube</a>
+            <a href={SOCIAL_LINKS.tiktok} target="_blank" rel="noopener noreferrer" className="hover:text-[#ED9B40] transition-colors">TikTok</a>
+            <a href={SOCIAL_LINKS.tiktokMarketing} target="_blank" rel="noopener noreferrer" className="hover:text-[#ED9B40] transition-colors">TikTok Marketing</a>
           </div>
         </div>
 

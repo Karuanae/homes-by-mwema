@@ -44,6 +44,7 @@ import {
 import { GiCook, GiSaucepan, GiChefToque, GiSteak, GiShrimp, GiChickenOven, GiFruitBowl, GiWineBottle } from 'react-icons/gi';
 import { BiDish, BiFoodMenu } from 'react-icons/bi';
 import { RiCake2Fill, RiRestaurantFill, RiKnifeLine } from 'react-icons/ri';
+import { SOCIAL_LINKS, SOCIAL_BRAND_COLORS } from '../constants/socialLinks';
 
 const ChefServices = () => {
   const [activeTab, setActiveTab] = useState('private');
@@ -732,7 +733,7 @@ const ChefServices = () => {
             <a href="mailto:chef@homesbymwema.com" className="text-white/60 hover:text-[#ED9B40] transition-colors">
               <FaEnvelope size={20} />
             </a>
-            <a href="#" className="text-white/60 hover:text-[#ED9B40] transition-colors">
+            <a href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="transition-opacity hover:opacity-80" style={{ color: SOCIAL_BRAND_COLORS.instagram }}>
               <FaInstagram size={20} />
             </a>
           </div>
