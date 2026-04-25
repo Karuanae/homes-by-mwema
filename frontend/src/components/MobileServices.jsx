@@ -7,6 +7,7 @@ export default function MobileServices({ onNavigate }) {
     <>
       <MenuLink to="/photography-videography" label="Photography & Videography" onClick={onNavigate} />
       <MenuLink to="/listing-optimization" label="Listing Optimization" onClick={onNavigate} />
+      <MenuLink to="/interior-design" label="Interior Design Setup" onClick={onNavigate} />
       <MenuLink to="/management" label="Management" onClick={onNavigate} />
     </>
   );

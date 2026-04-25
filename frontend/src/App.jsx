@@ -43,6 +43,7 @@ const FullyFurnishedUnitsOnSale = lazy(() => import("./pages/FullyFurnishedUnits
 const SafariTours             = lazy(() => import("./pages/SafariTours"));
 const AirportSGRTransfers     = lazy(() => import("./pages/AirportSGRTransfers"));
 const ChefServices            = lazy(() => import("./pages/ChefServices"));
+const InteriorDesignSetup     = lazy(() => import("./pages/InteriorDesignSetup"));
 const HostComingSoon          = lazy(() => import("./pages/HostComingSoon"));
 
 // Legal
@@ -218,6 +219,7 @@ function AppContent() {
           ["/safari-tours",          <SafariTours />],
           ["/airport-transfers",     <AirportSGRTransfers />],
           ["/chef-services",         <ChefServices />],
+          ["/interior-design",       <InteriorDesignSetup />],
           ["/terms",                 <TermsAndPolicy />],
           ["/privacy",               <TermsAndPolicy />],
           ["/cookie-policy",         <TermsAndPolicy />],

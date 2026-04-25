@@ -30,6 +30,7 @@ const OTHER_SERVICES = [
   { label: 'Photography & Videography', to: '/photography-videography' },
   { label: 'Listing Optimization', to: '/listing-optimization' },
   { label: 'Social Media Marketing', to: '/social-media-marketing' },
+  { label: 'Interior Design Setup', to: '/interior-design' },
   { label: 'Car Hire Services', to: '/car-hire' },
   { label: 'Fully Furnished Units', to: '/fully-furnished-units' },
   { label: 'Safari Tours', to: '/safari-tours' },
@@ -828,7 +829,7 @@ const Navbar = () => {
                           onClick={() => setIsMenuOpen(false)}
                           className="text-[#ED9B40] text-[8px] uppercase tracking-[0.3em] hover:text-white transition-colors"
                         >
-                          Discover The Collection
+                          View Properties
                         </Link>
                       </div>
                     </motion.div>

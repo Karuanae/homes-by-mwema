@@ -46,7 +46,9 @@ import {
   FaHotel,
   FaHeadset,
   FaLock,
-  FaCreditCard as FaCc
+  FaCreditCard as FaCc,
+  FaClipboardList,
+  FaPen
 } from 'react-icons/fa';
 import { BiSolidCar, BiSolidTaxi } from 'react-icons/bi';
 import { RiCustomerService2Fill, RiFlightTakeoffLine, RiFlightLandLine } from 'react-icons/ri';
@@ -55,9 +57,10 @@ import { SOCIAL_LINKS, SOCIAL_BRAND_COLORS } from '../constants/socialLinks';
 const AirportSGRTransfers = () => {
   const [activeTab, setActiveTab] = useState('airport');
   const [expandedFaq, setExpandedFaq] = useState(null);
+  const [showForm, setShowForm] = useState(false);
 
   // WhatsApp configuration
-  const whatsappNumber = "254720108914"; // Updated WhatsApp number
+  const whatsappNumber = "254720108914";
   const getWhatsAppLink = (message) => {
     return `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
   };
@@ -100,170 +103,32 @@ const AirportSGRTransfers = () => {
   ];
 
   const airportRoutes = [
-    {
-      id: 1,
-      from: "Jomo Kenyatta International Airport (JKIA)",
-      to: "Nairobi CBD",
-      distance: "18 km",
-      duration: "30-45 mins",
-      popular: true
-    },
-    {
-      id: 2,
-      from: "Jomo Kenyatta International Airport (JKIA)",
-      to: "Westlands",
-      distance: "20 km",
-      duration: "35-50 mins",
-      popular: true
-    },
-    {
-      id: 3,
-      from: "Jomo Kenyatta International Airport (JKIA)",
-      to: "Kilimani",
-      distance: "19 km",
-      duration: "30-45 mins",
-      popular: false
-    },
-    {
-      id: 4,
-      from: "Jomo Kenyatta International Airport (JKIA)",
-      to: "Karen",
-      distance: "25 km",
-      duration: "45-60 mins",
-      popular: false
-    },
-    {
-      id: 5,
-      from: "Jomo Kenyatta International Airport (JKIA)",
-      to: "Lavington",
-      distance: "22 km",
-      duration: "40-55 mins",
-      popular: false
-    },
-    {
-      id: 6,
-      from: "Jomo Kenyatta International Airport (JKIA)",
-      to: "Runda/Gigiri",
-      distance: "24 km",
-      duration: "45-60 mins",
-      popular: true
-    },
-    {
-      id: 7,
-      from: "Wilson Airport",
-      to: "Nairobi CBD",
-      distance: "6 km",
-      duration: "15-20 mins",
-      popular: true
-    },
-    {
-      id: 8,
-      from: "Wilson Airport",
-      to: "Karen",
-      distance: "12 km",
-      duration: "25-35 mins",
-      popular: false
-    }
+    { id: 1, from: "Jomo Kenyatta International Airport (JKIA)", to: "Nairobi CBD", distance: "18 km", duration: "30-45 mins", popular: true },
+    { id: 2, from: "Jomo Kenyatta International Airport (JKIA)", to: "Westlands", distance: "20 km", duration: "35-50 mins", popular: true },
+    { id: 3, from: "Jomo Kenyatta International Airport (JKIA)", to: "Kilimani", distance: "19 km", duration: "30-45 mins", popular: false },
+    { id: 4, from: "Jomo Kenyatta International Airport (JKIA)", to: "Karen", distance: "25 km", duration: "45-60 mins", popular: false },
+    { id: 5, from: "Jomo Kenyatta International Airport (JKIA)", to: "Lavington", distance: "22 km", duration: "40-55 mins", popular: false },
+    { id: 6, from: "Jomo Kenyatta International Airport (JKIA)", to: "Runda/Gigiri", distance: "24 km", duration: "45-60 mins", popular: true },
+    { id: 7, from: "Wilson Airport", to: "Nairobi CBD", distance: "6 km", duration: "15-20 mins", popular: true },
+    { id: 8, from: "Wilson Airport", to: "Karen", distance: "12 km", duration: "25-35 mins", popular: false }
   ];
 
   const sgrRoutes = [
-    {
-      id: 1,
-      from: "Nairobi Terminus (Syokimau)",
-      to: "Nairobi CBD",
-      distance: "15 km",
-      duration: "25-35 mins",
-      popular: true
-    },
-    {
-      id: 2,
-      from: "Nairobi Terminus (Syokimau)",
-      to: "Westlands",
-      distance: "18 km",
-      duration: "30-40 mins",
-      popular: true
-    },
-    {
-      id: 3,
-      from: "Nairobi Terminus (Syokimau)",
-      to: "JKIA Airport",
-      distance: "8 km",
-      duration: "15-20 mins",
-      popular: true
-    },
-    {
-      id: 4,
-      from: "Mombasa Terminus (Miritini)",
-      to: "Mombasa CBD",
-      distance: "20 km",
-      duration: "30-40 mins",
-      popular: true
-    },
-    {
-      id: 5,
-      from: "Mombasa Terminus (Miritini)",
-      to: "Diani Beach",
-      distance: "45 km",
-      duration: "60-75 mins (including ferry)",
-      popular: true
-    },
-    {
-      id: 6,
-      from: "Mombasa Terminus (Miritini)",
-      to: "Nyali",
-      distance: "25 km",
-      duration: "35-45 mins",
-      popular: false
-    },
-    {
-      id: 7,
-      from: "Nairobi Terminus (Syokimau)",
-      to: "Kilimani",
-      distance: "16 km",
-      duration: "25-35 mins",
-      popular: false
-    },
-    {
-      id: 8,
-      from: "Mombasa Terminus (Miritini)",
-      to: "Ukunda",
-      distance: "40 km",
-      duration: "50-65 mins (including ferry)",
-      popular: false
-    }
+    { id: 1, from: "Nairobi Terminus (Syokimau)", to: "Nairobi CBD", distance: "15 km", duration: "25-35 mins", popular: true },
+    { id: 2, from: "Nairobi Terminus (Syokimau)", to: "Westlands", distance: "18 km", duration: "30-40 mins", popular: true },
+    { id: 3, from: "Nairobi Terminus (Syokimau)", to: "JKIA Airport", distance: "8 km", duration: "15-20 mins", popular: true },
+    { id: 4, from: "Mombasa Terminus (Miritini)", to: "Mombasa CBD", distance: "20 km", duration: "30-40 mins", popular: true },
+    { id: 5, from: "Mombasa Terminus (Miritini)", to: "Diani Beach", distance: "45 km", duration: "60-75 mins (including ferry)", popular: true },
+    { id: 6, from: "Mombasa Terminus (Miritini)", to: "Nyali", distance: "25 km", duration: "35-45 mins", popular: false },
+    { id: 7, from: "Nairobi Terminus (Syokimau)", to: "Kilimani", distance: "16 km", duration: "25-35 mins", popular: false },
+    { id: 8, from: "Mombasa Terminus (Miritini)", to: "Ukunda", distance: "40 km", duration: "50-65 mins (including ferry)", popular: false }
   ];
 
   const additionalServices = [
-    {
-      icon: FaChild,
-      title: "Child Seats",
-      description: "Infant, toddler, and booster seats available free of charge—just let us know in advance."
-    },
-    {
-      icon: FaWheelchair,
-      title: "Accessible Vehicles",
-      description: "We can arrange wheelchair-accessible vehicles with trained drivers for passengers with mobility needs."
-    },
-    {
-      icon: FaDog,
-      title: "Pet-Friendly Transfers",
-      description: "Traveling with a furry friend? We offer pet-friendly vehicles with crate options."
-    },
-    {
-      icon: FaUserTie,
-      title: "Executive Chauffeur",
-      description: "Professional, uniformed drivers trained in hospitality and local knowledge."
-    },
-    {
-      icon: FaCoffee,
-      title: "Refreshments Included",
-      description: "Complimentary bottled water and optional coffee/tea service in premium vehicles."
-    },
-    {
-      icon: FaWifi,
-      title: "Onboard Wi-Fi",
-      description: "Stay connected during your transfer with complimentary high-speed internet."
-    }
+    { icon: FaChild, title: "Child Seats", description: "Infant, toddler, and booster seats available free of charge—just let us know in advance." },
+    { icon: FaWheelchair, title: "Accessible Vehicles", description: "We can arrange wheelchair-accessible vehicles with trained drivers for passengers with mobility needs." },
+    { icon: FaDog, title: "Pet-Friendly Transfers", description: "Traveling with a furry friend? We offer pet-friendly vehicles with crate options." },
+    { icon: FaUserTie, title: "Executive Chauffeur", description: "Professional, uniformed drivers trained in hospitality and local knowledge." }
   ];
 
   const stats = [
@@ -345,18 +210,18 @@ const AirportSGRTransfers = () => {
   return (
     <div className="bg-[#f5f2ee] font-sans text-black overflow-x-hidden selection:bg-stone-200">
       
-      {/* Global Styles */}
       <style>{`
         .bg-noise {
           position: fixed; top: 0; left: 0; width: 100%; height: 100%;
           pointer-events: none; z-index: 50; opacity: 0.04;
           background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
         }
-        .parallax {
-          background-attachment: fixed;
-          background-position: center;
-          background-repeat: no-repeat;
-          background-size: cover;
+        .cognito-form-container {
+          min-height: 600px;
+        }
+        .cognito-form-container iframe {
+          width: 100%;
+          border: none;
         }
       `}</style>
       <div className="bg-noise" />
@@ -365,7 +230,7 @@ const AirportSGRTransfers = () => {
       <section className="relative min-h-[80vh] flex items-center overflow-hidden">
         <div className="absolute inset-0">
           <img 
-            src="https://images.unsplash.com/photo-1577720643272-265f09367456?ixlib=rb-4.0.3&auto=format&fit=crop&w=2000&q=80"
+            src="https://images.unsplash.com/photo-1542296332-2e4473faf563?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
             alt="Airport transfer luxury vehicle"
             className="w-full h-full object-cover"
           />
@@ -386,26 +251,30 @@ const AirportSGRTransfers = () => {
               Seamless Travel, <br /><span className="italic text-[#ED9B40]">Every Time</span>
             </h1>
             <p className="text-xl text-white/80 mb-8 leading-relaxed max-w-2xl">
-              From JKIA to your hotel, from SGR terminus to the beach—experience the most reliable, comfortable, and stress-free transfers in Kenya. We track your flight, meet you at arrivals, and get you where you need to go.
+              From JKIA to your hotel, from SGR terminus to the beach—experience the most reliable, comfortable, and stress-free transfers in Kenya.
             </p>
             <div className="flex flex-wrap gap-4">
+              <button
+                onClick={() => {
+                  setShowForm(true);
+                  setTimeout(() => {
+                    document.getElementById('booking-form').scrollIntoView({ behavior: 'smooth' });
+                  }, 100);
+                }}
+                className="px-8 py-4 bg-[#ED9B40] text-[#093A3E] font-bold uppercase tracking-widest text-xs hover:bg-white transition-colors inline-flex items-center gap-2"
+              >
+                <FaClipboardList /> Request Transfer
+              </button>
               <a
                 href={getWhatsAppLink("Hello do you do airport or SGR transfers, if so please share your rates")}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-8 py-4 bg-[#ED9B40] text-[#093A3E] font-bold uppercase tracking-widest text-xs hover:bg-white transition-colors inline-flex items-center gap-2"
-              >
-                <FaWhatsapp /> Book on WhatsApp
-              </a>
-              <a
-                href="tel:+254720108914"
                 className="px-8 py-4 border border-white/30 text-white uppercase tracking-widest text-xs hover:bg-white/10 transition-colors inline-flex items-center gap-2"
               >
-                <FaPhone /> Call to Book
+                <FaWhatsapp /> Quick WhatsApp Booking
               </a>
             </div>
 
-            {/* Quick Stats */}
             <div className="flex gap-6 mt-12">
               <div className="flex items-center gap-2">
                 <FaPlane className="text-[#ED9B40]" />
@@ -421,6 +290,93 @@ const AirportSGRTransfers = () => {
               </div>
             </div>
           </motion.div>
+        </div>
+      </section>
+
+      {/* Booking Form Section - NEW */}
+      <section id="booking-form" className="py-20 px-6 bg-white">
+        <div className="max-w-[900px] mx-auto">
+          <div className="text-center mb-10">
+            <div className="inline-flex items-center gap-2 bg-[#ED9B40]/10 text-[#ED9B40] px-4 py-2 rounded-full text-sm font-medium mb-4">
+              <FaPen /> Online Booking
+            </div>
+            <h2 className="text-4xl md:text-5xl text-[#0F4C55] mb-4 font-serif" style={{ fontFamily: "'Playfair Display', serif" }}>
+              Request Your <span className="italic">Transfer</span>
+            </h2>
+            <p className="text-stone-600 max-w-2xl mx-auto">
+              Fill out the form below with your transfer details and we'll get back to you with a confirmation.
+            </p>
+          </div>
+
+          {/* Option Tabs */}
+          <div className="flex justify-center gap-4 mb-10">
+            <div className="bg-[#f5f2ee] p-1 rounded-full flex">
+              <button
+                onClick={() => setShowForm(true)}
+                className={`px-6 py-2 rounded-full text-sm font-medium transition-all ${
+                  showForm ? 'bg-[#0F4C55] text-white shadow-lg' : 'text-stone-500 hover:text-[#0F4C55]'
+                }`}
+              >
+                <FaClipboardList className="inline mr-2" />
+                Fill Online Form
+              </button>
+              <a
+                href={getWhatsAppLink("Hello do you do airport or SGR transfers, if so please share your rates")}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`px-6 py-2 rounded-full text-sm font-medium transition-all ${
+                  !showForm ? 'bg-[#0F4C55] text-white shadow-lg' : 'text-stone-500 hover:text-[#0F4C55]'
+                }`}
+              >
+                <FaWhatsapp className="inline mr-2" />
+                Book via WhatsApp
+              </a>
+            </div>
+          </div>
+
+          {/* Cognito Form */}
+          {showForm ? (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              className="bg-white rounded-sm border border-stone-200 shadow-lg overflow-hidden"
+            >
+              <div className="cognito-form-container">
+                <iframe 
+                  src="https://www.cognitoforms.com/HOMESBYMWEMA1/HomesByMwemaTransfer"
+                  style={{ width: '100%', height: '800px', border: 'none' }}
+                  title="Homes by Mwema Transfer Request Form"
+                />
+              </div>
+              <div className="p-4 bg-[#f5f2ee] border-t border-stone-200">
+                <p className="text-xs text-stone-500 text-center">
+                  Having trouble with the form? <a href={getWhatsAppLink("Hello! I'm having trouble with the online form. Can I book my transfer via WhatsApp instead?")} target="_blank" rel="noopener noreferrer" className="text-[#ED9B40] underline">Book via WhatsApp instead</a>
+                </p>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              className="bg-[#f5f2ee] p-12 rounded-sm border border-stone-200 text-center"
+            >
+              <FaWhatsapp className="text-5xl text-[#ED9B40] mx-auto mb-4" />
+              <h3 className="text-2xl font-bold text-[#0F4C55] mb-3 font-serif">Quick WhatsApp Booking</h3>
+              <p className="text-stone-600 mb-6 max-w-md mx-auto">
+                Prefer a faster option? Send us a message on WhatsApp with your transfer details and we'll confirm within minutes.
+              </p>
+              <a
+                href={getWhatsAppLink("Hello do you do airport or SGR transfers, if so please share your rates")}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-8 py-3 bg-[#25D366] text-white font-bold rounded-full hover:bg-[#20bd5a] transition-colors"
+              >
+                <FaWhatsapp /> Book on WhatsApp Now
+              </a>
+            </motion.div>
+          )}
         </div>
       </section>
 
@@ -446,25 +402,6 @@ const AirportSGRTransfers = () => {
               </motion.div>
             ))}
           </div>
-        </div>
-      </section>
-
-      {/* WhatsApp CTA - Prominent */}
-      <section className="py-16 px-6 bg-[#0F4C55] text-white">
-        <div className="max-w-[1000px] mx-auto text-center">
-          <FaWhatsapp className="text-5xl text-[#ED9B40] mx-auto mb-4" />
-          <h2 className="text-3xl md:text-4xl font-serif mb-4">Quick & Easy Booking on WhatsApp</h2>
-          <p className="text-white/80 mb-6 max-w-2xl mx-auto">
-            Send us your transfer details and we'll confirm your booking within minutes. Instant response, no waiting.
-          </p>
-          <a
-            href={getWhatsAppLink("Hello do you do airport or SGR transfers, if so please share your rates")}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-8 py-3 bg-[#ED9B40] text-[#093A3E] font-bold uppercase tracking-widest text-xs hover:bg-white transition-colors rounded-full"
-          >
-            <FaWhatsapp size={18} /> Send Booking Request
-          </a>
         </div>
       </section>
 
@@ -524,7 +461,6 @@ const AirportSGRTransfers = () => {
             </p>
           </div>
 
-          {/* Tabs */}
           <div className="flex justify-center gap-4 mb-12">
             <button
               onClick={() => setActiveTab('airport')}
@@ -548,7 +484,6 @@ const AirportSGRTransfers = () => {
             </button>
           </div>
 
-          {/* Route Tables */}
           <div className="bg-white rounded-sm border border-stone-200 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -596,7 +531,20 @@ const AirportSGRTransfers = () => {
             </div>
           </div>
 
-          <p className="text-center text-stone-500 text-sm mt-6">
+          <div className="text-center mt-6">
+            <button
+              onClick={() => {
+                setShowForm(true);
+                setTimeout(() => {
+                  document.getElementById('booking-form').scrollIntoView({ behavior: 'smooth' });
+                }, 100);
+              }}
+              className="inline-flex items-center gap-2 px-8 py-3 bg-[#ED9B40] text-[#093A3E] font-bold uppercase tracking-widest text-xs hover:bg-[#F5B56B] transition-colors"
+            >
+              <FaClipboardList /> Request Your Transfer
+            </button>
+          </div>
+          <p className="text-center text-stone-500 text-sm mt-4">
             *All transfers include flight tracking, meet & greet, and luggage assistance
           </p>
         </div>
@@ -614,7 +562,7 @@ const AirportSGRTransfers = () => {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {additionalServices.map((service, index) => (
               <motion.div
                 key={index}
@@ -645,26 +593,18 @@ const AirportSGRTransfers = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-[#0F4C55] rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-4">1</div>
-              <h3 className="font-bold text-[#0F4C55] mb-2">Book Online or WhatsApp</h3>
-              <p className="text-sm text-stone-600">Select your route, vehicle, and time. Instant confirmation on WhatsApp.</p>
-            </div>
-            <div className="text-center">
-              <div className="w-16 h-16 bg-[#0F4C55] rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-4">2</div>
-              <h3 className="font-bold text-[#0F4C55] mb-2">We Track Your Flight</h3>
-              <p className="text-sm text-stone-600">We monitor your arrival in real-time and adjust accordingly.</p>
-            </div>
-            <div className="text-center">
-              <div className="w-16 h-16 bg-[#0F4C55] rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-4">3</div>
-              <h3 className="font-bold text-[#0F4C55] mb-2">Meet & Greet</h3>
-              <p className="text-sm text-stone-600">Your driver meets you at arrivals with a name board.</p>
-            </div>
-            <div className="text-center">
-              <div className="w-16 h-16 bg-[#0F4C55] rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-4">4</div>
-              <h3 className="font-bold text-[#0F4C55] mb-2">Enjoy the Ride</h3>
-              <p className="text-sm text-stone-600">Relax in comfort as we take you to your destination.</p>
-            </div>
+            {[
+              { step: "1", title: "Request Transfer", desc: "Fill the online form or message us on WhatsApp with your details." },
+              { step: "2", title: "We Track Your Flight", desc: "We monitor your arrival in real-time and adjust accordingly." },
+              { step: "3", title: "Meet & Greet", desc: "Your driver meets you at arrivals with a name board." },
+              { step: "4", title: "Enjoy the Ride", desc: "Relax in comfort as we take you to your destination." }
+            ].map((item, i) => (
+              <div key={i} className="text-center">
+                <div className="w-16 h-16 bg-[#0F4C55] rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-4">{item.step}</div>
+                <h3 className="font-bold text-[#0F4C55] mb-2">{item.title}</h3>
+                <p className="text-sm text-stone-600">{item.desc}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -764,19 +704,24 @@ const AirportSGRTransfers = () => {
             Book your airport or SGR transfer now and experience the most reliable service in Kenya.
           </p>
           <div className="flex flex-wrap gap-4 justify-center">
+            <button
+              onClick={() => {
+                setShowForm(true);
+                setTimeout(() => {
+                  document.getElementById('booking-form').scrollIntoView({ behavior: 'smooth' });
+                }, 100);
+              }}
+              className="inline-flex items-center gap-2 px-8 py-4 bg-[#ED9B40] text-[#093A3E] font-bold uppercase tracking-widest text-xs hover:bg-white transition-colors"
+            >
+              <FaClipboardList /> Request Transfer
+            </button>
             <a
               href={getWhatsAppLink("Hello do you do airport or SGR transfers, if so please share your rates")}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-8 py-4 bg-[#ED9B40] text-[#093A3E] font-bold uppercase tracking-widest text-xs hover:bg-white transition-colors"
-            >
-              <FaWhatsapp /> Book on WhatsApp
-            </a>
-            <a
-              href="tel:+254720108914"
               className="inline-flex items-center gap-2 px-8 py-4 border border-white/30 text-white uppercase tracking-widest text-xs hover:bg-white/10 transition-colors"
             >
-              <FaPhone /> Call to Book
+              <FaWhatsapp /> WhatsApp Booking
             </a>
           </div>
           
@@ -784,10 +729,8 @@ const AirportSGRTransfers = () => {
             <span className="flex items-center gap-2"><FaShieldAlt className="text-[#ED9B40]" /> Fully Insured</span>
             <span className="flex items-center gap-2"><FaClock className="text-[#ED9B40]" /> 24/7 Support</span>
             <span className="flex items-center gap-2"><FaPlane className="text-[#ED9B40]" /> Flight Tracking</span>
-            <span className="flex items-center gap-2"><FaWifi className="text-[#ED9B40]" /> Onboard Wi-Fi</span>
           </div>
 
-          {/* Contact Options */}
           <div className="mt-8 flex justify-center gap-4">
             <a href="https://wa.me/254720108914" className="text-white/60 hover:text-[#ED9B40] transition-colors">
               <FaWhatsapp size={20} />

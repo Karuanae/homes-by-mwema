@@ -7,6 +7,7 @@ export default function Footer() {
   // Group additional services for better organization
   const additionalServices = [
     { name: "Social Media Marketing", path: "/social-media-marketing" },
+    { name: "Interior Design Setup", path: "/interior-design" },
     { name: "Car Hire Services", path: "/car-hire" },
     { name: "Fully Furnished Units", path: "/fully-furnished-units" },
     { name: "Safari Tours", path: "/safari-tours" },
