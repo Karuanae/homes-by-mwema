@@ -1,7 +1,8 @@
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { FaEye, FaEyeSlash, FaSpinner, FaGoogle } from 'react-icons/fa';
+import { FaEye, FaEyeSlash, FaSpinner } from 'react-icons/fa';
+import { FcGoogle } from 'react-icons/fc';
 import { useAuth } from '../context/AuthContext';
 import { socialAuth } from '../services/socialAuth';
 
@@ -451,7 +452,7 @@ export default function Register() {
               type="button" onClick={handleGoogleClick} disabled={isLoading}
               className="w-full py-3 border border-stone-200 text-[10px] uppercase tracking-widest hover:bg-stone-50 transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
             >
-              <FaGoogle className="text-lg" /> Register with Google
+              <FcGoogle className="text-lg" /> Register with Google
             </button>
 
             <p className="text-stone-500 font-serif text-sm">
