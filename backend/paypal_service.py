@@ -127,19 +127,14 @@ class PayPalService:
                     }
                 }
             ],
-            "payment_source": {
-                "paypal": {
-                    "experience_context": {
-                        "payment_method_preference": "IMMEDIATE_PAYMENT_REQUIRED",
-                        "brand_name": "Homes by Mwema",
-                        "locale": "en-US",
-                        "landing_page": "LOGIN",
-                        "shipping_preference": "NO_SHIPPING",
-                        "user_action": "PAY_NOW",
-                        "return_url": return_url or current_app.config.get('PAYPAL_RETURN_URL', 'http://localhost:5173/payment/success'),
-                        "cancel_url": cancel_url or current_app.config.get('PAYPAL_CANCEL_URL', 'http://localhost:5173/payment/cancel')
-                    }
-                }
+            "application_context": {
+                "brand_name": "Homes by Mwema",
+                "locale": "en-US",
+                "landing_page": "LOGIN",
+                "shipping_preference": "NO_SHIPPING",
+                "user_action": "PAY_NOW",
+                "return_url": return_url or current_app.config.get('PAYPAL_RETURN_URL', 'http://localhost:5173/payment/success'),
+                "cancel_url": cancel_url or current_app.config.get('PAYPAL_CANCEL_URL', 'http://localhost:5173/payment/cancel')
             }
         }
         
@@ -149,7 +144,7 @@ class PayPalService:
             # Extract approval URL
             approval_url = None
             for link in result.get('links', []):
-                if link.get('rel') == 'payer-action':
+                if link.get('rel') in ('approve', 'payer-action'):
                     approval_url = link.get('href')
                     break
             
