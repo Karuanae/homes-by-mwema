@@ -229,7 +229,7 @@ export default function ProfileSettings() {
             <div className="bg-[#093A3E] px-6 py-4">
               <h2 className="text-white font-serif text-lg flex items-center gap-2">
                 <FaUser className="text-[#ED9B40]" />
-                Personal Information
+                Personal Information.
               </h2>
             </div>
             
