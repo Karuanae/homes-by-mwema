@@ -59,7 +59,8 @@ db.init_app(app)
 
 # ===== CORS CONFIGURATION =====
 default_origins = 'http://localhost:3000,http://localhost:5173'
-allowed_origins = os.environ.get('ALLOWED_ORIGINS', default_origins).split(',')
+allowed_origins_str = os.environ.get('ALLOWED_ORIGINS', default_origins)
+allowed_origins = [d.strip() for d in allowed_origins_str.split(',') if d.strip()]
 
 vercel_domains = [
     'https://homes-by-mwema-bc0hneof2-karuanaes-projects.vercel.app',
@@ -73,36 +74,70 @@ custom_domains = [
 
 railway_domain = os.environ.get('RAILWAY_PUBLIC_DOMAIN')
 if railway_domain:
-    allowed_origins.append(f'https://{railway_domain}')
-    allowed_origins.append(f'https://www.{railway_domain}')
+    allowed_origins.extend([f'https://{railway_domain}', f'https://www.{railway_domain}'])
 
-all_domains = list({d for d in allowed_origins + vercel_domains + custom_domains if d})
+# Combine all domains and remove duplicates/empty strings
+all_domains = list({d for d in allowed_origins + vercel_domains + custom_domains if d and d.strip()})
 
-CORS(app, resources={
-    r"/api/*": {
-        "origins": all_domains,
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "idempotency-key"],
-        "expose_headers": ["Content-Type", "Authorization"],
-        "supports_credentials": True,
-        "max_age": 600
-    },
-    r"/socket.io/*": {
-        "origins": all_domains,
-        "supports_credentials": True
-    }
-})
+CORS(app, 
+     resources={
+         r"/api/*": {
+             "origins": all_domains,
+             "methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+             "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "idempotency-key"],
+             "expose_headers": ["Content-Type", "Authorization", "X-Total-Count"],
+             "supports_credentials": True,
+             "max_age": 3600,
+             "send_wildcard": False,
+             "vary_header": True
+         },
+         r"/socket.io/*": {
+             "origins": all_domains,
+             "supports_credentials": True
+         }
+     },
+     expose_headers=['Content-Type', 'Authorization', 'X-Total-Count'],
+     max_age=3600
+)
 
-print("=" * 50)
-print("🌐 CORS Allowed Origins:")
+print("=" * 60)
+print("🌐 CORS Configuration Active")
+print(f"   Environment ALLOWED_ORIGINS: {os.environ.get('ALLOWED_ORIGINS', 'NOT SET')}")
+print(f"   Railway Public Domain: {railway_domain or 'NOT SET'}")
+print(f"   Total allowed origins: {len(all_domains)}")
 for origin in sorted(all_domains):
-    print(f"  • {origin}")
-print("=" * 50)
+    print(f"     ✓ {origin}")
+print("=" * 60)
 
 # ===== JWT CONFIGURATION =====
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'akerywaeiyff\jk632423746')
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=24)
 app.config['JWT_VERIFY_SUB'] = False
+
+# ===== CORS HEADERS HANDLER =====
+@app.after_request
+def after_request(response):
+    """Ensure CORS headers are set on all responses"""
+    origin = request.headers.get('Origin')
+    
+    # Check if origin is in our allowed list
+    if origin in all_domains:
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+    elif origin and origin.replace('https://', '').replace('http://', '') in [d.replace('https://', '').replace('http://', '') for d in all_domains]:
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+    else:
+        # Still set headers for any allowed origin as fallback
+        response.headers['Access-Control-Allow-Origin'] = ', '.join(all_domains)
+    
+    # Ensure these headers are always present
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, PATCH, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, idempotency-key'
+    response.headers['Access-Control-Expose-Headers'] = 'Content-Type, Authorization, X-Total-Count'
+    response.headers['Access-Control-Max-Age'] = '3600'
+    
+    return response
 
 # ===== BOOKING & PAYMENT CONFIGURATION =====
 # All values come from environment variables with sensible fallbacks
