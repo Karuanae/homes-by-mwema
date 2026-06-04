@@ -637,7 +637,7 @@ const InteriorDesignSetup = () => {
           
           <div className="mt-12 pt-12 border-t border-white/10 flex flex-wrap gap-8 justify-center text-sm">
             <span className="flex items-center gap-2"><FaShieldAlt className="text-[#ED9B40]" /> Quality Guarantee</span>
-            <span className="flex items-center gap-2"><FaRegClock className="text-[#ED9B40]" /> On-Time Delivery</span>
+            <span className="flex items-center gap-2"><FaRegClock className="text-[#ED9B40]" /> On Time Delivery</span>
             <span className="flex items-center gap-2"><FaHome className="text-[#ED9B40]" /> 150+ Homes Styled</span>
           </div>
 
