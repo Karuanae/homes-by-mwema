@@ -16,7 +16,7 @@ const DEFAULT_META = {
     name: "Homes by Mwema",
     url: SITE_URL,
     image: `${SITE_URL}/og-image2.png`,
-    telephone: "+254720108914",
+    telephone: "+25459170780",
     areaServed: ["Nairobi", "Mombasa", "Diani", "Kileleshwa", "Kilimani", "Westlands"],
     sameAs: [
       "https://www.instagram.com/homes_bymwema",
@@ -47,7 +47,7 @@ const PAGE_META = {
       name: "Homes by Mwema",
       url: SITE_URL,
       image: `${SITE_URL}/og-image2.png`,
-      telephone: "+254720108914",
+      telephone: "+25459170780",
       address: {
         "@type": "PostalAddress",
         addressCountry: "KE",

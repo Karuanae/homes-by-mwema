@@ -494,7 +494,7 @@ const TermsAndPolicy = () => {
                     </p>
                     <ul className="list-none text-stone-700 space-y-2">
                       <li className="flex items-center gap-2"><FaEnvelope className="text-[#ED9B40]" /> privacy@homesbymwema.com</li>
-                      <li className="flex items-center gap-2"><FaPhone className="text-[#ED9B40]" /> +254 700 000 000</li>
+                      <li className="flex items-center gap-2"><FaPhone className="text-[#ED9B40]" /> +25459170780</li>
                       <li className="flex items-center gap-2"><FaMapMarkerAlt className="text-[#ED9B40]" /> Nairobi, Kenya</li>
                     </ul>
                   </div>

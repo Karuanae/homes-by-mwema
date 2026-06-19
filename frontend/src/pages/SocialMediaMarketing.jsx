@@ -50,7 +50,7 @@ const SocialMediaMarketing = () => {
   const [expandedFaq, setExpandedFaq] = useState(null);
   const [activePlatform, setActivePlatform] = useState('instagram');
 
-  const whatsappNumber = "254720108914";
+  const whatsappNumber = "25459170780";
   const getWhatsAppLink = (message) => {
     return `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
   };
@@ -541,7 +541,7 @@ const SocialMediaMarketing = () => {
               <FaWhatsapp /> List Your Property Now
             </a>
             <a
-              href="tel:+254720108914"
+              href="tel:+25459170780"
               className="inline-flex items-center gap-2 px-8 py-4 border border-white/30 text-white uppercase tracking-widest text-xs hover:bg-white/10 transition-colors"
             >
               <FaPhone /> Call Us

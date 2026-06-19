@@ -135,14 +135,14 @@ export default function PaymentCancel() {
                   <h4 className="font-medium text-sm mb-3">Contact Concierge</h4>
                   <div className="space-y-2">
                     <a
-                      href="tel:+254700000000"
+                      href="tel:+25459170780"
                       className="flex items-center gap-2 p-2 hover:bg-stone-50 rounded-lg transition-colors"
                     >
                       <Phone className="w-4 h-4 text-stone-600" />
-                      <span className="text-sm">+254 700 000 000</span>
+                      <span className="text-sm">+25459170780</span>
                     </a>
                     <a
-                      href="https://wa.me/254700000000"
+                      href="https://wa.me/25459170780"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-2 p-2 hover:bg-stone-50 rounded-lg transition-colors"

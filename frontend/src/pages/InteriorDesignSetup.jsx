@@ -59,7 +59,7 @@ const InteriorDesignSetup = () => {
   const [expandedFaq, setExpandedFaq] = useState(null);
 
   // WhatsApp configuration
-  const whatsappNumber = "254720108914";
+  const whatsappNumber = "25459170780";
   const getWhatsAppLink = (message) => {
     return `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
   };
@@ -307,7 +307,7 @@ const InteriorDesignSetup = () => {
                 <FaWhatsapp /> WhatsApp Consultation
               </a>
               <a
-                href="tel:+254720108914"
+                href="tel:+25459170780"
                 className="px-8 py-4 border border-white/30 text-white uppercase tracking-widest text-xs hover:bg-white/10 transition-colors inline-flex items-center gap-2"
               >
                 <FaPhone /> Call Us
@@ -345,7 +345,7 @@ const InteriorDesignSetup = () => {
               <FaWhatsapp size={20} /> Start WhatsApp Chat
             </a>
             <p className="text-xs text-stone-400 mt-4">
-              Or call us directly: <a href="tel:+254720108914" className="text-[#0F4C55]">+254 720 108 914</a>
+              Or call us directly: <a href="tel:+25459170780" className="text-[#0F4C55]">+25459170780</a>
             </p>
           </div>
         </div>
@@ -628,7 +628,7 @@ const InteriorDesignSetup = () => {
               <FaWhatsapp /> WhatsApp Consultation
             </a>
             <a
-              href="tel:+254720108914"
+              href="tel:+25459170780"
               className="inline-flex items-center gap-2 px-8 py-4 border border-white/30 text-white uppercase tracking-widest text-xs hover:bg-white/10 transition-colors"
             >
               <FaPhone /> Call Us
@@ -642,7 +642,7 @@ const InteriorDesignSetup = () => {
           </div>
 
           <div className="mt-8 flex justify-center gap-4">
-            <a href="https://wa.me/254720108914" className="text-white/60 hover:text-[#ED9B40] transition-colors">
+            <a href="https://wa.me/25459170780" className="text-white/60 hover:text-[#ED9B40] transition-colors">
               <FaWhatsapp size={20} />
             </a>
             <a href="mailto:design@homesbymwema.com" className="text-white/60 hover:text-[#ED9B40] transition-colors">

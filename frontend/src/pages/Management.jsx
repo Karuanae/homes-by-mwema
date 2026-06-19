@@ -23,7 +23,7 @@ export default function Management() {
   const [activeProperty, setActiveProperty] = useState(null);
 
   // WhatsApp configuration
-  const whatsappNumber = "254720108914";
+  const whatsappNumber = "25459170780";
   const getWhatsAppLink = (message) => {
     return `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
   };
@@ -563,7 +563,7 @@ Now, thanks to Homes By Mwema, my properties are booked solid 80% of the time, r
             <a href="mailto:homesbymwema@gmail.com" className="flex items-center gap-2 text-white/70 hover:text-[#ED9B40] transition-colors text-sm">
               <FaEnvelope /> homesbymwema@gmail.com
             </a>
-            <a href="tel:+254720108914" className="flex items-center gap-2 text-white/70 hover:text-[#ED9B40] transition-colors text-sm">
+            <a href="tel:+25459170780" className="flex items-center gap-2 text-white/70 hover:text-[#ED9B40] transition-colors text-sm">
               <FaPhone /> Call Us
             </a>
           </div>

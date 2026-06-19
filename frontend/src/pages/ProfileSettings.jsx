@@ -281,7 +281,7 @@ export default function ProfileSettings() {
                     value={profile.phone || ''}
                     onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
                     className="w-full pl-12 pr-4 py-3 border border-stone-200 rounded-lg bg-stone-50 focus:outline-none focus:border-stone-400 text-sm"
-                    placeholder="+254 700 000 000"
+                    placeholder="+25459170780"
                   />
                 </div>
               </div>

@@ -33,7 +33,7 @@ const SafariTours = () => {
   const [expandedFaq, setExpandedFaq] = useState(null);
 
   // WhatsApp configuration
-  const whatsappNumber = "254720108914";
+  const whatsappNumber = "25459170780";
   const getWhatsAppLink = (message) => {
     return `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
   };
@@ -644,7 +644,7 @@ const SafariTours = () => {
               <FaWhatsapp className="inline mr-2" /> Plan Your Safari on WhatsApp
             </a>
             <a
-              href="tel:+254720108914"
+              href="tel:+25459170780"
               className="inline-block px-8 py-4 border border-white/50 text-white uppercase tracking-widest text-xs hover:bg-white/20 transition-colors"
             >
               <FaPhone className="inline mr-2" /> Call to Discuss
