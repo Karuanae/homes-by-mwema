@@ -343,7 +343,7 @@ with app.app_context():
         admin_email    = os.environ.get('ADMIN_EMAIL', 'homesbymwema@gmail.com')
         admin_password = os.environ.get('ADMIN_PASSWORD', 'admin123')
         admin_name     = os.environ.get('ADMIN_NAME', 'Homes by Mwema Admin')
-        admin_phone    = os.environ.get('ADMIN_PHONE', '+25459170780')
+        admin_phone    = os.environ.get('ADMIN_PHONE', '+254759170780')
 
         admin_user = User.query.filter_by(email=admin_email).first()
 

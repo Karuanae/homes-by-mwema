@@ -60,7 +60,7 @@ const AirportSGRTransfers = () => {
   const [showForm, setShowForm] = useState(false);
 
   // WhatsApp configuration
-  const whatsappNumber = "25459170780";
+  const whatsappNumber = "254759170780";
   const getWhatsAppLink = (message) => {
     return `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
   };
@@ -732,7 +732,7 @@ const AirportSGRTransfers = () => {
           </div>
 
           <div className="mt-8 flex justify-center gap-4">
-            <a href="https://wa.me/25459170780" className="text-white/60 hover:text-[#ED9B40] transition-colors">
+            <a href="https://wa.me/254759170780" className="text-white/60 hover:text-[#ED9B40] transition-colors">
               <FaWhatsapp size={20} />
             </a>
             <a href="mailto:transfers@homesbymwema.com" className="text-white/60 hover:text-[#ED9B40] transition-colors">

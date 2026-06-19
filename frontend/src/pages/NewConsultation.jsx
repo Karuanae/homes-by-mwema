@@ -286,7 +286,7 @@ export default function NewConsultation() {
                           value={formData.phone}
                           onChange={e => setFormData(f => ({ ...f, phone: e.target.value }))}
                           className="w-full pl-9 pr-4 py-3 border border-stone-200 rounded-xl focus:border-[#C1A173] focus:outline-none text-sm"
-                          placeholder="+25459170780"
+                          placeholder="+254759170780"
                         />
                       </div>
                     </div>

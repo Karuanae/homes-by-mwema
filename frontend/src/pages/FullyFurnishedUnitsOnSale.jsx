@@ -838,10 +838,10 @@ const FullyFurnishedUnitsOnSale = () => {
               Schedule a Viewing <FaArrowRight />
             </Link>
             <a
-              href="tel:+25459170780"
+              href="tel:+254759170780"
               className="inline-flex items-center gap-2 px-8 py-4 border border-white/30 text-white uppercase tracking-widest text-xs hover:bg-white/10 transition-colors"
             >
-              Call Us: +25459170780
+              Call Us: +254759170780
             </a>
           </div>
           

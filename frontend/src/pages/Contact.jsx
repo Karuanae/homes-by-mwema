@@ -253,7 +253,7 @@ const Contact = () => {
             Get instant responses from our team. We're just a message away!
           </p>
           <a 
-            href="https://wa.me/25459170780?text=Hello%20Homes%20by%20Mwema!%20I'd%20like%20to%20inquire%20about%20your%20services." 
+            href="https://wa.me/254759170780?text=Hello%20Homes%20by%20Mwema!%20I'd%20like%20to%20inquire%20about%20your%20services." 
             target="_blank" 
             rel="noopener noreferrer"
             className="inline-flex items-center gap-3 px-8 py-4 bg-[#ED9B40] text-[#093A3E] font-bold uppercase tracking-widest text-sm hover:bg-white transition-colors rounded-full"
@@ -335,7 +335,7 @@ const Contact = () => {
                         value={formData.phone}
                         onChange={handleChange}
                         className="w-full px-4 py-3 border border-stone-200 rounded-sm bg-white focus:outline-none focus:border-[#ED9B40] text-sm"
-                        placeholder="+25459170780"
+                        placeholder="+254759170780"
                       />
                     </div>
                     <div>
@@ -392,13 +392,13 @@ const Contact = () => {
               <div className="bg-[#f5f2ee] p-8 rounded-sm border border-stone-200 mb-6">
                 <h3 className="text-xl font-serif text-[#0F4C55] mb-4">Quick Contacts</h3>
                 
-                <a href="tel:+25459170780" className="flex items-center gap-3 mb-4 group">
+                <a href="tel:+254759170780" className="flex items-center gap-3 mb-4 group">
                   <div className="w-10 h-10 bg-[#ED9B40]/10 rounded-full flex items-center justify-center group-hover:bg-[#ED9B40] transition-colors">
                     <FaPhone className="text-[#ED9B40] group-hover:text-white transition-colors" />
                   </div>
                   <div>
                     <p className="text-xs uppercase tracking-widest text-stone-400">Call Us</p>
-                    <p className="text-[#0F4C55] font-medium">+25459170780</p>
+                    <p className="text-[#0F4C55] font-medium">+254759170780</p>
                   </div>
                 </a>
 
@@ -412,13 +412,13 @@ const Contact = () => {
                   </div>
                 </a>
 
-                <a href="https://wa.me/25459170780" className="flex items-center gap-3 group">
+                <a href="https://wa.me/254759170780" className="flex items-center gap-3 group">
                   <div className="w-10 h-10 bg-[#ED9B40]/10 rounded-full flex items-center justify-center group-hover:bg-[#ED9B40] transition-colors">
                     <FaWhatsapp className="text-[#ED9B40] group-hover:text-white transition-colors" />
                   </div>
                   <div>
                     <p className="text-xs uppercase tracking-widest text-stone-400">WhatsApp</p>
-                    <p className="text-[#0F4C55] font-medium">+25459170780</p>
+                    <p className="text-[#0F4C55] font-medium">+254759170780</p>
                   </div>
                 </a>
               </div>
@@ -572,7 +572,7 @@ const Contact = () => {
           </p>
           <div className="flex flex-wrap gap-4 justify-center">
             <a
-              href="https://wa.me/25459170780"
+              href="https://wa.me/254759170780"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-8 py-4 bg-[#ED9B40] text-[#093A3E] font-bold uppercase tracking-widest text-xs hover:bg-white transition-colors"
@@ -580,7 +580,7 @@ const Contact = () => {
               <FaWhatsapp /> WhatsApp Us Now
             </a>
             <a
-              href="tel:+25459170780"
+              href="tel:+254759170780"
               className="inline-flex items-center gap-2 px-8 py-4 border border-white/30 text-white uppercase tracking-widest text-xs hover:bg-white/10 transition-colors"
             >
               <FaPhone /> Call Us

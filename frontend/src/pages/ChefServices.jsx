@@ -52,7 +52,7 @@ const ChefServices = () => {
   const [expandedFaq, setExpandedFaq] = useState(null);
 
   // WhatsApp configuration
-  const whatsappNumber = "25459170780";
+  const whatsappNumber = "254759170780";
   const getWhatsAppLink = (message) => {
     return `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
   };
@@ -598,7 +598,7 @@ const ChefServices = () => {
                       <FaWhatsapp /> Inquire on WhatsApp
                     </a>
                     <a
-                      href="tel:+25459170780"
+                      href="tel:+254759170780"
                       className="inline-flex items-center gap-2 px-6 py-3 border border-[#0F4C55] text-[#0F4C55] text-xs uppercase tracking-widest font-bold hover:bg-[#0F4C55] hover:text-white transition-colors rounded-lg"
                     >
                       <FaPhone /> Call Us
@@ -712,7 +712,7 @@ const ChefServices = () => {
               <FaWhatsapp /> Book on WhatsApp
             </a>
             <a
-              href="tel:+25459170780"
+              href="tel:+254759170780"
               className="inline-flex items-center gap-2 px-8 py-4 border border-white/30 text-white uppercase tracking-widest text-xs hover:bg-white/10 transition-colors rounded-lg"
             >
               <FaPhone /> Call to Discuss

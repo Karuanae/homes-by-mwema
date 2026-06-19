@@ -35,7 +35,7 @@ const ListingOptimization = () => {
   const [expandedFaq, setExpandedFaq] = useState(null);
 
   // WhatsApp configuration
-  const whatsappNumber = "25459170780";
+  const whatsappNumber = "254759170780";
   const getWhatsAppLink = (message) => {
     return `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
   };
@@ -629,7 +629,7 @@ const ListingOptimization = () => {
               <FaWhatsapp /> Optimize My Listing on WhatsApp
             </a>
             <a
-              href="tel:+25459170780"
+              href="tel:+254759170780"
               className="inline-flex items-center gap-2 px-8 py-4 border border-white/30 text-white uppercase tracking-widest text-xs hover:bg-white/10 transition-colors"
             >
               <FaPhone /> Call to Discuss
