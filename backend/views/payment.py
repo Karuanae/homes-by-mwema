@@ -17,6 +17,20 @@ from views.booking import delete_if_timer_elapsed
 payment_bp = Blueprint('payment', __name__)
 logger = logging.getLogger(__name__)
 
+
+def generate_mpesa_account_reference(user, booking_id):
+    """Generate a default AccountReference based on the registered user name."""
+    if not user or not user.name:
+        return f"BOOK{booking_id}"
+
+    normalized = ''.join(ch for ch in user.name.upper() if ch.isalnum())
+    if not normalized:
+        return f"BOOK{booking_id}"
+
+    max_name_length = 10
+    normalized = normalized[:max_name_length]
+    return f"{normalized}{booking_id}"
+
 def verify_mpesa_signature(request):
     """
     Verify that callback is genuinely from Safaricom
@@ -115,10 +129,12 @@ def initiate_mpesa_payment():
 
     try:
         mpesa_service = MPesaService()
+        payment_ref = generate_mpesa_account_reference(booking.user, booking.id)
+
         mpesa_result = mpesa_service.stk_push(
             phone_number=phone,
             amount=int(data['amount']),
-            account_reference=f"BOOK{booking.id}",
+            account_reference=payment_ref,
             transaction_desc=f"Payment for booking #{booking.id}"
         )
 

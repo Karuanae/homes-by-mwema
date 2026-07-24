@@ -111,8 +111,7 @@ class MPesaService:
         }
         
                 # Correct for Bank PayBill setup
-        bank_paybill = '542542' 
-        your_bank_account = '008814'
+        bank_paybill = '542542'
 
         payload = {
             'BusinessShortCode': bank_paybill,
@@ -124,7 +123,7 @@ class MPesaService:
             'PartyB': bank_paybill,  # MUST be the bank's PayBill number
             'PhoneNumber': phone_number,
             'CallBackURL': self.callback_url,
-            'AccountReference': your_bank_account, # YOUR 008814 number goes here!
+            'AccountReference': account_reference,
             'TransactionDesc': transaction_desc
         }
         
