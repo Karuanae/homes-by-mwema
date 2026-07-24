@@ -19,17 +19,28 @@ logger = logging.getLogger(__name__)
 
 
 def generate_mpesa_account_reference(user, booking_id):
-    """Generate a default AccountReference based on the registered user name."""
+    """Generate AccountReference for M-PESA STK push.
+
+    This value is displayed in the M-PESA confirmation popup as the account number.
+    Use the registered user name (one or two name parts) when available.
+    """
     if not user or not user.name:
         return f"BOOK{booking_id}"
 
-    normalized = ''.join(ch for ch in user.name.upper() if ch.isalnum())
-    if not normalized:
+    parts = [part for part in user.name.strip().split() if part]
+    if not parts:
         return f"BOOK{booking_id}"
 
-    max_name_length = 10
-    normalized = normalized[:max_name_length]
-    return f"{normalized}{booking_id}"
+    selected_parts = parts[:2]
+    cleaned_parts = [
+        ''.join(ch for ch in part if ch.isalnum())
+        for part in selected_parts
+    ]
+    cleaned_parts = [part for part in cleaned_parts if part]
+    if not cleaned_parts:
+        return f"BOOK{booking_id}"
+
+    return ' '.join(cleaned_parts)
 
 def verify_mpesa_signature(request):
     """
