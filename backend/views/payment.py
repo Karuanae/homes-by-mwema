@@ -8,6 +8,7 @@ import hmac
 import hashlib
 import json
 import logging
+import re
 import uuid
 import requests
 from mpesa_service import MPesaService
@@ -24,23 +25,63 @@ def generate_mpesa_account_reference(user, booking_id):
     This value is displayed in the M-PESA confirmation popup as the account number.
     Use the registered user name (one or two name parts) when available.
     """
-    if not user or not user.name:
+    raw_name = None
+    if user:
+        raw_name = getattr(user, 'name', None)
+        if not raw_name:
+            raw_name = getattr(user, 'first_name', None)
+        if not raw_name:
+            raw_name = getattr(user, 'last_name', None)
+        if not raw_name:
+            raw_name = getattr(user, 'email', None)
+
+    if not raw_name or not str(raw_name).strip():
+        current_app.logger.warning(
+            "MPESA account reference fallback used because no valid user name/email exists for booking %s user_id=%s",
+            booking_id,
+            getattr(user, 'id', None)
+        )
         return f"BOOK{booking_id}"
 
-    parts = [part for part in user.name.strip().split() if part]
+    raw_name = str(raw_name).strip()
+    if '@' in raw_name and not getattr(user, 'name', None):
+        raw_name = raw_name.split('@')[0]
+
+    parts = [part for part in raw_name.split() if part]
     if not parts:
+        current_app.logger.warning(
+            "MPESA account reference fallback used because cleaned name was empty for booking %s user_id=%s raw_name=%r",
+            booking_id,
+            getattr(user, 'id', None),
+            raw_name
+        )
         return f"BOOK{booking_id}"
 
     selected_parts = parts[:2]
-    cleaned_parts = [
-        ''.join(ch for ch in part if ch.isalnum())
-        for part in selected_parts
-    ]
-    cleaned_parts = [part for part in cleaned_parts if part]
+    cleaned_parts = []
+    for part in selected_parts:
+        cleaned = re.sub(r'[^A-Za-z0-9]', '', part)
+        if cleaned:
+            cleaned_parts.append(cleaned)
+
     if not cleaned_parts:
+        current_app.logger.warning(
+            "MPESA account reference fallback used because name parts cleaned to empty for booking %s user_id=%s raw_name=%r",
+            booking_id,
+            getattr(user, 'id', None),
+            raw_name
+        )
         return f"BOOK{booking_id}"
 
-    return ' '.join(cleaned_parts)
+    account_ref = ' '.join(cleaned_parts)
+    current_app.logger.info(
+        "MPESA account reference generated: booking_id=%s user_id=%s raw_name=%r account_ref=%s",
+        booking_id,
+        getattr(user, 'id', None),
+        raw_name,
+        account_ref
+    )
+    return account_ref
 
 def verify_mpesa_signature(request):
     """
@@ -140,7 +181,19 @@ def initiate_mpesa_payment():
 
     try:
         mpesa_service = MPesaService()
-        payment_ref = generate_mpesa_account_reference(booking.user, booking.id)
+        booking_user = User.query.get(booking.user_id) if booking.user_id else None
+        current_app.logger.info(
+            "MPESA account reference debug: booking_id=%s user_id=%s booking_user=%s",
+            booking.id,
+            booking.user_id,
+            repr(booking_user.name if booking_user else None)
+        )
+        payment_ref = generate_mpesa_account_reference(booking_user, booking.id)
+        current_app.logger.info(
+            "MPESA account reference final value: %s for booking %s",
+            payment_ref,
+            booking.id
+        )
 
         mpesa_result = mpesa_service.stk_push(
             phone_number=phone,
