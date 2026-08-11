@@ -352,14 +352,35 @@ with app.app_context():
                 name=admin_name,
                 email=admin_email,
                 phone=admin_phone,
-                role="admin"
+                role="admin",
+                auth_provider='email',
+                email_verified=True,
             )
             admin_user.set_password(admin_password)
+            admin_user.email_verification_code = None
+            admin_user.email_verification_code_expires = None
+            admin_user.email_verification_token = None
+            admin_user.email_verification_expires = None
             db.session.add(admin_user)
             db.session.commit()
             print(f"✅ Created admin user: {admin_email}")
         else:
             updated = False
+
+            if admin_user.role != 'admin':
+                admin_user.role = 'admin'
+                updated = True
+                print("🔄 Updated admin role to admin")
+
+            if admin_user.auth_provider != 'email':
+                admin_user.auth_provider = 'email'
+                updated = True
+                print("🔄 Updated admin auth provider to email")
+
+            if not admin_user.email_verified:
+                admin_user.email_verified = True
+                updated = True
+                print("🔄 Verified admin email")
 
             if not admin_user.check_password(admin_password):
                 admin_user.set_password(admin_password)
@@ -380,6 +401,19 @@ with app.app_context():
                 admin_user.phone = admin_phone
                 updated = True
                 print(f"🔄 Updated admin phone to: {admin_phone}")
+
+            if admin_user.email_verification_code is not None:
+                admin_user.email_verification_code = None
+                updated = True
+            if admin_user.email_verification_code_expires is not None:
+                admin_user.email_verification_code_expires = None
+                updated = True
+            if admin_user.email_verification_token is not None:
+                admin_user.email_verification_token = None
+                updated = True
+            if admin_user.email_verification_expires is not None:
+                admin_user.email_verification_expires = None
+                updated = True
 
             if updated:
                 db.session.commit()

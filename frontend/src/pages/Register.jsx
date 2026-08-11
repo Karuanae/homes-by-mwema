@@ -224,16 +224,27 @@ export default function Register() {
   };
 
   // Google Sign-Up
-  const handleGoogleSuccess = async () => {
+  const handleGoogleSuccess = async (googleData) => {
     setIsLoading(false);
-    const savedUser = localStorage.getItem('user');
-    if (savedUser) {
-      const refreshed = refreshUserFromStorage();
-      if (refreshed) {
-        setTimeout(() => redirectAfterAuth(JSON.parse(savedUser)), 50);
-      } else {
-        window.location.reload();
+
+    let userData = null;
+
+    if (googleData?.user) {
+      userData = googleData.user;
+      if (googleData.token && !localStorage.getItem('token')) {
+        localStorage.setItem('token', googleData.token);
       }
+      if (!localStorage.getItem('user')) {
+        localStorage.setItem('user', JSON.stringify(userData));
+      }
+    } else {
+      const savedUser = localStorage.getItem('user');
+      userData = savedUser ? JSON.parse(savedUser) : null;
+    }
+
+    if (userData) {
+      refreshUserFromStorage();
+      redirectAfterAuth(userData);
     } else {
       setError('Authentication succeeded but failed to save session. Please try again.');
     }

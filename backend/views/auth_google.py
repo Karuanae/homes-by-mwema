@@ -124,6 +124,7 @@ def google_login():
     # ── Find or create the user ───────────────────────────────────────────────
     try:
         user = User.query.filter_by(email=email).first()
+        google_sub = idinfo.get('sub')
 
         if not user:
             logger.info(f"Creating new user for email: {email}")
@@ -133,7 +134,9 @@ def google_login():
                 phone='',
                 role='user',
                 avatar_url=picture or None,
-                email_verified=True  # Google emails are pre-verified
+                email_verified=True,  # Google emails are pre-verified
+                auth_provider='google',
+                google_id=google_sub,
             )
             user.set_password(_random_password())
             db.session.add(user)
@@ -141,12 +144,28 @@ def google_login():
             logger.info('✅ New user created via Google OAuth: %s', email)
         else:
             logger.info(f"Existing user found: {email}")
-            # Keep avatar up-to-date if they didn't set one manually
             changed = False
-            if picture and not user.avatar_url:
+
+            if user.auth_provider != 'google':
+                user.auth_provider = 'google'
+                changed = True
+                logger.info(f"Marked existing user as Google auth provider: {email}")
+
+            if google_sub and user.google_id != google_sub:
+                user.google_id = google_sub
+                changed = True
+                logger.info(f"Updated Google ID for user: {email}")
+
+            if picture and user.avatar_url != picture:
                 user.avatar_url = picture
                 changed = True
                 logger.info(f"Updated avatar for user: {email}")
+
+            if not user.email_verified:
+                user.email_verified = True
+                changed = True
+                logger.info(f"Verified existing email for Google user: {email}")
+
             if changed:
                 db.session.commit()
             logger.info('✅ Existing user signed in via Google OAuth: %s', email)
