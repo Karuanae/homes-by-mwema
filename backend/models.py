@@ -262,6 +262,19 @@ class Booking(db.Model):
             refund_amount = 0
             
         return fee_amount, refund_amount
+
+
+class DateBlock(db.Model):
+    __tablename__ = 'date_blocks'
+
+    id = db.Column(db.Integer, primary_key=True)
+    property_id = db.Column(db.Integer, db.ForeignKey('properties.id'), nullable=False, index=True)
+    check_in = db.Column(db.Date, nullable=False)
+    check_out = db.Column(db.Date, nullable=False)
+    reason = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    property = db.relationship('Property', backref=db.backref('date_blocks', lazy=True, cascade='all, delete-orphan'))
     
 class Payment(db.Model):
     __tablename__ = 'payments'

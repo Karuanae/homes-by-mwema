@@ -17,6 +17,7 @@ import socketService from "../services/socketService";
 import AdminConsultations from '../pages/AdminConsultations';
 import AdminBookingsTab from '../pages/AdminBookingsTab';
 import AdminPropertiesTab from '../pages/AdminPropertiesTab'; // NEW IMPORT
+import AdminDateBlocks from '../pages/AdminDateBlocks';
 
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -80,6 +81,7 @@ export default function AdminDashboard() {
   const navItems = [
     { id: "dashboard",     label: "Dashboard",     icon: FaHome },
     { id: "properties",    label: "Properties",    icon: FaBuilding },
+    { id: "date-blocks",   label: "Blocked dates", icon: FaCalendarCheck },
     { id: "bookings",      label: "Bookings",      icon: FaCalendarAlt },
     { id: "customers",     label: "Clients",       icon: FaUsers },
     { id: "consultations", label: "Consultations", icon: FaClipboardList },
@@ -733,6 +735,12 @@ export default function AdminDashboard() {
         {activeTab === "bookings" && (
           <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} transition={{duration:0.4}}>
             <AdminBookingsTab />
+          </motion.div>
+        )}
+
+        {activeTab === "date-blocks" && (
+          <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} transition={{duration:0.4}}>
+            <AdminDateBlocks />
           </motion.div>
         )}
 

@@ -625,6 +625,21 @@ export const adminAPI = {
     return response;
   },
 
+  getDateBlocks: async () => {
+    const response = await api.get('/admin/date-blocks');
+    return response;
+  },
+
+  createDateBlock: async (data) => {
+    const response = await api.post('/admin/date-blocks', data);
+    return response;
+  },
+
+  deleteDateBlock: async (id) => {
+    const response = await api.delete(`/admin/date-blocks/${id}`);
+    return response;
+  },
+
   // Users
   getUsers: async () => {
     const response = await api.get('/admin/users');

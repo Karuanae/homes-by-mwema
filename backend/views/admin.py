@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import db, User, Property, Booking, Payment, Lead, HomepageContent, AdminStats, PropertyImage, Chat, ChatMessage, ImageCategory, Notification
+from models import db, User, Property, Booking, Payment, Lead, HomepageContent, AdminStats, PropertyImage, Chat, ChatMessage, ImageCategory, Notification, DateBlock
 from werkzeug.exceptions import Forbidden
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -1085,6 +1085,48 @@ def admin_update_booking_status(booking_id):
     return jsonify({'success': True, 'booking_id': booking.id, 'status': booking.status,
                     'confirmation': booking.confirmation,
                     'message': f'Booking {new_status} successfully'}), 200
+
+
+@admin_bp.route('/date-blocks', methods=['GET', 'POST'])
+@jwt_required()
+def admin_date_blocks():
+    require_admin()
+    if request.method == 'POST':
+        data = request.json or {}
+        try:
+            check_in = datetime.strptime(data['check_in'], '%Y-%m-%d').date()
+            check_out = datetime.strptime(data['check_out'], '%Y-%m-%d').date()
+        except (KeyError, ValueError):
+            return jsonify({'error': 'Valid check_in and check_out are required'}), 400
+        if check_in >= check_out:
+            return jsonify({'error': 'check_out must be after check_in'}), 400
+        if not Property.query.get(data.get('property_id')):
+            return jsonify({'error': 'Property not found'}), 404
+        block = DateBlock(
+            property_id=data['property_id'], check_in=check_in,
+            check_out=check_out, reason=(data.get('reason') or '').strip() or None
+        )
+        db.session.add(block)
+        db.session.commit()
+    blocks = DateBlock.query.order_by(DateBlock.check_in.asc()).all()
+    return jsonify([{
+        'id': b.id, 'property_id': b.property_id,
+        'property_name': b.property.name if b.property else 'Unknown property',
+        'check_in': b.check_in.isoformat(), 'check_out': b.check_out.isoformat(),
+        'reason': b.reason, 'created_at': b.created_at.isoformat() if b.created_at else None,
+    } for b in blocks]), 201 if request.method == 'POST' else 200
+
+
+@admin_bp.route('/date-blocks/<int:block_id>', methods=['DELETE'])
+@jwt_required()
+def admin_delete_date_block(block_id):
+    require_admin()
+    block = DateBlock.query.get(block_id)
+    if not block:
+        return jsonify({'error': 'Date block not found'}), 404
+    db.session.delete(block)
+    db.session.commit()
+    return jsonify({'success': True}), 200
 
 
 # ═════════════════════════════════════════════════════════════════════════════

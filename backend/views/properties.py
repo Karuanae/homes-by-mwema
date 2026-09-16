@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
-from models import db, Property, PropertyImage, ImageCategory
-from sqlalchemy import select, func
+from models import db, Property, PropertyImage, ImageCategory, DateBlock, Booking
+from sqlalchemy import select, func, and_, or_
 from datetime import datetime
 from collections import defaultdict
 
@@ -238,12 +238,30 @@ def check_availability(property_id):
     except ValueError:
         return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
 
+    now = datetime.utcnow()
+    conflict = db.session.query(Booking.id).filter(
+        Booking.property_id == property_id,
+        Booking.check_in < check_out_date,
+        Booking.check_out > check_in_date,
+        or_(
+            Booking.status.in_(['confirmed', 'upcoming']),
+            and_(Booking.status == 'pending', Booking.payment_status == 'completed'),
+            and_(Booking.status == 'pending', Booking.payment_status != 'completed',
+                 or_(Booking.expires_at.is_(None), Booking.expires_at > now))
+        )
+    ).first()
+    block = DateBlock.query.filter(
+        DateBlock.property_id == property_id,
+        DateBlock.check_in < check_out_date,
+        DateBlock.check_out > check_in_date
+    ).first()
+    available = not conflict and not block
     return jsonify({
-        'available': True,
+        'available': available,
         'property_id': property_id,
         'check_in': check_in,
         'check_out': check_out,
-        'message': 'Property is available for these dates',
+        'message': 'Property is available for these dates' if available else 'Property is not available for these dates',
     })
 
 

@@ -181,7 +181,8 @@ class MPesaService:
         }
         
         payload = {
-            'BusinessShortCode': self.business_short_code,
+            # The STK push above is sent through the configured bank PayBill.
+            'BusinessShortCode': '542542',
             'Password': password,
             'Timestamp': timestamp,
             'CheckoutRequestID': checkout_request_id

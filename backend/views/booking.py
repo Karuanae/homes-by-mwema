@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import db, Booking, Property, User, Notification, Payment
+from models import db, Booking, Property, User, Notification, Payment, DateBlock
 from sqlalchemy import and_, or_
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -19,9 +19,18 @@ def check_property_availability_with_lock(property_id, check_in, check_out, excl
     if isinstance(check_out, str):
         check_out = datetime.strptime(check_out, '%Y-%m-%d').date()
     
+    now = datetime.utcnow()
     query = Booking.query.filter(
         Booking.property_id == property_id,
-        Booking.status.in_(['pending', 'confirmed', 'upcoming']),
+        or_(
+            Booking.status.in_(['confirmed', 'upcoming']),
+            and_(Booking.status == 'pending', Booking.payment_status == 'completed'),
+            and_(
+                Booking.status == 'pending',
+                Booking.payment_status != 'completed',
+                or_(Booking.expires_at.is_(None), Booking.expires_at > now)
+            )
+        ),
         Booking.check_in < check_out,
         Booking.check_out > check_in
     ).with_for_update()
@@ -30,6 +39,13 @@ def check_property_availability_with_lock(property_id, check_in, check_out, excl
         query = query.filter(Booking.id != exclude_booking_id)
     
     conflicting = query.all()
+    blocked = DateBlock.query.filter(
+        DateBlock.property_id == property_id,
+        DateBlock.check_in < check_out,
+        DateBlock.check_out > check_in
+    ).with_for_update().first()
+    if blocked:
+        conflicting.append(blocked)
     return len(conflicting) == 0, conflicting
 
 
@@ -134,7 +150,7 @@ def create_booking():
         is_available, conflicts = check_property_availability_with_lock(property.id, check_in, check_out)
         if not is_available:
             conflict_dates = [
-                {'check_in': c.check_in.strftime('%b %d'), 'check_out': c.check_out.strftime('%b %d'), 'status': c.status}
+                {'check_in': c.check_in.strftime('%b %d'), 'check_out': c.check_out.strftime('%b %d'), 'status': getattr(c, 'status', 'blocked')}
                 for c in conflicts[:3]
             ]
             return jsonify({

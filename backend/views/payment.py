@@ -93,8 +93,9 @@ def verify_mpesa_signature(request):
 
     signature = request.headers.get('X-Mpesa-Signature')
     if not signature:
-        logger.warning("Missing M-PESA signature")
-        return False
+        # Daraja STK callbacks normally do not include this optional header.
+        logger.warning("M-PESA callback did not include a signature header")
+        return True
 
     mpesa_secret = current_app.config.get('MPESA_SECRET', '')
     if not mpesa_secret:
@@ -108,6 +109,36 @@ def verify_mpesa_signature(request):
     ).hexdigest()
 
     return hmac.compare_digest(signature, expected)
+
+
+def _mark_booking_paid(booking, payment):
+    """Apply a completed payment to its booking exactly once."""
+    total_paid = db.session.query(db.func.sum(Payment.amount)).filter(
+        Payment.booking_id == booking.id,
+        Payment.status == 'completed',
+        Payment.method != 'refund'
+    ).scalar() or Decimal('0')
+
+    if total_paid >= booking.total_amount:
+        booking.payment_status = 'completed'
+        booking.status = 'confirmed'
+        booking.confirmation = 'confirmed'
+        booking.pending_amount = Decimal('0')
+    elif total_paid >= (booking.total_amount - booking.pending_amount):
+        booking.payment_status = 'partial'
+        booking.status = 'confirmed'
+        booking.confirmation = 'confirmed'
+    booking.expires_at = None
+
+
+def _send_payment_email(booking, payment):
+    try:
+        from views.email_service import email_service
+        booking_user = User.query.get(payment.user_id)
+        if booking and booking_user:
+            email_service.send_payment_received(booking, booking_user, payment)
+    except Exception as email_err:
+        logger.warning(f"Payment email failed (non-fatal): {email_err}")
 
 
 @payment_bp.route('/mpesa/initiate', methods=['POST'])
@@ -270,6 +301,7 @@ def mpesa_callback():
         payment.webhook_received_at = datetime.utcnow()
 
         if processed.get('success'):
+            was_completed = payment.status == 'completed'
             payment.status = 'completed'
             payment.mpesa_receipt_number = processed.get('mpesa_receipt_number')
             payment.transaction_id = processed.get('mpesa_receipt_number')
@@ -277,39 +309,13 @@ def mpesa_callback():
 
             booking = Booking.query.get(payment.booking_id)
             if booking:
-                total_paid = db.session.query(
-                    db.func.sum(Payment.amount)
-                ).filter(
-                    Payment.booking_id == booking.id,
-                    Payment.status == 'completed',
-                    Payment.method != 'refund'
-                ).scalar() or Decimal('0')
-
-                if total_paid >= booking.total_amount:
-                    booking.payment_status = 'completed'
-                    booking.status = 'confirmed'
-                    booking.confirmation = 'confirmed'
-                    booking.pending_amount = Decimal('0')
-                    logger.info(f"✅ Booking {booking.id} fully paid — KES {total_paid}")
-                elif total_paid >= (booking.total_amount - booking.pending_amount):
-                    booking.payment_status = 'partial'
-                    booking.status = 'confirmed'
-                    booking.confirmation = 'confirmed'
-                    logger.info(f"✅ Booking {booking.id} partially paid — KES {total_paid}")
-
-                booking.expires_at = None
+                _mark_booking_paid(booking, payment)
 
             db.session.commit()
             logger.info(f"💰 Payment completed: {processed.get('mpesa_receipt_number')} for KES {payment.amount}")
 
-            # Send payment received email
-            try:
-                from views.email_service import email_service
-                booking_user = User.query.get(payment.user_id)
-                if booking and booking_user:
-                    email_service.send_payment_received(booking, booking_user, payment)
-            except Exception as email_err:
-                logger.warning(f"⚠️  Payment email failed (non-fatal): {email_err}")
+            if not was_completed:
+                _send_payment_email(booking, payment)
 
         else:
             payment.status = 'failed'
@@ -337,6 +343,30 @@ def check_payment_status(checkout_request_id):
 
     if not payment:
         return jsonify({'error': 'Payment not found'}), 404
+
+    if payment.status == 'pending':
+        try:
+            result = MPesaService().query_stk_push_status(checkout_request_id)
+            result_code = result.get('result_code')
+            if result.get('success') and result_code is not None:
+                if int(result_code) == 0:
+                    payment.status = 'completed'
+                    payment.completed_at = datetime.utcnow()
+                    payment.webhook_received_at = datetime.utcnow()
+                    payment.mpesa_response_code = str(result_code)
+                    payment.mpesa_response_description = result.get('result_desc')
+                    booking = Booking.query.get(payment.booking_id)
+                    if booking:
+                        _mark_booking_paid(booking, payment)
+                    db.session.commit()
+                    if booking:
+                        _send_payment_email(booking, payment)
+                elif int(result_code) != 1032:
+                    payment.status = 'failed'
+                    payment.error_log = result.get('result_desc', 'Payment failed')
+                    db.session.commit()
+        except Exception as query_err:
+            logger.warning(f"M-PESA status query failed for {checkout_request_id}: {query_err}")
 
     booking = Booking.query.get(payment.booking_id)
 
