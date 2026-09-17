@@ -76,6 +76,16 @@ def delete_if_timer_elapsed(booking):
         return False
     if booking.payment_status == 'completed':
         return False
+    active_payment = Payment.query.filter(
+        Payment.booking_id == booking.id,
+        Payment.method == 'mpesa',
+        Payment.status == 'pending',
+        Payment.checkout_request_id.isnot(None),
+    ).first()
+    if active_payment:
+        # Safaricom can deliver the callback after the booking hold expires.
+        # Keep the booking alive while an STK transaction is still trackable.
+        return False
     if booking.expires_at and booking.expires_at <= datetime.utcnow():
         logger.info(f"Deleting elapsed pending booking {booking.id} — no payment received")
         Payment.query.filter_by(booking_id=booking.id).delete(synchronize_session='fetch')
@@ -718,6 +728,17 @@ def expire_old_pending_bookings():
 
         for booking in all_expired:
             try:
+                active_payment = Payment.query.filter(
+                    Payment.booking_id == booking.id,
+                    Payment.method == 'mpesa',
+                    Payment.status == 'pending',
+                    Payment.checkout_request_id.isnot(None),
+                ).first()
+                if active_payment:
+                    logger.info(
+                        f"Keeping booking {booking.id}: active M-PESA checkout {active_payment.checkout_request_id}"
+                    )
+                    continue
                 logger.info(f"🗑️  Deleting expired booking {booking.id}")
                 Payment.query.filter_by(
                     booking_id=booking.id

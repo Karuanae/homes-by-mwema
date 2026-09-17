@@ -1,7 +1,7 @@
 {
   "headers": [
     {
-      "source": "/",
+      "source": "/index.html",
       "headers": [
         { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate" }
       ]
@@ -13,10 +13,8 @@
       ]
     }
   ],
-  "rewrites": [
-    {
-      "source": "/((?!assets/).*)",
-      "destination": "/"
-    }
+  "routes": [
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/" }
   ]
 }
