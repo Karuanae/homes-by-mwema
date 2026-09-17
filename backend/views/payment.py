@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import db, Payment, Booking, User
+from models import db, Payment, Booking, User, Notification
 from sqlalchemy import and_, or_
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -113,6 +113,7 @@ def verify_mpesa_signature(request):
 
 def _mark_booking_paid(booking, payment):
     """Apply a completed payment to its booking exactly once."""
+    was_paid = booking.payment_status == 'completed'
     total_paid = db.session.query(db.func.sum(Payment.amount)).filter(
         Payment.booking_id == booking.id,
         Payment.status == 'completed',
@@ -129,6 +130,16 @@ def _mark_booking_paid(booking, payment):
         booking.status = 'confirmed'
         booking.confirmation = 'confirmed'
     booking.expires_at = None
+
+    if not was_paid and booking.payment_status in ('completed', 'partial'):
+        db.session.add(Notification(
+            user_id=booking.user_id,
+            type='booking',
+            title='Payment received',
+            message=f'Your payment for {booking.property.name if booking.property else "your booking"} was successful. Booking #{booking.id} is confirmed.',
+            related_id=booking.id,
+            priority='normal',
+        ))
 
 
 def _send_payment_email(booking, payment):

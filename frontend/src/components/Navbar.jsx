@@ -159,11 +159,13 @@ const Navbar = () => {
             
             // Convert database notifications to the expected format
             dbNotifications.forEach(notification => {
-              let route = '/my-bookings';
+              let route = '/dashboard?tab=bookings';
               let action = 'View Details';
               
               if (notification.type === 'booking') {
-                route = '/my-bookings';
+                route = notification.related_id
+                  ? `/my-bookings?booking=${notification.related_id}`
+                  : '/dashboard?tab=bookings';
                 action = 'View Booking';
               }
               
@@ -270,6 +272,19 @@ const Navbar = () => {
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
+  const openNotification = async (notification) => {
+    setNotifPanelOpen(false);
+    setShowToast(false);
+    if (typeof notification.id === 'number') {
+      try {
+        await api.settings.markNotificationRead(notification.id);
+      } catch (err) {
+        console.error('Failed to mark notification as read:', err);
+      }
+    }
+    navigate(notification.route);
+  };
+
   // ─── MINIMAL NAVBAR (booking, payment, checkout) ───────────────────
   if (isMinimalRoute) {
     return (
@@ -339,7 +354,7 @@ const Navbar = () => {
                     <p className="font-serif italic text-xs text-stone-300">"{notification.message}"</p>
                     <div className="flex gap-4 mt-2">
                       <button
-                        onClick={() => { setShowToast(false); navigate(notification.route); }}
+                        onClick={() => openNotification(notification)}
                         className="text-[9px] uppercase tracking-widest border-b border-[#F5F2EE] pb-0.5 hover:text-[#ED9B40] hover:border-[#ED9B40] transition-colors"
                       >
                         {notification.action}
@@ -623,10 +638,7 @@ const Navbar = () => {
                                     {notification.message}
                                   </p>
                                   <button
-                                    onClick={() => {
-                                      setNotifPanelOpen(false);
-                                      navigate(notification.route);
-                                    }}
+                                    onClick={() => openNotification(notification)}
                                     className="mt-2 text-[9px] uppercase tracking-widest text-[#ED9B40] border-b border-[#ED9B40]/40 pb-0.5 hover:border-[#ED9B40] transition-colors"
                                   >
                                     {notification.action}

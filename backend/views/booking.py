@@ -195,19 +195,6 @@ def create_booking():
         db.session.add(booking)
         db.session.commit()
         
-        try:
-            db.session.add(Notification(
-                user_id    = user_id,
-                type       = 'booking',
-                title      = 'Booking Confirmed',
-                message    = f'Your booking at {property.name} has been confirmed',
-                related_id = booking.id,
-                priority   = 'normal',
-            ))
-            db.session.commit()
-        except Exception as notif_err:
-            logger.warning(f"⚠️ Failed to create user notification: {notif_err}")
-        
         logger.info(f"✅ Booking created: {booking.id}")
         
         property_image_url = (

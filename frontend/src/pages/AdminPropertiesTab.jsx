@@ -854,8 +854,9 @@ const StepBasic = ({ form, setForm, onLocationSelect }) => {
           <>
             <LocationAutocomplete
               onSelect={onLocationSelect}
+              onChange={(value) => setForm(prev => ({ ...prev, location: value, formatted_address: value }))}
               initialValue={form.location}
-              placeholder="Search for property location..."
+              placeholder="Search a Kenyan road, estate, or address..."
             />
             {form.latitude && form.longitude && (
               <p className="text-[10px] text-green-600 mt-1 flex items-center gap-1">

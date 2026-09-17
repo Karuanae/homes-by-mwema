@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, Response
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import jwt_required, get_jwt_identity, verify_jwt_in_request
 from models import db, User, Property, Booking, Payment, Lead, HomepageContent, AdminStats, PropertyImage, Chat, ChatMessage, ImageCategory, Notification, DateBlock
 from werkzeug.exceptions import Forbidden
 from datetime import datetime, timedelta
@@ -1087,9 +1087,11 @@ def admin_update_booking_status(booking_id):
                     'message': f'Booking {new_status} successfully'}), 200
 
 
-@admin_bp.route('/date-blocks', methods=['GET', 'POST'])
-@jwt_required()
+@admin_bp.route('/date-blocks', methods=['GET', 'POST', 'OPTIONS'])
 def admin_date_blocks():
+    if request.method == 'OPTIONS':
+        return ('', 204)
+    verify_jwt_in_request()
     require_admin()
     if request.method == 'POST':
         data = request.json or {}
@@ -1117,9 +1119,11 @@ def admin_date_blocks():
     } for b in blocks]), 201 if request.method == 'POST' else 200
 
 
-@admin_bp.route('/date-blocks/<int:block_id>', methods=['DELETE'])
-@jwt_required()
+@admin_bp.route('/date-blocks/<int:block_id>', methods=['DELETE', 'OPTIONS'])
 def admin_delete_date_block(block_id):
+    if request.method == 'OPTIONS':
+        return ('', 204)
+    verify_jwt_in_request()
     require_admin()
     block = DateBlock.query.get(block_id)
     if not block:
@@ -1127,6 +1131,78 @@ def admin_delete_date_block(block_id):
     db.session.delete(block)
     db.session.commit()
     return jsonify({'success': True}), 200
+
+
+@admin_bp.route('/bookings/manual', methods=['POST', 'OPTIONS'])
+def admin_create_manual_booking():
+    """Create a confirmed reservation entered by staff for an offline guest."""
+    if request.method == 'OPTIONS':
+        return ('', 204)
+    verify_jwt_in_request()
+    require_admin()
+    data = request.json or {}
+    required = ['property_id', 'check_in', 'check_out', 'guest_name']
+    if any(not data.get(field) for field in required):
+        return jsonify({'error': 'property_id, check_in, check_out and guest_name are required'}), 400
+
+    try:
+        check_in = datetime.strptime(data['check_in'], '%Y-%m-%d').date()
+        check_out = datetime.strptime(data['check_out'], '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'error': 'Dates must use YYYY-MM-DD'}), 400
+    if check_in >= check_out:
+        return jsonify({'error': 'check_out must be after check_in'}), 400
+
+    property_obj = Property.query.get(data['property_id'])
+    if not property_obj:
+        return jsonify({'error': 'Property not found'}), 404
+
+    from views.booking import check_property_availability_with_lock
+    available, _ = check_property_availability_with_lock(property_obj.id, check_in, check_out)
+    if not available:
+        return jsonify({'error': 'These dates are already unavailable'}), 409
+
+    guest_email = (data.get('guest_email') or '').strip().lower()
+    if guest_email:
+        guest = User.query.filter_by(email=guest_email).first()
+    else:
+        guest = None
+        guest_email = f"offline-{uuid.uuid4().hex[:12]}@manual.homesbymwema.com"
+    if not guest:
+        guest = User(
+            name=str(data['guest_name']).strip(), email=guest_email,
+            phone=(data.get('guest_phone') or '').strip() or None,
+            role='user', is_guest=True, auth_provider='manual'
+        )
+        guest.set_password(uuid.uuid4().hex)
+        guest.email_verified = True
+        db.session.add(guest)
+        db.session.flush()
+
+    nights = (check_out - check_in).days
+    total_amount = Decimal(str(data.get('total_amount') or (property_obj.price * nights)))
+    booking = Booking(
+        user_id=guest.id, property_id=property_obj.id,
+        check_in=check_in, check_out=check_out,
+        guests=data.get('guests') or {'adults': 1, 'children': 0, 'infants': 0},
+        nights=nights, base_amount=total_amount, cleaning_fee=Decimal('0'),
+        service_fee=Decimal('0'), total_amount=total_amount,
+        pending_amount=Decimal('0'), payment_type='full', payment_method='in_person',
+        status='confirmed', confirmation='confirmed', payment_status='completed',
+        idempotency_key=f"manual_{uuid.uuid4().hex}", expires_at=None,
+        created_at=datetime.utcnow(), message_to_host=data.get('notes'),
+        cancellation_policy='moderate'
+    )
+    db.session.add(booking)
+    db.session.flush()
+    db.session.add(Payment(
+        booking_id=booking.id, user_id=guest.id, property_id=property_obj.id,
+        amount=total_amount, method='in_person', status='completed',
+        transaction_id=data.get('reference') or f"OFFLINE-{booking.id}",
+        completed_at=datetime.utcnow(), created_at=datetime.utcnow()
+    ))
+    db.session.commit()
+    return jsonify({'success': True, 'booking_id': booking.id}), 201
 
 
 # ═════════════════════════════════════════════════════════════════════════════

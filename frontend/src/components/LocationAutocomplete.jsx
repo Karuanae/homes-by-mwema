@@ -6,7 +6,7 @@ import { Search, MapPin, Loader2 } from 'lucide-react';
 // ✅ FIX: Move libraries OUTSIDE the component
 const GOOGLE_MAPS_LIBRARIES = ['places'];
 
-export default function LocationAutocomplete({ onSelect, initialValue, placeholder = "Search for location..." }) {
+export default function LocationAutocomplete({ onSelect, onChange, initialValue, placeholder = "Search for a Kenyan road or address..." }) {
   // ✅ FIX: Use the stable constant reference
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
@@ -22,6 +22,7 @@ export default function LocationAutocomplete({ onSelect, initialValue, placehold
   } = usePlacesAutocomplete({
     requestOptions: {
       componentRestrictions: { country: 'ke' }, // Restrict to Kenya
+      types: ['address'],
     },
     debounce: 300,
   });
@@ -68,7 +69,10 @@ export default function LocationAutocomplete({ onSelect, initialValue, placehold
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
         <input
           value={value}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={(e) => {
+            setValue(e.target.value);
+            onChange?.(e.target.value);
+          }}
           disabled={!ready}
           placeholder={placeholder}
           className="w-full pl-9 pr-3 py-2.5 border border-stone-200 rounded-xl focus:outline-none focus:border-stone-900 transition-colors text-sm"

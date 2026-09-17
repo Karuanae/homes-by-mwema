@@ -640,6 +640,11 @@ export const adminAPI = {
     return response;
   },
 
+  createManualBooking: async (data) => {
+    const response = await api.post('/admin/bookings/manual', data);
+    return response;
+  },
+
   // Users
   getUsers: async () => {
     const response = await api.get('/admin/users');

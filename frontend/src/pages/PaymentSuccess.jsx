@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
+import api from "../services/api";
 import { 
   CheckCircle, Calendar, MapPin, Users, 
   Clock, Download, Share2, Home, Phone,
@@ -26,6 +27,19 @@ export default function PaymentSuccess() {
       }
     } else {
       setBookingData(data);
+      api.bookings.getById(data.bookingId).then((response) => {
+        const booking = response.data;
+        setBookingData((current) => ({
+          ...current,
+          propertyName: booking.property_name,
+          propertyLocation: booking.property_location,
+          checkIn: booking.check_in,
+          checkOut: booking.check_out,
+          nights: booking.nights,
+          guests: booking.guests,
+          amount: data.amount || booking.total_amount,
+        }));
+      }).catch(() => {});
       // Store for reference
       localStorage.setItem('lastBooking', JSON.stringify(data));
     }

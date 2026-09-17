@@ -271,7 +271,8 @@ export default function PaymentPage() {
   useEffect(() => {
     let iv;
     if (checkoutRequestId && paymentStatus === "processing") {
-      iv = setInterval(checkMpesaStatus, 3000);
+      checkMpesaStatus();
+      iv = setInterval(checkMpesaStatus, 2000);
     }
     return () => { if (iv) clearInterval(iv); };
   }, [checkoutRequestId, paymentStatus]);
@@ -415,9 +416,9 @@ export default function PaymentPage() {
           setPaymentStatus("success");
           setSuccessMessage("Payment completed successfully!");
           localStorage.removeItem("pendingBooking");
-          setTimeout(() => navigate("/payment/success", {
+          navigate("/payment/success", {
             state: { bookingId: data.booking?.id, amount: data.payment?.amount, receipt: data.payment?.mpesa_receipt },
-          }), 2000);
+          });
         } else if (data.payment?.status === "failed") {
           setPaymentStatus("failed");
           setErrorMessage("Payment failed. Please try again.");

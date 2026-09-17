@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import db, User, Favorite, Property, Notification
+from models import db, User, Favorite, Property, Notification, Booking
 from werkzeug.exceptions import BadRequest
 from datetime import datetime
 import re
@@ -370,6 +370,12 @@ def get_notifications():
         
         result = []
         for notification in notifications:
+            # Booking notifications are only valid after a successful payment.
+            # This also hides legacy false confirmations created before the fix.
+            if notification.type == 'booking' and notification.related_id:
+                booking = Booking.query.get(notification.related_id)
+                if not booking or booking.payment_status not in ('completed', 'partial'):
+                    continue
             result.append(notification.to_dict())
         
         return jsonify(result)
