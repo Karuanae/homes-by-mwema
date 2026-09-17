@@ -5,7 +5,8 @@ import {
   ArrowLeft, Clock, Shield, CheckCircle, XCircle,
   AlertCircle, Smartphone, CreditCard, ChevronRight,
   Copy, Phone, Wallet, Loader, Lock, Eye, EyeOff,
-  ExternalLink, MessageCircle, X, Send, Home, Check, CheckCheck
+  ExternalLink, MessageCircle, X, Send, Home, Check, CheckCheck,
+  MapPin, Calendar, Users
 } from "lucide-react";
 import api, { API_BASE_URL, IMAGE_BASE_URL } from "../services/api";
 import { useAuth } from "../context/AuthContext";
@@ -406,17 +407,28 @@ export default function PaymentPage() {
 
   // ── M-PESA ──────────────────────────────────────────────────────────────────
   const completeMpesaPayment = (payment, confirmedBooking) => {
+    const house = confirmedBooking?.house_details;
     setPaymentStatus("success");
     setSuccessMessage("Payment received and booking confirmed!");
+    setCompletedPayment(payment);
+    setBooking((current) => ({
+      ...current,
+      ...confirmedBooking,
+      ...(house ? {
+        property_name: house.name,
+        property_location: house.location,
+        check_in: house.check_in,
+        check_out: house.check_out,
+        nights: house.nights,
+        total_amount: house.total_amount,
+      } : {}),
+      status: "confirmed",
+      payment_status: "completed",
+    }));
+    if (confirmedBooking?.property) setProperty(confirmedBooking.property);
     localStorage.removeItem("pendingBooking");
     sessionStorage.setItem("refreshBookings", "true");
-    navigate("/payment/success", {
-      state: {
-        bookingId: confirmedBooking?.id || booking?.id,
-        amount: payment?.amount || booking?.total_amount,
-        receipt: payment?.mpesa_receipt,
-      },
-    });
+    window.dispatchEvent(new Event("bookingStatusChanged"));
   };
 
   const checkMpesaStatus = async () => {
@@ -639,14 +651,28 @@ export default function PaymentPage() {
     return (
       <div className="min-h-screen bg-[#f5f2ee] flex items-center justify-center p-4">
         <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-          className="bg-white rounded-xl shadow-lg max-w-md w-full p-6 md:p-8 text-center">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <CheckCircle className="w-8 h-8 text-green-600" />
+          className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden">
+          <div className="bg-emerald-600 p-6 text-center text-white">
+            <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
+            <CheckCircle className="w-8 h-8 text-white" />
+            </div>
+            <h2 className="font-serif text-xl md:text-2xl">Payment Received & Confirmed</h2>
+            <p className="text-emerald-100 text-sm mt-1">Your reservation is secured.</p>
           </div>
-          <h2 className="font-serif text-xl md:text-2xl mb-2">Payment Successful!</h2>
-          <p className="text-stone-600 text-sm mb-4">{successMessage}</p>
-          <p className="text-xs text-stone-400 mb-6">Redirecting to your bookings…</p>
-          <div className="w-8 h-8 border-2 border-stone-200 border-t-stone-900 rounded-full animate-spin mx-auto" />
+          <div className="p-6 space-y-4">
+            <div className="flex gap-4 items-center bg-stone-50 p-4 rounded-xl">
+              <img src={getImageSrc(property?.cover_image || property?.images?.[0])} alt={property?.name || "Booked property"} className="w-24 h-20 object-cover rounded-lg" />
+              <div><p className="text-xs uppercase tracking-widest text-amber-600">Booked home</p><h3 className="font-serif text-lg font-semibold">{property?.name || booking?.property_name}</h3><p className="text-xs text-stone-500 flex gap-1 items-center"><MapPin size={13} />{property?.location || booking?.property_location}</p></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="bg-stone-50 p-3 rounded-lg"><p className="text-xs text-stone-500 flex gap-1 items-center"><Calendar size={13} /> Check-in</p><strong>{booking?.check_in_display || booking?.check_in}</strong></div>
+              <div className="bg-stone-50 p-3 rounded-lg"><p className="text-xs text-stone-500 flex gap-1 items-center"><Calendar size={13} /> Check-out</p><strong>{booking?.check_out_display || booking?.check_out}</strong></div>
+              <div className="bg-stone-50 p-3 rounded-lg"><p className="text-xs text-stone-500 flex gap-1 items-center"><Users size={13} /> Nights</p><strong>{booking?.nights}</strong></div>
+              <div className="bg-stone-50 p-3 rounded-lg"><p className="text-xs text-stone-500">Amount paid</p><strong className="text-emerald-600">{formatCurrency(completedPayment?.amount || booking?.total_amount)}</strong></div>
+            </div>
+            {completedPayment?.mpesa_receipt && <p className="bg-emerald-50 text-emerald-800 rounded-lg p-3 text-xs font-mono">M-PESA receipt: <strong>{completedPayment.mpesa_receipt}</strong></p>}
+            <button onClick={() => navigate("/dashboard?tab=bookings")} className="w-full py-3 bg-[#093A3E] text-white rounded-lg text-sm font-medium">View My Bookings</button>
+          </div>
         </motion.div>
       </div>
     );
