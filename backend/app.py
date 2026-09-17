@@ -151,6 +151,10 @@ app.config['MPESA_ENVIRONMENT'] = os.environ.get('MPESA_ENVIRONMENT', 'productio
 app.config['MPESA_CONSUMER_KEY'] = os.environ.get('MPESA_CONSUMER_KEY', '')
 app.config['MPESA_CONSUMER_SECRET'] = os.environ.get('MPESA_CONSUMER_SECRET', '')
 app.config['MPESA_BUSINESS_SHORT_CODE'] = os.environ.get('MPESA_BUSINESS_SHORT_CODE', '008814')
+app.config['MPESA_PASSWORD_SHORT_CODE'] = os.environ.get(
+    'MPESA_PASSWORD_SHORT_CODE', app.config['MPESA_BUSINESS_SHORT_CODE']
+)
+app.config['MPESA_PAYBILL'] = os.environ.get('MPESA_PAYBILL', '542542')
 app.config['MPESA_PASSKEY'] = os.environ.get('MPESA_PASSKEY', '')
 app.config['MPESA_CALLBACK_URL'] = os.environ.get('MPESA_CALLBACK_URL', '')
 app.config['MPESA_SECRET'] = os.environ.get('MPESA_SECRET', '')  # For webhook verification
@@ -193,6 +197,7 @@ print("=" * 50)
 print("📱 M-PESA CONFIGURATION:")
 print(f"  • Environment: {app.config['MPESA_ENVIRONMENT']}")
 print(f"  • Short Code: {app.config['MPESA_BUSINESS_SHORT_CODE']}")
+print(f"  • STK PayBill: {app.config['MPESA_PAYBILL']}")
 print(f"  • Callback URL: {app.config['MPESA_CALLBACK_URL'] or 'Not set'}")
 print("=" * 50)
 print("💳 PAYPAL CONFIGURATION:")

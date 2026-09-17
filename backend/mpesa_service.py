@@ -19,6 +19,10 @@ class MPesaService:
         self.consumer_key = current_app.config.get('MPESA_CONSUMER_KEY')
         self.consumer_secret = current_app.config.get('MPESA_CONSUMER_SECRET')
         self.business_short_code = current_app.config.get('MPESA_BUSINESS_SHORT_CODE')
+        self.password_short_code = current_app.config.get(
+            'MPESA_PASSWORD_SHORT_CODE', self.business_short_code
+        )
+        self.paybill = current_app.config.get('MPESA_PAYBILL', '542542')
         self.passkey = current_app.config.get('MPESA_PASSKEY')
         self.callback_url = current_app.config.get('MPESA_CALLBACK_URL')
         self.environment = current_app.config.get('MPESA_ENVIRONMENT', 'sandbox')
@@ -70,7 +74,9 @@ class MPesaService:
         Returns: Base64 encoded password and timestamp
         """
         timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-        data_to_encode = f"{self.business_short_code}{self.passkey}{timestamp}"
+        # Keep the shortcode paired with the registered passkey. The bank
+        # PayBill used in the request is configured separately below.
+        data_to_encode = f"{self.password_short_code}{self.passkey}{timestamp}"
         encoded = base64.b64encode(data_to_encode.encode()).decode('utf-8')
         return encoded, timestamp
     
@@ -111,16 +117,14 @@ class MPesaService:
         }
         
                 # Correct for Bank PayBill setup
-        bank_paybill = '542542'
-
         payload = {
-            'BusinessShortCode': bank_paybill,
+            'BusinessShortCode': self.paybill,
             'Password': password,
             'Timestamp': timestamp,
             'TransactionType': 'CustomerPayBillOnline',
             'Amount': int(amount),
             'PartyA': phone_number,
-            'PartyB': bank_paybill,  # MUST be the bank's PayBill number
+            'PartyB': self.paybill,
             'PhoneNumber': phone_number,
             'CallBackURL': self.callback_url,
             'AccountReference': account_reference,
@@ -132,7 +136,21 @@ class MPesaService:
             response.raise_for_status()
             
             result = response.json()
-            current_app.logger.info(f"STK Push initiated: {result}")
+            current_app.logger.info(
+                "STK Push response: response_code=%s checkout_request_id=%s description=%s",
+                result.get('ResponseCode'),
+                result.get('CheckoutRequestID'),
+                result.get('ResponseDescription')
+            )
+
+            response_code = str(result.get('ResponseCode', ''))
+            checkout_request_id = result.get('CheckoutRequestID')
+            if response_code != '0' or not checkout_request_id:
+                return {
+                    'success': False,
+                    'error': result.get('ResponseDescription') or result.get('errorMessage') or 'M-PESA rejected the STK push request.',
+                    'response_code': response_code,
+                }
             
             return {
                 'success': True,
@@ -182,7 +200,7 @@ class MPesaService:
         
         payload = {
             # The STK push above is sent through the configured bank PayBill.
-            'BusinessShortCode': '542542',
+            'BusinessShortCode': self.paybill,
             'Password': password,
             'Timestamp': timestamp,
             'CheckoutRequestID': checkout_request_id
@@ -248,7 +266,7 @@ class MPesaService:
                 'mpesa_receipt_number': metadata.get('MpesaReceiptNumber'),
                 'transaction_date': metadata.get('TransactionDate'),
                 'phone_number': metadata.get('PhoneNumber'),
-                'success': result_code == 0
+                'success': str(result_code) == '0'
             }
             
         except Exception as e:

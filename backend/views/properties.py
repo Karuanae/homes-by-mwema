@@ -238,16 +238,13 @@ def check_availability(property_id):
     except ValueError:
         return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
 
-    now = datetime.utcnow()
     conflict = db.session.query(Booking.id).filter(
         Booking.property_id == property_id,
         Booking.check_in < check_out_date,
         Booking.check_out > check_in_date,
         or_(
             Booking.status.in_(['confirmed', 'upcoming']),
-            and_(Booking.status == 'pending', Booking.payment_status == 'completed'),
-            and_(Booking.status == 'pending', Booking.payment_status != 'completed',
-                 or_(Booking.expires_at.is_(None), Booking.expires_at > now))
+            and_(Booking.status == 'pending', Booking.payment_status == 'completed')
         )
     ).first()
     block = DateBlock.query.filter(

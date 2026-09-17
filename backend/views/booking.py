@@ -12,25 +12,42 @@ logger = logging.getLogger(__name__)
 
 # ==================== HELPER FUNCTIONS ====================
 
+def sync_booking_payment_status(booking):
+    """Make the booking status agree with completed payment rows."""
+    total_paid = db.session.query(db.func.sum(Payment.amount)).filter(
+        Payment.booking_id == booking.id,
+        Payment.status == 'completed',
+        Payment.method != 'refund'
+    ).scalar() or Decimal('0')
+
+    if total_paid >= booking.total_amount:
+        changed = booking.payment_status != 'completed' or booking.status != 'confirmed'
+        booking.payment_status = 'completed'
+        booking.status = 'confirmed'
+        booking.confirmation = 'confirmed'
+        booking.pending_amount = Decimal('0')
+        booking.expires_at = None
+        if changed:
+            db.session.commit()
+        return True
+
+    return False
+
 def check_property_availability_with_lock(property_id, check_in, check_out, exclude_booking_id=None):
-    """Check availability with row locking to prevent race conditions"""
+    """
+    Check availability with row locking.
+    ONLY confirmed, upcoming, active, or completed bookings with paid status, 
+    or manual DateBlocks, block dates. Unpaid pending bookings DO NOT block dates.
+    """
     if isinstance(check_in, str):
         check_in = datetime.strptime(check_in, '%Y-%m-%d').date()
     if isinstance(check_out, str):
         check_out = datetime.strptime(check_out, '%Y-%m-%d').date()
     
-    now = datetime.utcnow()
     query = Booking.query.filter(
         Booking.property_id == property_id,
-        or_(
-            Booking.status.in_(['confirmed', 'upcoming']),
-            and_(Booking.status == 'pending', Booking.payment_status == 'completed'),
-            and_(
-                Booking.status == 'pending',
-                Booking.payment_status != 'completed',
-                or_(Booking.expires_at.is_(None), Booking.expires_at > now)
-            )
-        ),
+        Booking.status.in_(['confirmed', 'upcoming', 'active', 'completed']),
+        Booking.payment_status == 'completed',
         Booking.check_in < check_out,
         Booking.check_out > check_in
     ).with_for_update()
@@ -44,6 +61,7 @@ def check_property_availability_with_lock(property_id, check_in, check_out, excl
         DateBlock.check_in < check_out,
         DateBlock.check_out > check_in
     ).with_for_update().first()
+    
     if blocked:
         conflicting.append(blocked)
     return len(conflicting) == 0, conflicting
@@ -60,7 +78,6 @@ def delete_if_timer_elapsed(booking):
         return False
     if booking.expires_at and booking.expires_at <= datetime.utcnow():
         logger.info(f"Deleting elapsed pending booking {booking.id} — no payment received")
-        # Delete payments first to avoid NOT NULL constraint violation on booking_id
         Payment.query.filter_by(booking_id=booking.id).delete(synchronize_session='fetch')
         db.session.delete(booking)
         db.session.commit()
@@ -381,6 +398,7 @@ def get_booking_by_id(booking_id):
         booking = Booking.query.filter_by(id=booking_id, user_id=user_id).first()
         if not booking:
             return jsonify({'error': 'Booking not found'}), 404
+        sync_booking_payment_status(booking)
         if delete_if_timer_elapsed(booking):
             return jsonify({'error': 'Booking expired and has been removed'}), 404
         
@@ -422,6 +440,8 @@ def get_booking_status(booking_id):
             'error':      'Booking window expired. The booking has been removed.',
             'is_expired': True,
         }), 404
+
+    sync_booking_payment_status(booking)
 
     now       = datetime.utcnow()
     time_left = None
@@ -495,6 +515,7 @@ def get_my_bookings():
 
         for booking in bookings:
             try:
+                sync_booking_payment_status(booking)
                 if delete_if_timer_elapsed(booking):
                     continue
 
@@ -623,6 +644,23 @@ def cancel_booking(booking_id):
         if hasattr(booking, 'refund_amount'):
             booking.refund_amount = refund_amount
 
+        # Clear existing "confirmed" notifications for this booking
+        Notification.query.filter_by(
+            user_id=user_id,
+            type='booking',
+            related_id=booking.id
+        ).update({'is_read': True})
+
+        # Add explicit Cancellation Notification
+        db.session.add(Notification(
+            user_id=user_id,
+            type='booking',
+            title='Booking Cancelled',
+            message=f'Your booking #{booking.id} for {booking.property.name if booking.property else "property"} has been cancelled.',
+            related_id=booking.id,
+            priority='normal'
+        ))
+
         db.session.commit()
 
         if not payment_was_made:
@@ -655,19 +693,11 @@ def cancel_booking(booking_id):
 # ==================== SCHEDULER FUNCTION ====================
 
 def expire_old_pending_bookings():
-    """
-    Background task — permanently delete pending bookings whose timer has
-    elapsed with no confirmed payment.
-
-    THE KEY FIX: payments are explicitly deleted BEFORE their booking is
-    deleted. This avoids the PostgreSQL NOT NULL constraint violation on
-    payments.booking_id that was causing the scheduler to fail every minute.
-    """
+    """Background task to permanently delete pending bookings whose timer has elapsed."""
     try:
         now             = datetime.utcnow()
         timeout_minutes = current_app.config.get('BOOKING_TIMEOUT_MINUTES', 15)
 
-        # Bookings with expires_at set and elapsed
         expired_with_expiry = Booking.query.filter(
             Booking.status         == 'pending',
             Booking.payment_status != 'completed',
@@ -675,7 +705,6 @@ def expire_old_pending_bookings():
             Booking.expires_at     <  now,
         ).all()
 
-        # Legacy bookings with no expires_at but old enough
         expired_without_expiry = Booking.query.filter(
             Booking.status         == 'pending',
             Booking.payment_status != 'completed',
@@ -683,7 +712,6 @@ def expire_old_pending_bookings():
             Booking.created_at     <  now - timedelta(minutes=timeout_minutes),
         ).all()
 
-        # Also catch any bookings still stuck in the old 'expired' status
         legacy_expired = Booking.query.filter(Booking.status == 'expired').all()
 
         all_expired = expired_with_expiry + expired_without_expiry + legacy_expired
@@ -692,26 +720,11 @@ def expire_old_pending_bookings():
         for booking in all_expired:
             try:
                 logger.info(f"🗑️  Deleting expired booking {booking.id}")
-
-                # ── THE FIX ──────────────────────────────────────────────────
-                # Delete all payments for this booking first, before deleting
-                # the booking itself.  Without this, PostgreSQL raises:
-                #   NotNullViolation: null value in column "booking_id"
-                # because SQLAlchemy tries to SET booking_id = NULL on the
-                # payment rows instead of deleting them.
-                deleted_payments = Payment.query.filter_by(
+                Payment.query.filter_by(
                     booking_id=booking.id
                 ).delete(synchronize_session='fetch')
-
-                if deleted_payments:
-                    logger.info(
-                        f"   Deleted {deleted_payments} payment(s) for booking {booking.id}"
-                    )
-                # ─────────────────────────────────────────────────────────────
-
                 db.session.delete(booking)
                 count += 1
-
             except Exception as e:
                 logger.error(f"❌ Failed to delete booking {booking.id}: {e}")
                 db.session.rollback()
@@ -721,8 +734,6 @@ def expire_old_pending_bookings():
             db.session.commit()
             logger.info(f"✅ Expired and deleted {count} pending booking(s)")
 
-        # Clean up any orphaned payments whose booking_id is already NULL
-        # (left over from before this fix was deployed)
         try:
             orphaned = Payment.query.filter(
                 Payment.booking_id.is_(None),

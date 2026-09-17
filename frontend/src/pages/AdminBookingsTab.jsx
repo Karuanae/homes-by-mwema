@@ -156,6 +156,11 @@ const AdminBookingsTab = () => {
 
   useEffect(() => { fetchBookings(); }, [fetchBookings]);
 
+  useEffect(() => {
+    const interval = setInterval(fetchBookings, 10000);
+    return () => clearInterval(interval);
+  }, [fetchBookings]);
+
   // Re-apply filters whenever search/date/bookings change
   useEffect(() => {
     applyFilters(bookings, searchTerm, dateRange);

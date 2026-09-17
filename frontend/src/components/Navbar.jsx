@@ -164,7 +164,7 @@ const Navbar = () => {
               
               if (notification.type === 'booking') {
                 route = notification.related_id
-                  ? `/my-bookings?booking=${notification.related_id}`
+                  ? `/dashboard?tab=bookings&booking=${notification.related_id}`
                   : '/dashboard?tab=bookings';
                 action = 'View Booking';
               }

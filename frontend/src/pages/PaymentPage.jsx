@@ -200,6 +200,7 @@ export default function PaymentPage() {
   const [isExpired,        setIsExpired]        = useState(false);
   const [showSummary,      setShowSummary]      = useState(false);
   const [copied,           setCopied]           = useState(false);
+  const [checkingStatus,   setCheckingStatus]   = useState(false);
 
   // ── Init ────────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -404,28 +405,55 @@ export default function PaymentPage() {
   };
 
   // ── M-PESA ──────────────────────────────────────────────────────────────────
+  const completeMpesaPayment = (payment, confirmedBooking) => {
+    setPaymentStatus("success");
+    setSuccessMessage("Payment received and booking confirmed!");
+    localStorage.removeItem("pendingBooking");
+    sessionStorage.setItem("refreshBookings", "true");
+    navigate("/payment/success", {
+      state: {
+        bookingId: confirmedBooking?.id || booking?.id,
+        amount: payment?.amount || booking?.total_amount,
+        receipt: payment?.mpesa_receipt,
+      },
+    });
+  };
+
   const checkMpesaStatus = async () => {
     if (!checkoutRequestId) return;
+    setCheckingStatus(true);
     try {
       const res = await fetch(`${API_BASE_URL}/payments/mpesa/status/${checkoutRequestId}`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
       const data = await res.json();
-      if (data.success) {
-        if (data.payment?.status === "completed") {
-          setPaymentStatus("success");
-          setSuccessMessage("Payment completed successfully!");
-          localStorage.removeItem("pendingBooking");
-          navigate("/payment/success", {
-            state: { bookingId: data.booking?.id, amount: data.payment?.amount, receipt: data.payment?.mpesa_receipt },
-          });
-        } else if (data.payment?.status === "failed") {
-          setPaymentStatus("failed");
-          setErrorMessage("Payment failed. Please try again.");
+      if (!res.ok || !data.success) {
+        setErrorMessage(data.error || "We could not check M-PESA yet. Retrying…");
+      } else if (data.payment?.status === "completed" || data.booking?.payment_status === "completed") {
+        completeMpesaPayment(data.payment, data.booking);
+        return;
+      } else if (data.payment?.status === "failed") {
+        setPaymentStatus("failed");
+        setErrorMessage("Payment failed. Please try again.");
+        return;
+      }
+
+      // The callback may update the booking before the Daraja query reflects it.
+      if (booking?.id) {
+        try {
+          const bookingStatus = await api.bookings.getStatus(booking.id);
+          if (bookingStatus.data?.payment_status === "completed") {
+            completeMpesaPayment(data.payment, { id: booking.id });
+          }
+        } catch (bookingError) {
+          console.debug("Booking confirmation fallback is still pending", bookingError);
         }
       }
     } catch (e) {
       console.error("Status check error:", e);
+      setErrorMessage("M-PESA status check could not reach the server. Please try again.");
+    } finally {
+      setCheckingStatus(false);
     }
   };
 
@@ -475,6 +503,9 @@ export default function PaymentPage() {
       if (!res.ok) {
         if (data.expired) { setIsExpired(true); throw new Error("Booking session expired."); }
         throw new Error(data.error || "Payment initiation failed");
+      }
+      if (!data.checkout_request_id) {
+        throw new Error(data.error || "M-PESA did not return a checkout request. Please try again.");
       }
       setCheckoutRequestId(data.checkout_request_id);
       setPaymentId(data.payment_id);
@@ -832,8 +863,8 @@ export default function PaymentPage() {
                       </div>
                       <p className="text-sm font-medium">Waiting for M-PESA confirmation</p>
                       <p className="text-xs text-stone-500 mt-1">Check your phone and enter PIN</p>
-                      <button onClick={checkMpesaStatus} className="mt-4 text-xs text-green-600 underline">
-                        Check status manually
+                      <button onClick={checkMpesaStatus} disabled={checkingStatus} className="mt-4 text-xs text-green-600 underline disabled:opacity-50">
+                        {checkingStatus ? "Checking M-PESA…" : "Check status manually"}
                       </button>
                     </div>
                   )}

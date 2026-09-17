@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FaMapMarkerAlt, FaStar, FaDownload,
@@ -14,14 +14,6 @@ import {
 import api, { IMAGE_BASE_URL } from "../services/api";
 import GoogleMap from "../components/GoogleMap";
 
-// ─── Status helpers ───────────────────────────────────────────────────────────
-//
-//  pending   → 15-min timer running, no payment yet
-//  confirmed → payment done, check-in in the future
-//  active    → payment done, guest currently staying
-//  completed → payment done, check-out has passed
-//  cancelled → cancelled; may have refund
-//
 const STATUS_STYLE = {
   pending:   "bg-amber-100  text-amber-700  border-amber-200",
   confirmed: "bg-green-100  text-green-700  border-green-200",
@@ -50,9 +42,9 @@ const formatDate = (d) => {
   });
 };
 
-// ─── Component ────────────────────────────────────────────────────────────────
 export default function MyBookings() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [activeTab,       setActiveTab]       = useState("current");
   const [bookings,        setBookings]        = useState([]);
@@ -69,22 +61,15 @@ export default function MyBookings() {
   const [viewMode,        setViewMode]        = useState("list");
   const [mapCenter,       setMapCenter]       = useState({ lat: -1.286389, lng: 36.817223 });
 
-  // ── Timer state — managed entirely outside React state to avoid re-renders ──
-  // We use a ref-based map so the countdown never causes component re-renders
-  // (which is what was causing the infinite fetch loop).
   const [timers, setTimers] = useState({});
 
-  // Refs — never stale, never cause re-renders when mutated
   const bookingsRef        = useRef([]);
-  const fetchingRef        = useRef(false);   // prevents concurrent fetches
-  const refreshScheduled   = useRef(false);   // prevents stacking refresh callbacks
-  const mountedRef         = useRef(true);    // prevents state updates after unmount
+  const fetchingRef        = useRef(false);
+  const refreshScheduled   = useRef(false);
+  const mountedRef         = useRef(true);
 
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
 
-  // ── fetchBookings — stable, never recreated ─────────────────────────────────
-  // IMPORTANT: this function must NOT be in the dependency array of the timer
-  // effect, otherwise every fetch → setState → effect restart → fetch loop.
   const fetchBookings = useCallback(async () => {
     if (fetchingRef.current || !mountedRef.current) return;
     fetchingRef.current = true;
@@ -107,7 +92,6 @@ export default function MyBookings() {
         guests:            b.guests || { adults: 1, children: 0 },
         totalAmount:       b.total_amount  || 0,
         baseAmount:        b.base_amount   || 0,
-        // pending_amount is only meaningful while status === 'pending'
         pendingAmount:     b.status === "pending" ? (b.pending_amount || 0) : 0,
         paidAmount:        b.status !== "pending" ? (b.total_amount || 0) : 0,
         status:            b.status        || "pending",
@@ -118,11 +102,9 @@ export default function MyBookings() {
         refundInfo:        b.refund_info || null,
       }));
 
-      // Keep ref in sync — this is what the timer reads
       bookingsRef.current = transformed;
       setBookings(transformed);
 
-      // Map centre
       const withCoords = transformed.filter((b) => b.propertyLatitude && b.propertyLongitude);
       if (withCoords.length > 0) {
         const lat = withCoords.reduce((s, b) => s + b.propertyLatitude,  0) / withCoords.length;
@@ -130,7 +112,6 @@ export default function MyBookings() {
         setMapCenter({ lat, lng });
       }
 
-      // Seed timers from fresh data
       const init = {};
       transformed.forEach((b) => {
         if (b.status === "pending" && b.expiresAt) {
@@ -140,7 +121,6 @@ export default function MyBookings() {
             const s = Math.floor((diff % 60000) / 1000);
             init[b.id] = `${m}:${String(s).padStart(2, "0")}`;
           }
-          // If diff <= 0 the backend will have deleted it; don't seed a timer
         }
       });
       setTimers(init);
@@ -152,9 +132,8 @@ export default function MyBookings() {
       fetchingRef.current  = false;
       refreshScheduled.current = false;
     }
-  }, []); // ← empty deps: this function never changes identity
+  }, []);
 
-  // ── Initial load + refresh on visibility change + payment return flag ──────
   useEffect(() => {
     setUser(JSON.parse(localStorage.getItem("user") || "null"));
     fetchBookings();
@@ -177,19 +156,20 @@ export default function MyBookings() {
     };
   }, [fetchBookings]);
 
-  // ── Timer effect — runs ONCE on mount, reads bookings via ref ───────────────
-  //
-  // The root cause of the infinite loop:
-  //   fetchBookings → setBookings → [bookings] in dep array → effect restarts
-  //   → updateLocalTimers runs → timer already elapsed → fetchBookings → loop
-  //
-  // Fix: the effect has NO state in its dependency array.  It reads bookings
-  // through bookingsRef (a ref, not state) so it NEVER needs to restart.
-  // fetchBookings is stable (useCallback with []) so it's safe in deps.
-  //
   useEffect(() => {
-    // Track which booking IDs already triggered a refresh this cycle
-    // so we don't call fetchBookings multiple times for the same expiry.
+    const bookingId = searchParams.get("booking");
+    if (!bookingId || bookings.length === 0) return;
+    const target = bookings.find((booking) => String(booking.id) === bookingId);
+    if (target) setSelectedBooking(target);
+  }, [bookings, searchParams]);
+
+  useEffect(() => {
+    if (!selectedBooking) return;
+    const refreshed = bookings.find((booking) => booking.id === selectedBooking.id);
+    if (refreshed) setSelectedBooking(refreshed);
+  }, [bookings, selectedBooking]);
+
+  useEffect(() => {
     const alreadyRefreshed = new Set();
 
     const tickLocalTimers = () => {
@@ -211,13 +191,10 @@ export default function MyBookings() {
         const diff   = expiry - now;
 
         if (diff <= 0) {
-          // Timer just hit zero — backend will delete it on next fetch.
-          // Only schedule ONE refresh per booking (not every tick).
           if (!alreadyRefreshed.has(b.id)) {
             alreadyRefreshed.add(b.id);
             needsFetch = true;
           }
-          // Don't add to newTimers — card will vanish after refresh
         } else {
           const m = Math.floor(diff / 60000);
           const s = Math.floor((diff % 60000) / 1000);
@@ -227,21 +204,16 @@ export default function MyBookings() {
 
       setTimers(newTimers);
 
-      // Debounced fetch — only if not already in flight or scheduled
       if (needsFetch && !fetchingRef.current && !refreshScheduled.current) {
         refreshScheduled.current = true;
-        // Small delay so the UI shows "0:00" briefly before the card disappears
         setTimeout(() => {
           if (mountedRef.current) fetchBookings();
         }, 800);
       }
     };
 
-    // Smooth 1-second countdown
     const localInterval = setInterval(tickLocalTimers, 1000);
 
-    // Periodic server sync every 30 s — catches payment completion
-    // Uses allSettled so a single 404 (deleted booking) doesn't throw
     const serverInterval = setInterval(async () => {
       const pending = bookingsRef.current.filter(
         (b) => b.status === "pending" && b.expiresAt
@@ -267,15 +239,14 @@ export default function MyBookings() {
       }
     }, 30000);
 
-    tickLocalTimers(); // immediate first tick
+    tickLocalTimers();
 
     return () => {
       clearInterval(localInterval);
       clearInterval(serverInterval);
     };
-  }, [fetchBookings]); // fetchBookings is stable — this effect runs exactly once
+  }, [fetchBookings]);
 
-  // ── Cancel helpers ───────────────────────────────────────────────────────────
   const handleCancelClick = (booking, e) => {
     e.stopPropagation();
     setCancelBooking(booking);
@@ -304,6 +275,10 @@ export default function MyBookings() {
     try {
       const res = await api.bookings.cancel(cancelBooking.id);
       alert(res.data.message || "Booking cancelled successfully.");
+      
+      // Dispatch real-time notification update to Navbar
+      window.dispatchEvent(new Event("bookingStatusChanged"));
+
       await fetchBookings();
     } catch (err) {
       alert(err.response?.data?.error || "Failed to cancel booking.");
@@ -314,7 +289,6 @@ export default function MyBookings() {
     }
   };
 
-  // ── Return to payment ────────────────────────────────────────────────────────
   const handlePayNow = async (booking) => {
     try {
       const res = await api.bookings.getById(booking.id);
@@ -325,7 +299,6 @@ export default function MyBookings() {
     }
   };
 
-  // ── Derived data ─────────────────────────────────────────────────────────────
   const filteredBookings = bookings.filter((b) => {
     if (activeTab === "current" && !CURRENT_STATUSES.includes(b.status)) return false;
     if (activeTab === "history" && !HISTORY_STATUSES.includes(b.status)) return false;
@@ -349,7 +322,6 @@ export default function MyBookings() {
     })(),
   };
 
-  // ── Loading ──────────────────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="min-h-screen bg-[#f5f2ee] flex flex-col items-center justify-center">
@@ -361,11 +333,8 @@ export default function MyBookings() {
     );
   }
 
-  // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-[#f5f2ee] text-stone-900 pb-20 pt-8">
-
-      {/* Header */}
       <div className="max-w-7xl mx-auto px-6 mb-8">
         <div className="flex items-center gap-4 mb-2">
           <div className="w-12 h-12 rounded-full bg-[#093A3E] flex items-center justify-center">
@@ -379,7 +348,6 @@ export default function MyBookings() {
           </div>
         </div>
 
-        {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
           <div className="bg-white rounded-lg p-4 border border-stone-100 shadow-sm">
             <FaCalendarCheck className="text-[#093A3E] mb-2" size={20} />
@@ -411,7 +379,6 @@ export default function MyBookings() {
         </div>
       </div>
 
-      {/* Tabs + Search */}
       <div className="max-w-7xl mx-auto px-6">
         <div className="flex flex-col md:flex-row justify-between items-center gap-6 mb-6">
           <div className="flex gap-8 border-b border-stone-200 w-full md:w-auto">
@@ -473,7 +440,6 @@ export default function MyBookings() {
           </div>
         </div>
 
-        {/* Filter dropdown */}
         <AnimatePresence>
           {showFilters && (
             <motion.div
@@ -504,7 +470,6 @@ export default function MyBookings() {
           )}
         </AnimatePresence>
 
-        {/* Map view */}
         {viewMode === "map" && filteredBookings.length > 0 && (
           <div className="mb-8">
             <div className="bg-white rounded-xl overflow-hidden border border-stone-200 shadow-sm">
@@ -523,7 +488,6 @@ export default function MyBookings() {
           </div>
         )}
 
-        {/* List view */}
         {viewMode === "list" && (
           <div className="space-y-4">
             {filteredBookings.length === 0 ? (
@@ -555,7 +519,6 @@ export default function MyBookings() {
                   }`}
                 >
                   <div className="flex flex-col md:flex-row">
-                    {/* Image */}
                     <div className="md:w-56 h-48 md:h-auto relative bg-stone-100">
                       <img
                         src={
@@ -586,7 +549,6 @@ export default function MyBookings() {
                       )}
                     </div>
 
-                    {/* Content */}
                     <div className="flex-1 p-5">
                       <div className="flex justify-between items-start mb-2">
                         <h3 className="font-serif text-xl text-stone-900">{booking.propertyName}</h3>
@@ -621,7 +583,6 @@ export default function MyBookings() {
                         </div>
                       </div>
 
-                      {/* Cancelled — refund info */}
                       {booking.status === "cancelled" && booking.refundInfo && booking.refundInfo.refund_amount > 0 && (
                         <div className={`mb-3 px-3 py-2 rounded-lg text-xs flex items-center gap-2 ${
                           booking.refundInfo.refund_processed
@@ -638,7 +599,6 @@ export default function MyBookings() {
                         <div>
                           <p className="text-xs text-stone-500">Total amount</p>
                           <p className="text-xl font-serif text-stone-900">{formatCurrency(booking.totalAmount)}</p>
-                          {/* Balance due ONLY while actively pending — never on any other status */}
                           {booking.status === "pending" && booking.pendingAmount > 0 && (
                             <p className="text-xs text-amber-600">
                               Balance due: {formatCurrency(booking.pendingAmount)}
@@ -890,7 +850,6 @@ export default function MyBookings() {
         )}
       </AnimatePresence>
 
-      {/* Concierge */}
       <div className="max-w-7xl mx-auto px-6 mt-12">
         <div className="bg-gradient-to-r from-[#093A3E] to-[#0a4a52] text-white rounded-xl p-6 md:p-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">

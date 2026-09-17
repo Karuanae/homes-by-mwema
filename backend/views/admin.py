@@ -1001,7 +1001,9 @@ def admin_get_bookings():
             cover_by_prop[prop_id] = f"/api/admin/property-image/{img_id}"
 
     result = []
+    from views.booking import sync_booking_payment_status
     for booking in bookings:
+        sync_booking_payment_status(booking)
         pmts = payments_by_booking.get(booking.id, [])
         total_paid = sum(float(p.amount) for p in pmts
                          if p.status == 'completed' and p.method != 'refund')
