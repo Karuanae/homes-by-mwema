@@ -358,7 +358,15 @@ export default function PaymentPage() {
             bookingData = res.data;
           }
         } catch (e) {
-          console.error("Fetch booking by ID failed:", e);
+          if (e.response?.status === 404) {
+            setIsExpired(true);
+            setErrorMessage("This booking session has expired or is no longer available. Please start a new booking.");
+          } else {
+            console.error("Fetch booking by ID failed:", e);
+            setErrorMessage("Unable to load this booking. Please try again.");
+          }
+          setLoading(false);
+          return;
         }
       }
 
@@ -387,7 +395,7 @@ export default function PaymentPage() {
         }
         if (bookingData.status === "confirmed" || bookingData.payment_status === "completed") {
           setErrorMessage("This booking has already been paid. Redirecting to your bookings…");
-          setTimeout(() => navigate("/my-bookings"), 2500);
+          setTimeout(() => navigate("/dashboard?tab=bookings"), 2500);
           setLoading(false);
           return;
         }

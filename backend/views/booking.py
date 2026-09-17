@@ -435,13 +435,12 @@ def get_booking_status(booking_id):
     if not booking:
         return jsonify({'error': 'Booking not found', 'is_expired': True}), 404
 
+    sync_booking_payment_status(booking)
     if delete_if_timer_elapsed(booking):
         return jsonify({
             'error':      'Booking window expired. The booking has been removed.',
             'is_expired': True,
         }), 404
-
-    sync_booking_payment_status(booking)
 
     now       = datetime.utcnow()
     time_left = None
