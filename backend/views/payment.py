@@ -43,11 +43,12 @@ def generate_mpesa_account_reference(user, booking_id):
 
     return ' '.join(cleaned_parts)
 
-def verify_mpesa_signature(request):
+
+def verify_mpesa_signature(req):
     if current_app.config.get('MPESA_ENVIRONMENT') == 'sandbox':
         return True
 
-    signature = request.headers.get('X-Mpesa-Signature')
+    signature = req.headers.get('X-Mpesa-Signature')
     if not signature:
         return True
 
@@ -57,16 +58,45 @@ def verify_mpesa_signature(request):
 
     expected = hmac.new(
         mpesa_secret.encode(),
-        request.get_data(),
+        req.get_data(),
         hashlib.sha256
     ).hexdigest()
 
     return hmac.compare_digest(signature, expected)
 
 
+def _extract_receipt_from_query_result(result_data):
+    """Safely extract M-PESA Receipt Number from various Daraja response shapes."""
+    if not isinstance(result_data, dict):
+        return None
+    
+    # Check top-level keys
+    if result_data.get('mpesa_receipt_number'):
+        return result_data.get('mpesa_receipt_number')
+    if result_data.get('MpesaReceiptNumber'):
+        return result_data.get('MpesaReceiptNumber')
+    
+    # Check Callback/Query Item arrays
+    try:
+        items = result_data.get('CallbackMetadata', {}).get('Item', [])
+        if not items and 'ResultParameters' in result_data:
+            items = result_data.get('ResultParameters', {}).get('ResultParameter', [])
+            
+        for item in items:
+            name = item.get('Name') or item.get('Key')
+            if name in ('MpesaReceiptNumber', 'mpesa_receipt_number'):
+                return str(item.get('Value'))
+    except Exception as parse_err:
+        logger.debug(f"Receipt extraction parse debug: {parse_err}")
+        
+    return None
+
+
 def _mark_booking_paid(booking, payment):
     """Apply a completed payment to its booking exactly once and set proper confirmation flags."""
     was_paid = booking.payment_status == 'completed'
+    
+    # Recalculate total payments on this booking
     total_paid = db.session.query(db.func.sum(Payment.amount)).filter(
         Payment.booking_id == booking.id,
         Payment.status == 'completed',
@@ -82,6 +112,7 @@ def _mark_booking_paid(booking, payment):
         booking.payment_status = 'partial'
         booking.status = 'confirmed'
         booking.confirmation = 'confirmed'
+    
     booking.expires_at = None
 
     if not was_paid and booking.payment_status in ('completed', 'partial'):
@@ -144,7 +175,7 @@ def initiate_mpesa_payment():
     if booking.payment_status == 'completed':
         return jsonify({'success': False, 'error': 'This booking is already paid'}), 400
 
-    phone = data['phone_number'].strip().replace(' ', '').replace('+', '')
+    phone = str(data['phone_number']).strip().replace(' ', '').replace('+', '')
     if phone.startswith('0'):
         phone = '254' + phone[1:]
     elif not phone.startswith('254'):
@@ -213,15 +244,17 @@ def initiate_mpesa_payment():
 
 
 @payment_bp.route('/mpesa/callback', methods=['POST'])
+@payment_bp.route('/re/mpesa/callback', methods=['POST'])
 def mpesa_callback():
-    logger.info(f"📞 M-PESA Callback received")
+    """Webhooks endpoint for Safaricom Daraja callback."""
+    logger.info("📞 M-PESA Callback received")
 
     if not verify_mpesa_signature(request):
         return jsonify({'ResultCode': 1, 'ResultDesc': 'Invalid signature'}), 401
 
     try:
         mpesa_service = MPesaService()
-        callback_data = request.json
+        callback_data = request.json or {}
         processed = mpesa_service.process_callback(callback_data)
 
         checkout_request_id = processed.get('checkout_request_id')
@@ -236,10 +269,13 @@ def mpesa_callback():
         payment.webhook_received_at = datetime.utcnow()
 
         if processed.get('success'):
-            was_completed = payment.status == 'completed'
+            was_completed = (payment.status == 'completed')
+            receipt = processed.get('mpesa_receipt_number') or _extract_receipt_from_query_result(callback_data)
+            
             payment.status = 'completed'
-            payment.mpesa_receipt_number = processed.get('mpesa_receipt_number')
-            payment.transaction_id = processed.get('mpesa_receipt_number')
+            if receipt:
+                payment.mpesa_receipt_number = receipt
+                payment.transaction_id = receipt
             payment.completed_at = datetime.utcnow()
 
             booking = Booking.query.get(payment.booking_id)
@@ -248,7 +284,7 @@ def mpesa_callback():
 
             db.session.commit()
 
-            if not was_completed:
+            if not was_completed and booking:
                 _send_payment_email(booking, payment)
 
         else:
@@ -266,7 +302,7 @@ def mpesa_callback():
 @payment_bp.route('/mpesa/status/<checkout_request_id>', methods=['GET'])
 @jwt_required()
 def check_payment_status(checkout_request_id):
-    """STEP 3: Frontend polls this to check if payment completed"""
+    """Frontend polls this endpoint to verify if STK Push payment completed."""
     user_id = get_jwt_identity()
 
     payment = Payment.query.filter_by(
@@ -277,33 +313,48 @@ def check_payment_status(checkout_request_id):
     if not payment:
         return jsonify({'error': 'Payment not found'}), 404
 
+    # Direct query fallback: query Daraja if local payment status is still pending
     if payment.status == 'pending':
         try:
-            result = MPesaService().query_stk_push_status(checkout_request_id)
+            mpesa_service = MPesaService()
+            result = mpesa_service.query_stk_push_status(checkout_request_id)
+            
+            # Check for result codes across varying Daraja wrapper keys
             result_code = result.get('result_code')
-            if result.get('success') and result_code is not None:
-                if int(result_code) == 0:
-                    was_completed = payment.status == 'completed'
-                    payment.status = 'completed'
-                    payment.completed_at = datetime.utcnow()
-                    payment.webhook_received_at = datetime.utcnow()
-                    payment.mpesa_response_code = str(result_code)
-                    payment.mpesa_response_description = result.get('result_desc')
+            if result_code is None:
+                result_code = result.get('ResultCode')
+
+            if result.get('success') or (result_code is not None and int(result_code) == 0):
+                was_completed = (payment.status == 'completed')
+                receipt = _extract_receipt_from_query_result(result)
+                
+                payment.status = 'completed'
+                if receipt:
+                    payment.mpesa_receipt_number = receipt
+                    payment.transaction_id = receipt
                     
-                    booking = Booking.query.get(payment.booking_id)
-                    if booking:
-                        _mark_booking_paid(booking, payment)
-                        db.session.commit()
-                        if not was_completed:
-                            _send_payment_email(booking, payment)
-                    else:
-                        db.session.commit()
-                elif int(result_code) != 1032:
-                    payment.status = 'failed'
-                    payment.error_log = result.get('result_desc', 'Payment failed')
+                payment.completed_at = datetime.utcnow()
+                payment.webhook_received_at = datetime.utcnow()
+                payment.mpesa_response_code = str(result_code) if result_code is not None else "0"
+                payment.mpesa_response_description = result.get('result_desc') or result.get('ResultDesc')
+                
+                booking = Booking.query.get(payment.booking_id)
+                if booking:
+                    _mark_booking_paid(booking, payment)
                     db.session.commit()
+                    if not was_completed:
+                        _send_payment_email(booking, payment)
+                else:
+                    db.session.commit()
+                    
+            elif result_code is not None and int(result_code) not in (0, 1032):
+                # 1032 indicates the user is still actively entering their PIN or request is processing
+                payment.status = 'failed'
+                payment.error_log = result.get('result_desc') or result.get('ResultDesc', 'Payment failed')
+                db.session.commit()
+                
         except Exception as query_err:
-            logger.warning(f"M-PESA status query failed for {checkout_request_id}: {query_err}")
+            logger.warning(f"M-PESA direct status query check failed: {query_err}")
 
     booking = Booking.query.get(payment.booking_id)
     property_obj = booking.property if booking else None
@@ -319,10 +370,10 @@ def check_payment_status(checkout_request_id):
             'completed_at': payment.completed_at.isoformat() if payment.completed_at else None
         },
         'booking': {
-            'id': booking.id,
-            'status': booking.status,
-            'payment_status': booking.payment_status,
-            'confirmation': booking.confirmation
+            'id': booking.id if booking else None,
+            'status': booking.status if booking else None,
+            'payment_status': booking.payment_status if booking else None,
+            'confirmation': booking.confirmation if booking else None
         },
         'property': {
             'id': property_obj.id,
@@ -333,8 +384,8 @@ def check_payment_status(checkout_request_id):
         'house_details': {
             'name': property_obj.name if property_obj else None,
             'location': property_obj.location if property_obj else None,
-            'check_in': booking.check_in.isoformat() if booking else None,
-            'check_out': booking.check_out.isoformat() if booking else None,
+            'check_in': booking.check_in.isoformat() if (booking and booking.check_in) else None,
+            'check_out': booking.check_out.isoformat() if (booking and booking.check_out) else None,
             'nights': booking.nights if booking else None,
             'total_amount': float(booking.total_amount) if booking else None,
         } if booking else None
@@ -401,7 +452,9 @@ def process_payment():
         amount=Decimal(str(data['amount'])),
         method=data['method'],
         mpesa_number=data.get('mpesa_number'),
-        status='completed'
+        status='completed',
+        created_at=datetime.utcnow(),
+        completed_at=datetime.utcnow()
     )
 
     _mark_booking_paid(booking, payment)
@@ -416,5 +469,5 @@ def process_payment():
         'method': payment.method,
         'status': payment.status,
         'transaction_id': payment.transaction_id or f'TXN{str(payment.id).zfill(8)}',
-        'payment_date': payment.payment_date.isoformat()
+        'payment_date': payment.created_at.isoformat()
     }), 201

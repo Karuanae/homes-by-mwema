@@ -454,7 +454,7 @@ const ChefServices = () => {
                 The Taste of Kenya, <span className="italic">Wherever You Are</span>
               </h2>
               <p className="text-stone-700 text-lg mb-6 leading-relaxed">
-                Whether you're staying at a luxurious Airbnb in Kilimani, a beachfront villa in Diani, or relaxing in your own home—Nairobi's finest chefs come to you. From sizzling nyama choma prepared over an open flame to fragrant coastal biriani, we bring authentic Kenyan flavors to your table.
+                Whether you are staying at a luxurious Airbnb in Kilimani, a beachfront villa in Diani, or relaxing in your own home—Nairobi's finest chefs come to you. From sizzling nyama choma prepared over an open flame to fragrant coastal biriani, we bring authentic Kenyan flavors to your table.
               </p>
               <p className="text-stone-600 leading-relaxed">
                 Our chefs have trained in Kenya's top kitchens and are celebrated for their mastery of both traditional and contemporary cuisine. Let us turn your dining experience into a celebration of Kenya's rich culinary heritage.
