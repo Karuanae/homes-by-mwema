@@ -320,52 +320,74 @@ def check_payment_status(checkout_request_id):
     if not payment:
         return jsonify({'error': 'Payment not found'}), 404
 
-    # Direct query fallback: query Daraja if local payment status is still pending
+    # Query Daraja only while the local transaction is unresolved. HTTP errors
+    # from the query endpoint can mean that the STK prompt is still processing.
     if payment.status == 'pending':
         try:
             mpesa_service = MPesaService()
             result = mpesa_service.query_stk_push_status(checkout_request_id)
-            
-            # Check for result codes across varying Daraja wrapper keys
-            result_code = result.get('result_code')
-            if result_code is None:
-                result_code = result.get('ResultCode')
 
-            if result_code is not None and int(result_code) == 0:
-                was_completed = (payment.status == 'completed')
-                receipt = _extract_receipt_from_query_result(result)
-                
-                payment.status = 'completed'
-                if receipt:
-                    payment.mpesa_receipt_number = receipt
-                    payment.transaction_id = receipt
-                    
-                payment.completed_at = datetime.utcnow()
-                payment.webhook_received_at = datetime.utcnow()
-                payment.mpesa_response_code = str(result_code) if result_code is not None else "0"
-                payment.mpesa_response_description = result.get('result_desc') or result.get('ResultDesc')
-                
-                booking = Booking.query.get(payment.booking_id)
-                if booking:
-                    _mark_booking_paid(booking, payment)
-                    db.session.commit()
-                    if not was_completed:
-                        _send_payment_email(booking, payment)
+            # A false success flag means the Daraja request itself did not
+            # complete. This includes HTTP 500.001.1001 while the STK prompt is
+            # still active, so leave the payment pending and let polling retry.
+            if not result.get('success'):
+                logger.info(
+                    "M-PESA status query still unresolved for %s: %s",
+                    checkout_request_id,
+                    result.get('error', 'no terminal result'),
+                )
+            else:
+                result_code = result.get('result_code')
+                if result_code is None:
+                    result_code = result.get('ResultCode')
+
+                if result_code is None:
+                    # A successful HTTP response without a Daraja result code
+                    # is not evidence of payment success or failure.
+                    logger.warning(
+                        "M-PESA status query returned no result code for %s",
+                        checkout_request_id,
+                    )
                 else:
-                    db.session.commit()
-                    
-            elif result_code is not None:
-                # 1032 indicates the user is still actively entering their PIN or
-                # the request is processing. Every other non-zero code is failure.
-                if int(result_code) != 1032:
-                    payment.status = 'failed'
-                    payment.error_log = result.get('result_desc') or result.get('ResultDesc', 'Payment failed')
-                booking = Booking.query.get(payment.booking_id)
-                if booking and booking.payment_status != 'completed':
-                    booking.status = 'pending'
-                    booking.payment_status = 'pending'
-                    booking.confirmation = 'pending'
-                db.session.commit()
+                    result_code = int(result_code)
+                    booking = Booking.query.get(payment.booking_id)
+
+                    if result_code == 0:
+                        receipt = _extract_receipt_from_query_result(result)
+                        payment.status = 'completed'
+                        if receipt:
+                            payment.mpesa_receipt_number = receipt
+                            payment.transaction_id = receipt
+                        payment.completed_at = datetime.utcnow()
+                        payment.webhook_received_at = datetime.utcnow()
+                        payment.mpesa_response_code = str(result_code)
+                        payment.mpesa_response_description = (
+                            result.get('result_desc') or result.get('ResultDesc')
+                        )
+
+                        if booking:
+                            _mark_booking_paid(booking, payment)
+                            db.session.commit()
+                            if booking.payment_status == 'completed':
+                                _send_payment_email(booking, payment)
+                        else:
+                            db.session.commit()
+                    else:
+                        # Any explicit non-zero ResultCode from a successful
+                        # Daraja query is terminal failure, including 1032
+                        # (user cancelled) and 1037 (timeout). Only the HTTP
+                        # error path above is treated as still processing.
+                        payment.status = 'failed'
+                        payment.error_log = (
+                            result.get('result_desc') or
+                            result.get('ResultDesc') or
+                            'Payment failed'
+                        )
+                        if booking and booking.payment_status != 'completed':
+                            booking.status = 'pending'
+                            booking.payment_status = 'pending'
+                            booking.confirmation = 'pending'
+                        db.session.commit()
                 
         except Exception as query_err:
             logger.warning(f"M-PESA direct status query check failed: {query_err}")
