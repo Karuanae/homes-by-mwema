@@ -207,7 +207,8 @@ export default function PaymentPage() {
   }, []);
 
   useEffect(() => {
-    if (!booking?.id) return;
+    if (!booking?.id || isExpired) return;
+
     const check = async () => {
       try {
         const res = await api.bookings.getStatus(booking.id);
@@ -221,13 +222,18 @@ export default function PaymentPage() {
           });
         }
       } catch (e) {
-        console.error("Expiry check error:", e);
+        if (e.response?.status === 404) {
+          setIsExpired(true);
+          setErrorMessage("Your booking session has expired. Please start over.");
+        } else {
+          console.error("Expiry check error:", e);
+        }
       }
     };
     check();
     const iv = setInterval(check, 10000);
     return () => clearInterval(iv);
-  }, [booking?.id]);
+  }, [booking?.id, isExpired]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -437,7 +443,7 @@ export default function PaymentPage() {
       } else if (data.payment?.status === "failed") {
         setPaymentStatus("failed");
         setProcessing(false);
-        // READ THE ERROR LOG PROVIDED BY THE BACKEND
+        // Display exact error message from Daraja via the backend
         const exactError = data.payment.error_log || "Payment failed. Please try again.";
         setErrorMessage(exactError);
         return;
@@ -676,7 +682,7 @@ export default function PaymentPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div className="md:col-span-2 space-y-6">
             
-            {/* Show explicit DARARJA Error message prominently if it failed */}
+            {/* Show explicit DARAJA Error message prominently if it failed */}
             <AnimatePresence>
               {paymentStatus === "failed" && errorMessage && (
                 <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
@@ -740,7 +746,7 @@ export default function PaymentPage() {
                     ) : (
                       <button
                         onClick={initiateMpesa}
-                        disabled={processing || !phoneNumber}
+                        disabled={processing || !phoneNumber || !!phoneError}
                         className="w-full py-4 bg-emerald-600 text-white font-medium rounded-xl text-sm hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2"
                       >
                         <Wallet className="w-4 h-4" /> Pay {formatCurrency(booking?.total_amount)}
