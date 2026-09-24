@@ -443,8 +443,7 @@ export default function PaymentPage() {
       } else if (data.payment?.status === "failed") {
         setPaymentStatus("failed");
         setProcessing(false);
-        // Display exact error message from Daraja via the backend
-        const exactError = data.payment.error_log || "Payment failed. Please try again.";
+        const exactError = data.payment?.error_log || "Safaricom rejected the payment. Please check your balance and try again.";
         setErrorMessage(exactError);
         return;
       }
@@ -523,69 +522,6 @@ export default function PaymentPage() {
       setPaymentStatus("failed");
       setProcessing(false);
       setErrorMessage(e.message || "Failed to initiate payment. Please try again.");
-    }
-  };
-
-  const initiatePaypal = async () => {
-    if (!booking) { setErrorMessage("Booking information missing"); return; }
-    setPaypalLoading(true);
-    setErrorMessage("");
-    try {
-      const base      = window.location.origin + window.location.pathname;
-      const returnUrl = `${base}?paypal=success`;
-      const cancelUrl = `${base}?paypal=cancel`;
-
-      const res = await fetch(`${API_BASE_URL}/payments/paypal/create-order`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` },
-        body: JSON.stringify({
-          booking_id: booking.id,
-          amount:     Math.round(booking.total_amount),
-          currency:   "KES",
-          return_url: returnUrl,
-          cancel_url: cancelUrl,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create PayPal order");
-
-      if (data.success && data.approval_url) {
-        localStorage.setItem("pendingBooking", JSON.stringify(booking));
-        localStorage.setItem("pendingPaypalOrderId", data.order_id);
-        window.location.href = data.approval_url;
-      } else {
-        throw new Error("No PayPal approval URL received");
-      }
-    } catch (e) {
-      setErrorMessage(e.message || "Failed to initiate PayPal payment. Please try again.");
-    } finally {
-      setPaypalLoading(false);
-    }
-  };
-
-  const handlePaypalReturn = async (orderId) => {
-    setPaymentStatus("processing");
-    setSuccessMessage("Completing your PayPal payment…");
-    try {
-      const res = await fetch(`${API_BASE_URL}/payments/paypal/capture-order`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` },
-        body: JSON.stringify({ order_id: orderId }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setPaymentStatus("success");
-        localStorage.removeItem("pendingBooking");
-        localStorage.removeItem("pendingPaypalOrderId");
-        setTimeout(() => navigate("/payment/success", {
-          state: { bookingId: booking?.id, amount: booking?.total_amount, receipt: data.transaction_id },
-        }), 2000);
-      } else {
-        throw new Error(data.error || "Failed to capture PayPal payment");
-      }
-    } catch (e) {
-      setPaymentStatus("failed");
-      setErrorMessage(e.message || "Failed to complete PayPal payment. Please try again.");
     }
   };
 
@@ -689,7 +625,7 @@ export default function PaymentPage() {
                   className="bg-red-50 border border-red-200 rounded-xl p-4 md:p-6 flex flex-col items-center justify-center text-center gap-2">
                   <XCircle className="w-8 h-8 text-red-500 mb-2" />
                   <p className="text-red-800 font-medium text-lg">Payment Failed</p>
-                  <p className="text-red-600 text-sm">{errorMessage}</p>
+                  <p className="text-red-600 text-sm max-w-md">{errorMessage}</p>
                   <button onClick={handleRetry} className="mt-4 px-6 py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors">
                     Try Again
                   </button>
@@ -753,6 +689,7 @@ export default function PaymentPage() {
                       </button>
                     )}
 
+                    {/* Fallback inline error if something else sets errorMessage while not in failed state */}
                     {errorMessage && paymentStatus !== "failed" && (
                       <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg flex items-center gap-2 mt-4">
                         <AlertCircle className="w-4 h-4 shrink-0" />

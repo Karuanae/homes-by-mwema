@@ -150,11 +150,13 @@ app.config['MAX_NIGHTS_BOOKING'] = int(os.environ.get('MAX_NIGHTS_BOOKING', 30))
 app.config['MPESA_ENVIRONMENT'] = os.environ.get('MPESA_ENVIRONMENT', 'production')
 app.config['MPESA_CONSUMER_KEY'] = os.environ.get('MPESA_CONSUMER_KEY', '')
 app.config['MPESA_CONSUMER_SECRET'] = os.environ.get('MPESA_CONSUMER_SECRET', '')
-app.config['MPESA_BUSINESS_SHORT_CODE'] = os.environ.get('MPESA_BUSINESS_SHORT_CODE', '008814')
-app.config['MPESA_PASSWORD_SHORT_CODE'] = os.environ.get(
-    'MPESA_PASSWORD_SHORT_CODE', app.config['MPESA_BUSINESS_SHORT_CODE']
+app.config['MPESA_BUSINESS_SHORT_CODE'] = os.environ.get('MPESA_BUSINESS_SHORT_CODE', '')
+app.config['MPESA_PAYBILL'] = os.environ.get(
+    'MPESA_PAYBILL', app.config['MPESA_BUSINESS_SHORT_CODE']
 )
-app.config['MPESA_PAYBILL'] = os.environ.get('MPESA_PAYBILL', '542542')
+app.config['MPESA_PASSWORD_SHORT_CODE'] = os.environ.get(
+    'MPESA_PASSWORD_SHORT_CODE', app.config['MPESA_PAYBILL']
+)
 app.config['MPESA_PASSKEY'] = os.environ.get('MPESA_PASSKEY', '')
 app.config['MPESA_CALLBACK_URL'] = os.environ.get('MPESA_CALLBACK_URL', '')
 app.config['MPESA_SECRET'] = os.environ.get('MPESA_SECRET', '')  # For webhook verification

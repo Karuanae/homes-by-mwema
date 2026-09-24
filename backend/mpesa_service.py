@@ -35,6 +35,18 @@ class MPesaService:
         
         self.access_token = None
         self.token_expiry = None
+
+        missing = [
+            name for name, value in {
+                'MPESA_CONSUMER_KEY': self.consumer_key,
+                'MPESA_CONSUMER_SECRET': self.consumer_secret,
+                'MPESA_PAYBILL': self.paybill,
+                'MPESA_PASSKEY': self.passkey,
+                'MPESA_CALLBACK_URL': self.callback_url,
+            }.items() if not value
+        ]
+        if missing:
+            raise ValueError(f'M-PESA configuration is incomplete: {", ".join(missing)}')
     
     def get_access_token(self):
         """
@@ -116,7 +128,6 @@ class MPesaService:
             'Content-Type': 'application/json'
         }
         
-                # Correct for Bank PayBill setup
         payload = {
             'BusinessShortCode': self.paybill,
             'Password': password,

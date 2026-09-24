@@ -66,6 +66,7 @@ def verify_mpesa_signature(req):
 
 
 def _extract_receipt_from_query_result(result_data):
+    """Safely extract M-PESA Receipt Number from various Daraja response shapes."""
     if not isinstance(result_data, dict):
         return None
     
@@ -88,19 +89,23 @@ def _extract_receipt_from_query_result(result_data):
         
     return None
 
+
 def _translate_mpesa_error(result_code, result_desc):
     """Translate Daraja error codes into user-friendly messages."""
-    code = str(result_code) if result_code is not None else ""
+    try:
+        code = str(result_code).strip() if result_code is not None else ""
+    except Exception:
+        code = ""
+        
     if code == "1032": return "Transaction cancelled on your phone."
     if code == "1037": return "M-PESA prompt timed out. Your phone might be off or lacks network coverage."
     if code == "1": return "Insufficient funds in your M-PESA account."
     if code == "2001": return "Invalid M-PESA PIN entered."
-    return result_desc or f"Safaricom rejected the payment (Code {code})."
+    if result_desc: return str(result_desc)
+    return f"Safaricom rejected the payment (Code {code})."
 
 
-def _mark_booking_paid(booking, payment):
-    was_paid = booking.payment_status == 'completed'
-    
+def sync_booking_payment_status(booking):
     total_paid = db.session.query(db.func.sum(Payment.amount)).filter(
         Payment.booking_id == booking.id,
         Payment.status == 'completed',
@@ -108,15 +113,22 @@ def _mark_booking_paid(booking, payment):
     ).scalar() or Decimal('0')
 
     if total_paid >= booking.total_amount:
+        changed = booking.payment_status != 'completed' or booking.status != 'confirmed'
         booking.payment_status = 'completed'
         booking.status = 'confirmed'
         booking.confirmation = 'confirmed'
         booking.pending_amount = Decimal('0')
         booking.expires_at = None
-    else:
-        booking.payment_status = 'pending'
-        booking.status = 'pending'
-        booking.confirmation = 'pending'
+        if changed:
+            db.session.commit()
+        return True
+
+    return False
+
+
+def _mark_booking_paid(booking, payment):
+    was_paid = booking.payment_status == 'completed'
+    sync_booking_payment_status(booking)
 
     if not was_paid and booking.payment_status == 'completed':
         db.session.add(Notification(
@@ -151,29 +163,13 @@ def initiate_mpesa_payment():
         if field not in data:
             return jsonify({'success': False, 'error': f'Missing {field}'}), 400
 
-    booking = Booking.query.filter_by(
-        id=data['booking_id'],
-        user_id=user_id
-    ).first()
+    booking = Booking.query.filter_by(id=data['booking_id'], user_id=user_id).first()
 
     if not booking:
         return jsonify({'success': False, 'error': 'Booking not found'}), 404
 
     if delete_if_timer_elapsed(booking):
-        return jsonify({
-            'success': False,
-            'error': 'Booking session expired. The booking has been removed.',
-            'expired': True
-        }), 400
-
-    if booking.expires_at and booking.expires_at < datetime.utcnow():
-        db.session.delete(booking)
-        db.session.commit()
-        return jsonify({
-            'success': False,
-            'error': 'Booking session expired. The booking has been removed.',
-            'expired': True
-        }), 400
+        return jsonify({'success': False, 'error': 'Booking session expired.', 'expired': True}), 400
 
     if booking.payment_status == 'completed':
         return jsonify({'success': False, 'error': 'This booking is already paid'}), 400
@@ -185,8 +181,8 @@ def initiate_mpesa_payment():
         phone = '254' + phone
 
     idempotency_key = f"MPESA_{booking.id}_{datetime.utcnow().timestamp()}"
-
     payment_amount = Decimal(str(booking.total_amount))
+    
     payment = Payment(
         booking_id=booking.id,
         user_id=user_id,
@@ -228,12 +224,12 @@ def initiate_mpesa_payment():
             }), 200
         else:
             payment.status = 'failed'
-            payment.error_log = mpesa_result.get('error', 'Unknown error')
+            payment.error_log = mpesa_result.get('error', 'Safaricom rejected the request. Please try again.')
             db.session.commit()
 
             return jsonify({
                 'success': False,
-                'error': mpesa_result.get('error', 'Failed to initiate payment. Please try again.')
+                'error': payment.error_log
             }), 400
 
     except Exception as e:
@@ -241,10 +237,7 @@ def initiate_mpesa_payment():
         payment.error_log = str(e)
         db.session.commit()
 
-        return jsonify({
-            'success': False,
-            'error': 'Payment service unavailable. Please try again.'
-        }), 500
+        return jsonify({'success': False, 'error': 'Payment service unavailable. Please try again.'}), 500
 
 
 @payment_bp.route('/mpesa/callback', methods=['POST'])
@@ -261,10 +254,7 @@ def mpesa_callback():
         processed = mpesa_service.process_callback(callback_data)
 
         checkout_request_id = processed.get('checkout_request_id')
-
-        payment = Payment.query.filter_by(
-            checkout_request_id=checkout_request_id
-        ).first()
+        payment = Payment.query.filter_by(checkout_request_id=checkout_request_id).first()
 
         if not payment:
             return jsonify({'ResultCode': 1, 'ResultDesc': 'Payment not found'}), 200
@@ -292,11 +282,7 @@ def mpesa_callback():
 
         else:
             payment.status = 'failed'
-            payment.error_log = _translate_mpesa_error(
-                processed.get('result_code'), 
-                processed.get('result_desc')
-            )
-            
+            payment.error_log = _translate_mpesa_error(processed.get('result_code'), processed.get('result_desc'))
             booking = Booking.query.get(payment.booking_id)
             if booking and booking.payment_status != 'completed':
                 booking.status = 'pending'
@@ -317,10 +303,7 @@ def check_payment_status(checkout_request_id):
     """Frontend polls this endpoint to verify if STK Push payment completed."""
     user_id = get_jwt_identity()
 
-    payment = Payment.query.filter_by(
-        checkout_request_id=checkout_request_id,
-        user_id=user_id
-    ).first()
+    payment = Payment.query.filter_by(checkout_request_id=checkout_request_id, user_id=user_id).first()
 
     if not payment:
         return jsonify({'error': 'Payment not found'}), 404
@@ -361,10 +344,8 @@ def check_payment_status(checkout_request_id):
                             db.session.commit()
                     else:
                         payment.status = 'failed'
-                        payment.error_log = _translate_mpesa_error(
-                            result_code_int, 
-                            result.get('result_desc') or result.get('ResultDesc')
-                        )
+                        desc = result.get('result_desc') or result.get('ResultDesc')
+                        payment.error_log = _translate_mpesa_error(result_code_int, desc)
                         
                         if booking and booking.payment_status != 'completed':
                             booking.status = 'pending'
@@ -423,23 +404,13 @@ def get_booking_payments(booking_id):
     if not booking:
         return jsonify({'error': 'Booking not found'}), 404
 
-    payments = Payment.query.filter_by(booking_id=booking_id).order_by(
-        Payment.created_at.desc()
-    ).all()
-
-    result = []
-    for p in payments:
-        result.append({
-            'id': p.id,
-            'amount': float(p.amount),
-            'method': p.method,
-            'status': p.status,
-            'mpesa_receipt': p.mpesa_receipt_number,
-            'refund_payment_id': p.refund_payment_id,
-            'refund_note': p.refund_note,
-            'created_at': p.created_at.isoformat() if p.created_at else None,
-            'completed_at': p.completed_at.isoformat() if p.completed_at else None
-        })
+    payments = Payment.query.filter_by(booking_id=booking_id).order_by(Payment.created_at.desc()).all()
+    result = [{
+        'id': p.id, 'amount': float(p.amount), 'method': p.method, 'status': p.status,
+        'mpesa_receipt': p.mpesa_receipt_number, 'refund_payment_id': p.refund_payment_id,
+        'refund_note': p.refund_note, 'created_at': p.created_at.isoformat() if p.created_at else None,
+        'completed_at': p.completed_at.isoformat() if p.completed_at else None
+    } for p in payments]
 
     return jsonify({
         'booking_id': booking_id,
@@ -454,42 +425,19 @@ def get_booking_payments(booking_id):
 def process_payment():
     user_id = get_jwt_identity()
     data = request.json
-
-    required_fields = ['booking_id', 'amount', 'method']
-    for field in required_fields:
-        if field not in data:
-            return jsonify({'error': f'Missing required field: {field}'}), 400
-
     booking = Booking.query.filter_by(id=data['booking_id'], user_id=user_id).first()
-    if not booking:
-        return jsonify({'error': 'Booking not found'}), 404
-
     if booking.payment_status == 'completed':
         return jsonify({'error': 'Payment already completed for this booking'}), 400
 
     payment = Payment(
-        booking_id=data['booking_id'],
-        user_id=user_id,
-        property_id=booking.property_id,
-        amount=Decimal(str(data['amount'])),
-        method=data['method'],
-        mpesa_number=data.get('mpesa_number'),
-        status='completed',
-        created_at=datetime.utcnow(),
-        completed_at=datetime.utcnow()
+        booking_id=data['booking_id'], user_id=user_id, property_id=booking.property_id,
+        amount=Decimal(str(data['amount'])), method=data['method'], mpesa_number=data.get('mpesa_number'),
+        status='completed', created_at=datetime.utcnow(), completed_at=datetime.utcnow()
     )
 
-    _mark_booking_paid(booking, payment)
     db.session.add(payment)
+    _mark_booking_paid(booking, payment)
     db.session.commit()
     _send_payment_email(booking, payment)
 
-    return jsonify({
-        'id': payment.id,
-        'booking_id': payment.booking_id,
-        'amount': float(payment.amount),
-        'method': payment.method,
-        'status': payment.status,
-        'transaction_id': payment.transaction_id or f'TXN{str(payment.id).zfill(8)}',
-        'payment_date': payment.created_at.isoformat()
-    }), 201
+    return jsonify({'id': payment.id, 'status': payment.status}), 201
