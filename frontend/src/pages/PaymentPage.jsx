@@ -11,13 +11,11 @@ import {
 import api, { API_BASE_URL, IMAGE_BASE_URL } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 function parseUTCDate(dateStr) {
   if (!dateStr) return null;
   return new Date(dateStr.endsWith("Z") ? dateStr : dateStr + "Z");
 }
 
-// ─── ChatDrawer (unchanged) ───────────────────────────────────────────────────
 function ChatDrawer({ isOpen, onClose, user }) {
   const [messages,    setMessages]    = useState([]);
   const [newMessage,  setNewMessage]  = useState("");
@@ -174,7 +172,6 @@ function ChatDrawer({ isOpen, onClose, user }) {
   );
 }
 
-// ─── PaymentPage ──────────────────────────────────────────────────────────────
 export default function PaymentPage() {
   const { id } = useParams();
   const navigate  = useNavigate();
@@ -196,6 +193,7 @@ export default function PaymentPage() {
   const [paymentId,        setPaymentId]        = useState(null);
   const [errorMessage,     setErrorMessage]     = useState("");
   const [successMessage,   setSuccessMessage]   = useState("");
+  const [completedPayment, setCompletedPayment] = useState(null);
   const [timeLeft,         setTimeLeft]         = useState(null);
   const [showTimerWarning, setShowTimerWarning] = useState(false);
   const [isExpired,        setIsExpired]        = useState(false);
@@ -203,13 +201,11 @@ export default function PaymentPage() {
   const [copied,           setCopied]           = useState(false);
   const [checkingStatus,   setCheckingStatus]   = useState(false);
 
-  // ── Init ────────────────────────────────────────────────────────────────────
   useEffect(() => {
     window.scrollTo(0, 0);
     initializePayment();
   }, []);
 
-  // Real-time expiry check every 10 s
   useEffect(() => {
     if (!booking?.id) return;
     const check = async () => {
@@ -233,7 +229,6 @@ export default function PaymentPage() {
     return () => clearInterval(iv);
   }, [booking?.id]);
 
-  // PayPal redirect return
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const paypalReturn = params.get("paypal");
@@ -245,7 +240,6 @@ export default function PaymentPage() {
     }
   }, []);
 
-  // Timer countdown
   useEffect(() => {
     if (!booking?.expires_at) return;
     const expiresAt = parseUTCDate(booking.expires_at);
@@ -269,21 +263,18 @@ export default function PaymentPage() {
     return () => clearInterval(iv);
   }, [booking]);
 
-  // M-PESA poller
   useEffect(() => {
     let iv;
     if (checkoutRequestId && paymentStatus === "processing") {
       checkMpesaStatus();
-      iv = setInterval(checkMpesaStatus, 2000);
+      iv = setInterval(checkMpesaStatus, 3000);
     }
     return () => { if (iv) clearInterval(iv); };
   }, [checkoutRequestId, paymentStatus]);
 
-  // ── Initialize payment ──────────────────────────────────────────────────────
   const initializePayment = async () => {
     setLoading(true);
     try {
-      // 1. Pending booking data from pre-login flow
       const pendingData = localStorage.getItem("pendingBookingData");
       if (pendingData && isAuthenticated) {
         try {
@@ -335,10 +326,8 @@ export default function PaymentPage() {
         }
       }
 
-      // 2. Booking passed via router state (fresh booking flow)
       let bookingData = location.state?.bookingDetails;
 
-      // 3. Booking saved in localStorage (PayPal return)
       if (!bookingData) {
         const stored = localStorage.getItem("pendingBooking");
         if (stored) {
@@ -347,10 +336,6 @@ export default function PaymentPage() {
         }
       }
 
-      // 4. ── KEY FIX: Return-to-payment path ──────────────────────────────
-      //    If the user navigated here from MyBookings via "Pay Now", there is
-      //    no local state — fetch the booking directly from the API using the
-      //    ID in the URL.
       if (!bookingData && id && isAuthenticated) {
         try {
           const res = await api.bookings.getById(id);
@@ -376,7 +361,6 @@ export default function PaymentPage() {
         return;
       }
 
-      // 5. Expiry check
       if (bookingData.expires_at) {
         const expiresAt = parseUTCDate(bookingData.expires_at);
         if (expiresAt && expiresAt < new Date()) {
@@ -386,7 +370,6 @@ export default function PaymentPage() {
         }
       }
 
-      // 6. Payment completion is authoritative; booking status alone is not.
       if (bookingData.status === "expired") {
         setIsExpired(true);
         setLoading(false);
@@ -411,7 +394,6 @@ export default function PaymentPage() {
     }
   };
 
-  // ── M-PESA ──────────────────────────────────────────────────────────────────
   const completeMpesaPayment = (payment, confirmedBooking) => {
     if (confirmedBooking?.payment_status !== "completed") return;
     const house = confirmedBooking?.house_details;
@@ -446,18 +428,21 @@ export default function PaymentPage() {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
       const data = await res.json();
+      
       if (!res.ok || !data.success) {
-        setErrorMessage(data.error || "We could not check M-PESA yet. Retrying…");
+        // Backend didn't get a definitive result yet, just wait for next poll
       } else if (data.payment?.status === "completed" || data.booking?.payment_status === "completed") {
         completeMpesaPayment(data.payment, data.booking);
         return;
       } else if (data.payment?.status === "failed") {
         setPaymentStatus("failed");
-        setErrorMessage("Payment failed. Please try again.");
+        setProcessing(false);
+        // READ THE ERROR LOG PROVIDED BY THE BACKEND
+        const exactError = data.payment.error_log || "Payment failed. Please try again.";
+        setErrorMessage(exactError);
         return;
       }
 
-      // The callback may update the booking before the Daraja query reflects it.
       if (booking?.id) {
         try {
           const bookingStatus = await api.bookings.getStatus(booking.id);
@@ -470,7 +455,6 @@ export default function PaymentPage() {
       }
     } catch (e) {
       console.error("Status check error:", e);
-      setErrorMessage("M-PESA status check could not reach the server. Please try again.");
     } finally {
       setCheckingStatus(false);
     }
@@ -531,13 +515,11 @@ export default function PaymentPage() {
       setSuccessMessage("STK Push sent! Check your phone and enter your PIN.");
     } catch (e) {
       setPaymentStatus("failed");
-      setErrorMessage(e.message || "Failed to initiate payment. Please try again.");
-    } finally {
       setProcessing(false);
+      setErrorMessage(e.message || "Failed to initiate payment. Please try again.");
     }
   };
 
-  // ── PayPal ──────────────────────────────────────────────────────────────────
   const initiatePaypal = async () => {
     if (!booking) { setErrorMessage("Booking information missing"); return; }
     setPaypalLoading(true);
@@ -601,7 +583,6 @@ export default function PaymentPage() {
     }
   };
 
-  // ── Shared ──────────────────────────────────────────────────────────────────
   const handleRetry = () => {
     setPaymentStatus("pending");
     setErrorMessage("");
@@ -620,7 +601,6 @@ export default function PaymentPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // ── Loading ─────────────────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="min-h-screen bg-[#f5f2ee] flex items-center justify-center p-4">
@@ -632,7 +612,6 @@ export default function PaymentPage() {
     );
   }
 
-  // ── Expired ─────────────────────────────────────────────────────────────────
   if (isExpired) {
     return (
       <div className="min-h-screen bg-[#f5f2ee] flex items-center justify-center p-4">
@@ -653,7 +632,6 @@ export default function PaymentPage() {
     );
   }
 
-  // ── Success ─────────────────────────────────────────────────────────────────
   if (paymentStatus === "success") {
     return (
       <div className="min-h-screen bg-[#f5f2ee] flex items-center justify-center p-4">
@@ -685,375 +663,159 @@ export default function PaymentPage() {
     );
   }
 
-  // ── Main ─────────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-[#f5f2ee] pb-16 md:pb-24">
-
-      {isAuthenticated && <ChatDrawer isOpen={showChat} onClose={() => setShowChat(false)} user={user} />}
-
-      {/* Mobile header */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-40 px-4 py-2.5 flex items-center justify-between"
-        style={{ background: "#093A3E", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-        <button onClick={() => navigate(-1)} className="p-1.5 hover:bg-white/10 rounded-full transition-colors">
-          <ArrowLeft className="w-4 h-4 text-[#ED9B40]" />
-        </button>
-        <h1 className="text-base font-medium text-[#ED9B40] truncate max-w-[200px]">Complete Payment</h1>
-        <button onClick={() => setShowSummary(!showSummary)} className="p-1.5 hover:bg-white/10 rounded-full transition-colors">
-          <Eye className={`w-4 h-4 text-[#ED9B40] transition-transform ${showSummary ? "rotate-180" : ""}`} />
-        </button>
-      </div>
-
-      {/* Mobile summary dropdown */}
-      <AnimatePresence>
-        {showSummary && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-            className="md:hidden fixed top-[49px] left-0 right-0 bg-white border-b border-stone-200 z-40 overflow-hidden shadow-lg"
-          >
-            <div className="p-4">
-              <div className="flex gap-3">
-                <img src={getImageSrc(property?.cover_image || property?.images?.[0])}
-                  alt={property?.name || "Property"}
-                  className="w-16 h-16 object-cover rounded-lg"
-                  onError={(e) => { e.target.src = "/default-property.jpg"; }} />
-                <div className="flex-1">
-                  <h3 className="font-medium text-sm">{property?.name || "Property"}</h3>
-                  <p className="text-xs text-stone-500 mt-1">{property?.location}</p>
-                </div>
-              </div>
-              <div className="mt-4 space-y-2 text-sm border-t border-stone-100 pt-4">
-                <div className="flex justify-between">
-                  <span className="text-stone-600">Total Amount</span>
-                  <span className="font-serif font-bold">{formatCurrency(booking?.total_amount)}</span>
-                </div>
-                {timeLeft && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-stone-600">Time left</span>
-                    <span className={`font-mono font-bold ${showTimerWarning ? "text-red-600" : "text-stone-900"}`}>
-                      {timeLeft.minutes}:{String(timeLeft.seconds).padStart(2, "0")}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Main content */}
-      <div className="max-w-6xl mx-auto px-4 pt-20 md:pt-12">
-
-        {/* Desktop header */}
-        <div className="hidden md:flex items-center gap-3 mb-8">
-          <button onClick={() => navigate(-1)} className="p-1.5 hover:bg-stone-200 rounded-full transition-colors">
-            <ArrowLeft className="w-4 h-4" />
+    <div className="min-h-screen bg-[#f5f2ee] pb-16 pt-12 px-4">
+      <div className="max-w-4xl mx-auto">
+        <div className="flex items-center gap-3 mb-6">
+          <button onClick={() => navigate(-1)} className="p-2 bg-white hover:bg-stone-100 rounded-full transition-colors">
+            <ArrowLeft className="w-5 h-5 text-[#093A3E]" />
           </button>
-          <h1 className="font-serif text-xl">Complete Your Payment</h1>
+          <h1 className="font-serif text-2xl text-[#1C2321]">Complete Your Reservation</h1>
         </div>
 
-        {/* Timer warnings */}
-        {showTimerWarning && timeLeft && (
-          <>
-            <div className="hidden md:block mb-6">
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-center gap-3">
-                <Clock className="w-5 h-5 text-amber-600" />
-                <div>
-                  <p className="text-amber-800 font-medium">
-                    Complete payment in {timeLeft.minutes}:{String(timeLeft.seconds).padStart(2, "0")}
-                  </p>
-                  <p className="text-amber-600 text-sm">Your booking will expire if not completed in time.</p>
-                </div>
-              </div>
-            </div>
-            <div className="md:hidden mb-4">
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-2">
-                <Clock className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                <p className="text-amber-800 text-xs">
-                  Complete in <span className="font-mono font-bold">
-                    {timeLeft.minutes}:{String(timeLeft.seconds).padStart(2, "0")}
-                  </span>
-                </p>
-              </div>
-            </div>
-          </>
-        )}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="md:col-span-2 space-y-6">
+            
+            {/* Show explicit DARARJA Error message prominently if it failed */}
+            <AnimatePresence>
+              {paymentStatus === "failed" && errorMessage && (
+                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                  className="bg-red-50 border border-red-200 rounded-xl p-4 md:p-6 flex flex-col items-center justify-center text-center gap-2">
+                  <XCircle className="w-8 h-8 text-red-500 mb-2" />
+                  <p className="text-red-800 font-medium text-lg">Payment Failed</p>
+                  <p className="text-red-600 text-sm">{errorMessage}</p>
+                  <button onClick={handleRetry} className="mt-4 px-6 py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors">
+                    Try Again
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-        {/* Error */}
-        <AnimatePresence>
-          {errorMessage && (
-            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-              className="mb-4 md:mb-6 bg-red-50 border border-red-200 rounded-lg p-3 md:p-4 flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-red-700 text-xs md:text-sm">{errorMessage}</p>
-                {paymentStatus === "failed" && (
-                  <button onClick={handleRetry} className="text-xs text-red-600 underline mt-1">Try again</button>
+            {paymentStatus !== "failed" && (
+              <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-6">
+                <h2 className="font-serif text-xl mb-4 text-[#1C2321]">Select Payment Method</h2>
+                <div className="flex gap-4 mb-6">
+                  <button 
+                    onClick={() => setSelectedMethod("mpesa")}
+                    className={`flex-1 p-4 rounded-xl border-2 text-left transition-all ${
+                      selectedMethod === "mpesa" ? "border-emerald-600 bg-emerald-50/30" : "border-stone-200"
+                    }`}
+                  >
+                    <Smartphone className="w-5 h-5 text-emerald-600 mb-2" />
+                    <p className="font-semibold text-sm">M-PESA</p>
+                    <p className="text-xs text-stone-500">Instant STK Push</p>
+                  </button>
+                </div>
+
+                {selectedMethod === "mpesa" && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs uppercase tracking-wider text-stone-500 mb-2">M-PESA Phone Number</label>
+                      <input 
+                        type="tel"
+                        value={phoneNumber}
+                        onChange={handlePhoneChange}
+                        placeholder="e.g. 0712345678"
+                        disabled={paymentStatus === "processing"}
+                        className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm outline-none focus:border-[#093A3E]"
+                      />
+                      {phoneError && <p className="text-xs text-red-500 mt-1">{phoneError}</p>}
+                    </div>
+
+                    {paymentStatus === "processing" ? (
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center space-y-3">
+                        <div className="w-10 h-10 border-3 border-amber-600 border-t-transparent rounded-full animate-spin mx-auto" />
+                        <div>
+                          <p className="font-semibold text-amber-900 text-sm">STK Push Sent to Your Phone!</p>
+                          <p className="text-xs text-amber-700 mt-1">Check your phone screen, enter your M-PESA PIN, and press Send.</p>
+                        </div>
+                        <button 
+                          onClick={checkMpesaStatus}
+                          disabled={checkingStatus}
+                          className="mt-2 text-xs text-[#093A3E] font-bold underline hover:text-emerald-700"
+                        >
+                          {checkingStatus ? "Checking status with Safaricom..." : "I have entered my PIN — Verify Payment"}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={initiateMpesa}
+                        disabled={processing || !phoneNumber}
+                        className="w-full py-4 bg-emerald-600 text-white font-medium rounded-xl text-sm hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2"
+                      >
+                        <Wallet className="w-4 h-4" /> Pay {formatCurrency(booking?.total_amount)}
+                      </button>
+                    )}
+
+                    {errorMessage && paymentStatus !== "failed" && (
+                      <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg flex items-center gap-2 mt-4">
+                        <AlertCircle className="w-4 h-4 shrink-0" />
+                        <span>{errorMessage}</span>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Processing banner */}
-        <AnimatePresence>
-          {successMessage && paymentStatus === "processing" && (
-            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-              className="mb-4 md:mb-6 bg-green-50 border border-green-200 rounded-lg p-3 md:p-4 flex items-start gap-2">
-              <Smartphone className="w-4 h-4 text-green-600 flex-shrink-0" />
-              <p className="text-green-700 text-xs md:text-sm">{successMessage}</p>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
-
-          {/* LEFT — Payment form */}
-          <div className="md:col-span-2 order-2 md:order-1">
-            <div className="bg-white rounded-xl shadow-lg border border-stone-200 overflow-hidden">
-
-              {/* Method selection */}
-              <div className="p-4 md:p-6 border-b border-stone-200">
-                <h2 className="font-serif text-lg md:text-xl mb-4">Payment Method</h2>
-                <div className="grid grid-cols-2 gap-2 md:gap-3">
-                  <button onClick={() => { setSelectedMethod("mpesa"); handleRetry(); }}
-                    className={`p-3 md:p-4 rounded-lg border-2 transition-all flex items-center gap-2 md:gap-3 ${
-                      selectedMethod === "mpesa" ? "border-green-500 bg-green-50" : "border-stone-200 hover:border-stone-300"
-                    }`}>
-                    <Smartphone className={`w-4 h-4 md:w-5 md:h-5 ${selectedMethod === "mpesa" ? "text-green-600" : "text-stone-400"}`} />
-                    <div className="text-left">
-                      <p className="text-xs md:text-sm font-medium">M-PESA</p>
-                      <p className="text-[10px] md:text-xs text-stone-500">Mobile money</p>
-                    </div>
-                  </button>
-                  <button onClick={() => { setSelectedMethod("paypal"); handleRetry(); }}
-                    className={`p-3 md:p-4 rounded-lg border-2 transition-all flex items-center gap-2 md:gap-3 ${
-                      selectedMethod === "paypal" ? "border-blue-500 bg-blue-50" : "border-stone-200 hover:border-stone-300"
-                    }`}>
-                    <div className="w-4 h-4 md:w-5 md:h-5 flex items-center justify-center flex-shrink-0">
-                      <svg viewBox="0 0 24 24" className={`w-4 h-4 md:w-5 md:h-5 ${selectedMethod === "paypal" ? "opacity-100" : "opacity-40"}`} fill="none">
-                        <path d="M19.5 6.5C19.5 9.5 17.5 12 14 12H11.5L10.5 17.5H7.5L9.5 6.5H14C17 6.5 19.5 4 19.5 6.5Z" fill="#003087"/>
-                        <path d="M17 9.5C17 12.5 15 15 11.5 15H9L8 20.5H5L7 9.5H11.5C14.5 9.5 17 7 17 9.5Z" fill="#009cde"/>
-                      </svg>
-                    </div>
-                    <div className="text-left">
-                      <p className="text-xs md:text-sm font-medium">PayPal</p>
-                      <p className="text-[10px] md:text-xs text-stone-500">Pay online</p>
-                    </div>
-                  </button>
-                </div>
-              </div>
-
-              {/* M-PESA form */}
-              {selectedMethod === "mpesa" && (
-                <div className="p-4 md:p-6">
-                  <h3 className="font-medium text-sm md:text-base mb-3">M-PESA Phone Number</h3>
-                  <div className="relative">
-                    <div className="flex items-center border border-stone-200 rounded-lg overflow-hidden focus-within:border-stone-900 transition-colors">
-                      <div className="bg-stone-100 px-3 py-3 md:px-4 md:py-3.5 border-r border-stone-200">
-                        <Phone className="w-4 h-4 text-stone-500" />
-                      </div>
-                      <input type="tel" value={phoneNumber} onChange={handlePhoneChange}
-                        placeholder="0712345678" disabled={paymentStatus === "processing"}
-                        className="flex-1 px-3 md:px-4 py-3 md:py-3.5 outline-none text-sm disabled:bg-stone-50" />
-                    </div>
-                    <button onClick={() => setShowPhoneHelp(!showPhoneHelp)}
-                      className="text-xs text-stone-500 mt-2 flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3" />
-                      What format should I use?
-                    </button>
-                    <AnimatePresence>
-                      {showPhoneHelp && (
-                        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                          <div className="bg-stone-50 p-3 rounded-lg mt-2 text-xs space-y-2">
-                            <p>✅ <span className="font-mono">0712345678</span> (10 digits)</p>
-                            <p>✅ <span className="font-mono">254712345678</span> (12 digits)</p>
-                            <p>✅ <span className="font-mono">+254712345678</span> (13 digits)</p>
-                            <button onClick={copyPhone} className="text-green-600 flex items-center gap-1 mt-1">
-                              <Copy className="w-3 h-3" />
-                              {copied ? "Copied!" : "Copy example"}
-                            </button>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                    {phoneError && <p className="text-red-500 text-xs mt-2">{phoneError}</p>}
-                  </div>
-
-                  {paymentStatus === "pending" && (
-                    <button onClick={initiateMpesa} disabled={processing || !phoneNumber || !!phoneError}
-                      className="w-full mt-6 py-3 md:py-4 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:bg-stone-300 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                      {processing
-                        ? <><Loader className="w-4 h-4 animate-spin" /> Processing…</>
-                        : <><Wallet className="w-4 h-4" /> Pay {formatCurrency(booking?.total_amount)}</>}
-                    </button>
-                  )}
-                  {paymentStatus === "processing" && (
-                    <div className="mt-6 text-center">
-                      <div className="flex justify-center mb-3">
-                        <div className="w-12 h-12 border-4 border-stone-200 border-t-green-600 rounded-full animate-spin" />
-                      </div>
-                      <p className="text-sm font-medium">Waiting for M-PESA confirmation</p>
-                      <p className="text-xs text-stone-500 mt-1">Check your phone and enter PIN</p>
-                      <button onClick={checkMpesaStatus} disabled={checkingStatus} className="mt-4 text-xs text-green-600 underline disabled:opacity-50">
-                        {checkingStatus ? "Checking M-PESA…" : "Check status manually"}
-                      </button>
-                    </div>
-                  )}
-                  {paymentStatus === "failed" && (
-                    <button onClick={handleRetry}
-                      className="w-full mt-6 py-3 bg-stone-900 text-white rounded-lg text-sm font-medium hover:bg-stone-800 transition-colors">
-                      Try Again
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {/* PayPal form */}
-              {selectedMethod === "paypal" && (
-                <div className="p-4 md:p-6">
-                  <h3 className="font-medium text-sm md:text-base mb-2">Pay with PayPal</h3>
-                  <p className="text-xs text-stone-500 mb-6">
-                    You'll be redirected to PayPal to complete your payment securely.
+            )}
+            
+            <div className="p-4 md:p-6 bg-stone-50 border border-stone-200 rounded-2xl">
+              <div className="flex items-start gap-2">
+                <Lock className="w-4 h-4 text-stone-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-medium">Secure Payment</p>
+                  <p className="text-[10px] md:text-xs text-stone-500">
+                    Your payment is encrypted. We never store your M-PESA PIN.
                   </p>
-                  <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-6">
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-stone-600">Amount</span>
-                      <span className="font-serif font-bold">{formatCurrency(booking?.total_amount)}</span>
-                    </div>
-                    <p className="text-[10px] text-stone-400 mt-1">
-                      Approximate USD equivalent charged at PayPal's current exchange rate.
-                    </p>
-                  </div>
-                  {paymentStatus === "pending" && (
-                    <button onClick={initiatePaypal} disabled={paypalLoading}
-                      className="w-full py-3 md:py-4 bg-[#0070ba] hover:bg-[#005ea6] text-white rounded-lg text-sm font-medium transition-colors disabled:bg-stone-300 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                      {paypalLoading
-                        ? <><Loader className="w-4 h-4 animate-spin" /> Connecting to PayPal…</>
-                        : <>
-                            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="white">
-                              <path d="M19.5 6.5C19.5 9.5 17.5 12 14 12H11.5L10.5 17.5H7.5L9.5 6.5H14C17 6.5 19.5 4 19.5 6.5Z" fillOpacity="0.9"/>
-                              <path d="M17 9.5C17 12.5 15 15 11.5 15H9L8 20.5H5L7 9.5H11.5C14.5 9.5 17 7 17 9.5Z" fillOpacity="0.7"/>
-                            </svg>
-                            Pay with PayPal <ExternalLink className="w-3 h-3 opacity-70" />
-                          </>}
-                    </button>
-                  )}
-                  {paymentStatus === "processing" && (
-                    <div className="mt-2 text-center">
-                      <div className="flex justify-center mb-3">
-                        <div className="w-12 h-12 border-4 border-stone-200 border-t-blue-600 rounded-full animate-spin" />
-                      </div>
-                      <p className="text-sm font-medium">Completing PayPal payment…</p>
-                    </div>
-                  )}
-                  {paymentStatus === "failed" && (
-                    <button onClick={handleRetry}
-                      className="w-full mt-4 py-3 bg-stone-900 text-white rounded-lg text-sm font-medium hover:bg-stone-800 transition-colors">
-                      Try Again
-                    </button>
-                  )}
-                  <p className="text-[10px] text-stone-400 text-center mt-4">
-                    You will be redirected to PayPal's secure checkout.
-                  </p>
-                </div>
-              )}
-
-              {/* Security note */}
-              <div className="p-4 md:p-6 bg-stone-50 border-t border-stone-200">
-                <div className="flex items-start gap-2">
-                  <Lock className="w-4 h-4 text-stone-500 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-xs font-medium">Secure Payment</p>
-                    <p className="text-[10px] md:text-xs text-stone-500">
-                      {selectedMethod === "mpesa"
-                        ? "Your payment is encrypted. We never store your M-PESA PIN."
-                        : "You'll be redirected to PayPal's encrypted checkout. We never see your PayPal credentials."}
-                    </p>
-                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* RIGHT — Summary */}
-          <div className="md:col-span-1 order-1 md:order-2">
-            <div className="md:sticky md:top-24">
-              <div className="bg-white rounded-xl shadow-lg border border-stone-200 overflow-hidden">
-
-                {/* Property preview (desktop) */}
-                <div className="hidden md:block p-4 border-b border-stone-200">
-                  <div className="flex gap-3">
-                    <img src={getImageSrc(property?.cover_image || property?.images?.[0])}
-                      alt={property?.name || "Property"}
-                      className="w-16 h-16 object-cover rounded-lg"
-                      onError={(e) => { e.target.src = "/default-property.jpg"; }} />
-                    <div>
-                      <h3 className="font-medium text-sm">{property?.name || "Property"}</h3>
-                      <p className="text-xs text-stone-500 mt-1">{property?.location}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Booking summary */}
-                <div className="p-4 md:p-5 space-y-3">
-                  <h3 className="font-serif text-base md:text-lg mb-3">Booking Summary</h3>
-                  <div className="flex justify-between text-xs md:text-sm">
-                    <span className="text-stone-600">Dates</span>
-                    <span className="font-medium">
-                      {booking?.check_in_display || booking?.check_in} — {booking?.check_out_display || booking?.check_out}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-xs md:text-sm">
-                    <span className="text-stone-600">Nights</span>
-                    <span className="font-medium">{booking?.nights}</span>
-                  </div>
-                  <div className="flex justify-between text-xs md:text-sm">
-                    <span className="text-stone-600">Guests</span>
-                    <span className="font-medium">
-                      {booking?.guests?.adults || 1} Adult{booking?.guests?.adults !== 1 ? "s" : ""}
-                      {booking?.guests?.children > 0 && `, ${booking?.guests?.children} Children`}
-                    </span>
-                  </div>
-                  <div className="border-t border-stone-200 my-3 pt-3">
-                    <div className="flex justify-between font-bold">
-                      <span>Total Amount</span>
-                      <span className="font-serif text-lg md:text-xl">
-                        {formatCurrency(booking?.total_amount)}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Timer */}
-                  {timeLeft && (
-                    <div className={`p-3 rounded-lg ${showTimerWarning ? "bg-red-50" : "bg-stone-50"}`}>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs">Time to complete:</span>
-                        <span className={`font-mono font-bold ${showTimerWarning ? "text-red-600" : ""}`}>
-                          {timeLeft.minutes}:{String(timeLeft.seconds).padStart(2, "0")}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {isAuthenticated && (
-                    <button onClick={() => setShowChat(true)}
-                      className="w-full mt-4 py-3 border border-[#093A3E] text-[#093A3E] rounded-lg hover:bg-[#093A3E] hover:text-white transition-colors text-sm font-medium flex items-center justify-center gap-2">
-                      <MessageCircle size={18} /> Contact Concierge
-                    </button>
-                  )}
-                </div>
-
-                <div className="p-4 bg-stone-50 border-t border-stone-200">
-                  <p className="text-[10px] md:text-xs text-stone-500 text-center">
-                    Need help?{" "}
-                    <button onClick={() => setShowChat(true)} className="text-stone-900 underline">
-                      Chat with us
-                    </button>
-                  </p>
+          <div className="md:col-span-1">
+            <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-6 space-y-4 sticky top-20">
+              <h3 className="font-serif text-lg text-[#1C2321]">Reservation Summary</h3>
+              <div className="flex gap-3 items-center pb-4 border-b border-stone-100">
+                <img 
+                  src={getImageSrc(property?.cover_image || property?.images?.[0])} 
+                  alt={property?.name} 
+                  className="w-16 h-16 object-cover rounded-lg"
+                />
+                <div>
+                  <h4 className="font-semibold text-sm">{property?.name}</h4>
+                  <p className="text-xs text-stone-500">{property?.location}</p>
                 </div>
               </div>
+
+              <div className="space-y-2 text-xs text-stone-600">
+                <div className="flex justify-between">
+                  <span>Check-in:</span>
+                  <span className="font-medium text-stone-900">{booking?.check_in_display || booking?.check_in}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Check-out:</span>
+                  <span className="font-medium text-stone-900">{booking?.check_out_display || booking?.check_out}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Nights:</span>
+                  <span className="font-medium text-stone-900">{booking?.nights}</span>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-stone-100 flex justify-between items-center">
+                <span className="font-semibold text-sm">Total Due:</span>
+                <span className="font-serif text-xl font-bold text-[#093A3E]">{formatCurrency(booking?.total_amount)}</span>
+              </div>
+
+              {timeLeft && (
+                <div className="p-3 bg-amber-50 rounded-lg text-center mt-4">
+                  <p className="text-[10px] uppercase text-amber-700 font-bold">Hold Time Remaining</p>
+                  <p className="font-mono text-sm font-bold text-amber-900">{timeLeft.minutes}:{String(timeLeft.seconds).padStart(2, "0")}</p>
+                </div>
+              )}
+              
+              <button onClick={() => setShowChat(true)} className="w-full mt-4 flex items-center justify-center gap-2 border border-stone-300 py-2.5 rounded-lg text-xs font-medium hover:bg-stone-50 transition-colors">
+                <MessageCircle size={14} /> Contact Concierge
+              </button>
             </div>
           </div>
         </div>
