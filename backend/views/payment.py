@@ -108,14 +108,15 @@ def _mark_booking_paid(booking, payment):
         booking.status = 'confirmed'
         booking.confirmation = 'confirmed'
         booking.pending_amount = Decimal('0')
-    elif total_paid >= (booking.total_amount - booking.pending_amount):
-        booking.payment_status = 'partial'
-        booking.status = 'confirmed'
-        booking.confirmation = 'confirmed'
-    
-    booking.expires_at = None
+        booking.expires_at = None
+    else:
+        # A successful individual transaction is not enough to confirm a booking.
+        # Keep the booking pending until all of its required amount is verified.
+        booking.payment_status = 'pending'
+        booking.status = 'pending'
+        booking.confirmation = 'pending'
 
-    if not was_paid and booking.payment_status in ('completed', 'partial'):
+    if not was_paid and booking.payment_status == 'completed':
         db.session.add(Notification(
             user_id=booking.user_id,
             type='booking',
@@ -183,11 +184,12 @@ def initiate_mpesa_payment():
 
     idempotency_key = f"MPESA_{booking.id}_{datetime.utcnow().timestamp()}"
 
+    payment_amount = Decimal(str(booking.total_amount))
     payment = Payment(
         booking_id=booking.id,
         user_id=user_id,
         property_id=booking.property_id,
-        amount=Decimal(str(data['amount'])),
+        amount=payment_amount,
         method='mpesa',
         mpesa_number=phone,
         status='pending',
@@ -205,7 +207,7 @@ def initiate_mpesa_payment():
 
         mpesa_result = mpesa_service.stk_push(
             phone_number=phone,
-            amount=int(data['amount']),
+            amount=int(payment_amount),
             account_reference=payment_ref,
             transaction_desc=f"Payment for booking #{booking.id}"
         )
@@ -284,12 +286,17 @@ def mpesa_callback():
 
             db.session.commit()
 
-            if not was_completed and booking:
+            if not was_completed and booking and booking.payment_status == 'completed':
                 _send_payment_email(booking, payment)
 
         else:
             payment.status = 'failed'
             payment.error_log = processed.get('result_desc', 'Payment failed')
+            booking = Booking.query.get(payment.booking_id)
+            if booking and booking.payment_status != 'completed':
+                booking.status = 'pending'
+                booking.payment_status = 'pending'
+                booking.confirmation = 'pending'
             db.session.commit()
 
         return jsonify({'ResultCode': 0, 'ResultDesc': 'Success'}), 200
@@ -324,7 +331,7 @@ def check_payment_status(checkout_request_id):
             if result_code is None:
                 result_code = result.get('ResultCode')
 
-            if result.get('success') or (result_code is not None and int(result_code) == 0):
+            if result_code is not None and int(result_code) == 0:
                 was_completed = (payment.status == 'completed')
                 receipt = _extract_receipt_from_query_result(result)
                 
@@ -347,10 +354,17 @@ def check_payment_status(checkout_request_id):
                 else:
                     db.session.commit()
                     
-            elif result_code is not None and int(result_code) not in (0, 1032):
-                # 1032 indicates the user is still actively entering their PIN or request is processing
-                payment.status = 'failed'
-                payment.error_log = result.get('result_desc') or result.get('ResultDesc', 'Payment failed')
+            elif result_code is not None:
+                # 1032 indicates the user is still actively entering their PIN or
+                # the request is processing. Every other non-zero code is failure.
+                if int(result_code) != 1032:
+                    payment.status = 'failed'
+                    payment.error_log = result.get('result_desc') or result.get('ResultDesc', 'Payment failed')
+                booking = Booking.query.get(payment.booking_id)
+                if booking and booking.payment_status != 'completed':
+                    booking.status = 'pending'
+                    booking.payment_status = 'pending'
+                    booking.confirmation = 'pending'
                 db.session.commit()
                 
         except Exception as query_err:

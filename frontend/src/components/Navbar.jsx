@@ -1,4 +1,3 @@
-// Navbar.jsx - Updated with consistent navbar across all pages and Host button
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavbarState } from '../hooks/useNavbarState';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -8,24 +7,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import api from '../services/api';
 import MenuLink from './MenuLink';
 
-// --- STYLING CONSTANTS ---
-const COLORS = {
-  cream: '#F5F2EE',
-  creamDark: '#EBE5DE',
-  charcoal: '#1C1917',
-  gold: '#ED9B40',
-  white: '#FFFFFF',
-  teal: '#093A3E',
-};
-
-// Pages where the navbar shows ONLY the logo + back button (minimal mode)
 const MINIMAL_NAVBAR_ROUTES = [
   '/booking',
   '/payment',
   '/checkout',
 ];
 
-// "Other Services" submenu items - REMOVED Terms & Policy
 const OTHER_SERVICES = [
   { label: 'Photography & Videography', to: '/photography-videography' },
   { label: 'Listing Optimization', to: '/listing-optimization' },
@@ -36,10 +23,8 @@ const OTHER_SERVICES = [
   { label: 'Safari Tours', to: '/safari-tours' },
   { label: 'Airport & SGR Transfers', to: '/airport-transfers' },
   { label: 'Chef Services', to: '/chef-services' },
-  // Terms & Policy removed as requested
 ];
 
-// Scroll spy component
 const ScrollSpy = ({ onScroll }) => {
   useEffect(() => {
     const handleScroll = () => {
@@ -68,18 +53,14 @@ const Navbar = () => {
   const otherServicesRef = useRef(null);
   const notifRef = useRef(null);
 
-  // Check if current page is homepage
   const isHomePage = location.pathname === '/';
 
-  // Determine if we're on a page that should show minimal navbar
   const isMinimalRoute = MINIMAL_NAVBAR_ROUTES.some(route =>
     location.pathname.startsWith(route)
   );
 
-  // Check if we're at the top of the page (for transparency effects) - only applies to homepage
   const isAtTop = isHomePage ? scrollY < 50 : false;
 
-  // Helper function to check if a route is active
   const isActiveRoute = (path) => {
     if (path === '/') return location.pathname === '/';
     return location.pathname.startsWith(path);
@@ -101,21 +82,22 @@ const Navbar = () => {
 
         if (user.role === 'admin') {
           try {
-            // Fetch admin notifications from the database
             const notifRes = await api.settings.getAdminNotifications();
             const dbNotifications = notifRes.data || [];
             
-            // Convert database notifications to the expected format
             dbNotifications.forEach(notification => {
-              let route = '/admin';
+              let route = '/admin?tab=dashboard';
               let action = 'View Details';
               
               if (notification.type === 'chat') {
-                route = '/admin/messages';
+                route = '/admin?tab=messages';
                 action = 'View Messages';
               } else if (notification.type === 'consultation') {
-                route = '/admin/consultations';
+                route = '/admin?tab=consultations';
                 action = 'View Consultation';
+              } else if (notification.type === 'booking') {
+                route = '/admin?tab=bookings';
+                action = 'View Booking';
               }
               
               notificationsList.push({
@@ -131,7 +113,6 @@ const Navbar = () => {
               });
             });
 
-            // Also check for unread chat count (legacy system)
             const chatRes = await api.chats.getUnreadCount();
             const unreadCount = chatRes.data?.unread_count ?? chatRes.data?.count ?? chatRes.data?.unread ?? 0;
             if (unreadCount > 0) {
@@ -142,7 +123,7 @@ const Navbar = () => {
                 message: `You have ${unreadCount} unread message${unreadCount > 1 ? 's' : ''} from guests.`,
                 icon: 'message',
                 action: 'View Messages',
-                route: '/admin/messages',
+                route: '/admin?tab=messages',
                 timestamp: new Date(),
               });
             }
@@ -153,11 +134,9 @@ const Navbar = () => {
 
         if (user.role !== 'admin') {
           try {
-            // Fetch user notifications from the database
             const notifRes = await api.settings.getNotifications();
             const dbNotifications = notifRes.data || [];
             
-            // Convert database notifications to the expected format
             dbNotifications.forEach(notification => {
               let route = '/dashboard?tab=bookings';
               let action = 'View Details';
@@ -194,8 +173,16 @@ const Navbar = () => {
         console.error('Notification fetch error', err);
       }
     };
+
     fetchNotifications();
-    return () => { isMounted = false; };
+
+    // Listen for custom real-time status change events
+    window.addEventListener("bookingStatusChanged", fetchNotifications);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener("bookingStatusChanged", fetchNotifications);
+    };
   }, [isAuthenticated, user, location]);
 
   useEffect(() => {
@@ -204,7 +191,6 @@ const Navbar = () => {
     return () => clearTimeout(timer);
   }, [showToast]);
 
-  // Close menu/panels on outside click
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (isMenuOpen && menuRef.current && !menuRef.current.contains(event.target)) {
@@ -230,7 +216,6 @@ const Navbar = () => {
 
   const handleConsultClick = () => {
     if (!isAuthenticated) {
-      // Save consultation intent
       localStorage.setItem('consultationIntent', 'true');
       navigate('/login?redirect=/dashboard?tab=consultations');
     } else {
@@ -255,7 +240,6 @@ const Navbar = () => {
   };
 
   const dismissNotification = async (id) => {
-    // If it's a database notification (has numeric ID), mark as read
     if (typeof id === 'number' || (typeof id === 'string' && !isNaN(id))) {
       try {
         if (user?.role === 'admin') {
@@ -267,8 +251,6 @@ const Navbar = () => {
         console.error('Failed to mark notification as read:', err);
       }
     }
-    
-    // Remove from local state
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
@@ -277,7 +259,11 @@ const Navbar = () => {
     setShowToast(false);
     if (typeof notification.id === 'number') {
       try {
-        await api.settings.markNotificationRead(notification.id);
+        if (user?.role === 'admin') {
+          await api.settings.markAdminNotificationRead(notification.id);
+        } else {
+          await api.settings.markNotificationRead(notification.id);
+        }
       } catch (err) {
         console.error('Failed to mark notification as read:', err);
       }
@@ -285,7 +271,6 @@ const Navbar = () => {
     navigate(notification.route);
   };
 
-  // ─── MINIMAL NAVBAR (booking, payment, checkout) ───────────────────
   if (isMinimalRoute) {
     return (
       <>
@@ -296,7 +281,6 @@ const Navbar = () => {
         >
           <div className="max-w-[1600px] mx-auto px-6 lg:px-12">
             <div className="flex items-center justify-between">
-              {/* Logo → home */}
               <div className="flex-shrink-0 flex items-center">
                 <Link to="/" aria-label="Go to homepage">
                   <img
@@ -307,7 +291,6 @@ const Navbar = () => {
                 </Link>
               </div>
 
-              {/* Back button */}
               <button
                 onClick={() => navigate(-1)}
                 className="flex items-center gap-2 text-[#ED9B40] hover:text-white transition-colors duration-300 group"
@@ -329,12 +312,10 @@ const Navbar = () => {
     );
   }
 
-  // ─── FULL NAVBAR ──────────────────────────────────────────────────────────
   return (
     <>
-      {/* --- TOAST NOTIFICATIONS --- */}
       <AnimatePresence>
-        {showToast && isAuthenticated && user && user.role !== 'admin' && notifications.length > 0 && (
+        {showToast && isAuthenticated && notifications.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -374,7 +355,6 @@ const Navbar = () => {
         )}
       </AnimatePresence>
 
-      {/* --- MAIN NAVBAR - BEHAVIOR CHANGES BASED ON PAGE --- */}
       <motion.header 
         className="fixed top-0 left-0 w-full z-[100] py-0.5 transition-all duration-300"
         animate={{
@@ -390,7 +370,6 @@ const Navbar = () => {
         <div className="max-w-[1600px] mx-auto pl-0 pr-6 lg:pl-0 lg:pr-12">
           <div className="flex items-center justify-between">
 
-            {/* Left: Logo */}
             <div className="flex-shrink-0 flex items-center m-0 p-0">
               <Link to="/" aria-label="Go to homepage">
                 <img
@@ -405,13 +384,8 @@ const Navbar = () => {
               </Link>
             </div>
 
-            {/* Right: Actions */}
             <div className="flex items-center gap-4">
-
-              {/* Desktop Nav Links */}
               <nav className="hidden md:flex items-center gap-4 mr-1">
-
-                {/* 1. Reserve a Unit */}
                 <Link
                   to="/properties"
                   className="inline-flex items-center justify-center relative group px-4 py-1.5"
@@ -425,7 +399,6 @@ const Navbar = () => {
                   </span>
                 </Link>
 
-                {/* 2. Host Button */}
                 <Link
                   to="/host"
                   className="inline-flex items-center justify-center relative group px-1.5 py-1.5"
@@ -439,7 +412,6 @@ const Navbar = () => {
                   >
                     Host
                   </span>
-                  {/* Underline that appears on hover */}
                   <span 
                     className={`absolute bottom-0 left-0 h-[1px] transition-all duration-500 ${
                       isActiveRoute('/host') ? 'w-full' : 'w-0 group-hover:w-full'
@@ -450,7 +422,6 @@ const Navbar = () => {
                   />
                 </Link>
 
-                {/* 3. Management Services */}
                 <Link
                   to="/management"
                   className="inline-flex items-center justify-center relative group px-1.5 py-1.5"
@@ -464,7 +435,6 @@ const Navbar = () => {
                   >
                     Management Services
                   </span>
-                  {/* Underline that stays when active */}
                   <span 
                     className={`absolute bottom-0 left-0 h-[1px] transition-all duration-500 ${
                       isActiveRoute('/management') ? 'w-full' : 'w-0 group-hover:w-full'
@@ -475,7 +445,6 @@ const Navbar = () => {
                   />
                 </Link>
 
-                {/* 4. Other Services dropdown */}
                 <div className="relative" ref={otherServicesRef}>
                   <button
                     onClick={() => setOtherServicesOpen(prev => !prev)}
@@ -498,7 +467,6 @@ const Navbar = () => {
                       }}
                       className={`transition-transform duration-300 ${otherServicesOpen ? 'rotate-180' : ''}`}
                     />
-                    {/* Underline that appears on hover */}
                     <span 
                       className={`absolute bottom-0 left-0 h-[1px] transition-all duration-500 w-0 group-hover:w-full`}
                       style={{
@@ -534,7 +502,6 @@ const Navbar = () => {
                   </AnimatePresence>
                 </div>
 
-                {/* 5. Schedule Consultation */}
                 <button
                   onClick={handleConsultClick}
                   className="inline-flex items-center justify-center relative group px-1.5 py-1.5"
@@ -548,7 +515,6 @@ const Navbar = () => {
                   >
                     Schedule Consultation
                   </span>
-                  {/* Underline that appears on hover */}
                   <span 
                     className={`absolute bottom-0 left-0 h-[1px] transition-all duration-500 ${
                       isActiveRoute('/my-consultations') || isActiveRoute('/consultation/new') ? 'w-full' : 'w-0 group-hover:w-full'
@@ -560,7 +526,6 @@ const Navbar = () => {
                 </button>
               </nav>
 
-              {/* Notification Bell with popup panel */}
               {isAuthenticated && (
                 <div className="relative" ref={notifRef}>
                   <button
@@ -579,7 +544,6 @@ const Navbar = () => {
                     )}
                   </button>
 
-                  {/* Notification Popup Panel */}
                   <AnimatePresence>
                     {notifPanelOpen && (
                       <motion.div
@@ -590,7 +554,6 @@ const Navbar = () => {
                         className="absolute right-0 top-full mt-3 w-80 bg-[#F5F2EE] shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-[#EBE5DE] z-50 flex flex-col"
                         style={{ maxHeight: '420px' }}
                       >
-                        {/* Panel Header */}
                         <div className="flex items-center justify-between px-5 py-4 border-b border-[#EBE5DE] bg-white flex-shrink-0">
                           <div className="flex items-center gap-2">
                             <Bell size={13} className="text-[#ED9B40]" strokeWidth={1.5} />
@@ -608,7 +571,6 @@ const Navbar = () => {
                           )}
                         </div>
 
-                        {/* Scrollable Notification List */}
                         <div className="overflow-y-auto flex-1" style={{ maxHeight: '340px' }}>
                           {notifications.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-10 px-6 text-center">
@@ -660,7 +622,6 @@ const Navbar = () => {
                 </div>
               )}
 
-              {/* Hamburger Menu Toggle */}
               <div className="relative" ref={menuRef}>
                 <button
                   onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -680,7 +641,6 @@ const Navbar = () => {
                   </div>
                 </button>
 
-                {/* --- DROPDOWN MENU --- */}
                 <AnimatePresence>
                   {isMenuOpen && (
                     <motion.div
@@ -690,7 +650,6 @@ const Navbar = () => {
                       transition={{ duration: 0.4, ease: 'easeOut' }}
                       className="absolute right-0 top-14 mt-2 w-72 bg-[#F5F2EE] shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-[#EBE5DE] z-50 flex flex-col"
                     >
-                      {/* User Header */}
                       <div className="p-6 border-b border-[#EBE5DE] bg-white">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-full bg-[#093A3E] flex items-center justify-center text-[#ED9B40]">
@@ -705,14 +664,10 @@ const Navbar = () => {
                         </div>
                       </div>
 
-                      {/* Navigation Links */}
                       <div className="py-3">
-
-                        {/* Mobile: reorganized service links */}
                         <div className="px-4 md:hidden">
                           <p className="text-[8px] uppercase tracking-widest text-stone-400 px-6 pt-1 pb-0.5">Navigation</p>
 
-                          {/* Reserve a Unit */}
                           <Link
                             to="/properties"
                             onClick={() => setIsMenuOpen(false)}
@@ -722,7 +677,6 @@ const Navbar = () => {
                             <ChevronRight size={10} />
                           </Link>
 
-                          {/* Host Button - Mobile */}
                           <Link
                             to="/host"
                             onClick={() => setIsMenuOpen(false)}
@@ -731,7 +685,6 @@ const Navbar = () => {
                             Host
                           </Link>
 
-                          {/* Management Services */}
                           <Link
                             to="/management"
                             onClick={() => setIsMenuOpen(false)}
@@ -740,7 +693,6 @@ const Navbar = () => {
                             Management Services
                           </Link>
 
-                          {/* Other Services accordion */}
                           <div>
                             <button
                               onClick={() => setMobileOtherServicesOpen(prev => !prev)}
@@ -776,7 +728,6 @@ const Navbar = () => {
                             </AnimatePresence>
                           </div>
 
-                          {/* Schedule Consultation - Mobile */}
                           <button
                             onClick={() => { handleConsultClick(); setIsMenuOpen(false); }}
                             className="w-full text-left px-6 py-2 mb-1 uppercase text-[9px] tracking-[0.2em] font-bold text-[#093A3E] hover:bg-white transition-colors"
@@ -787,7 +738,6 @@ const Navbar = () => {
                           <div className="h-px bg-[#EBE5DE] mx-4 my-1.5" />
                         </div>
 
-                        {/* Auth-based links */}
                         {!isAuthenticated ? (
                           <>
                             <MenuLink to="/login" label="Login" onClick={() => setIsMenuOpen(false)} />
@@ -807,7 +757,6 @@ const Navbar = () => {
                           </>
                         ) : (
                           <>
-                            {/* My Dashboard - replaces individual account links */}
                             <Link
                               to="/dashboard"
                               onClick={() => setIsMenuOpen(false)}
@@ -822,7 +771,6 @@ const Navbar = () => {
 
                             <div className="h-px bg-[#EBE5DE] mx-4 my-1.5" />
 
-                            {/* Sign Out */}
                             <button
                               onClick={handleLogout}
                               className="w-full text-left px-6 py-2 text-[9px] uppercase tracking-[0.2em] font-bold text-red-900/60 hover:text-red-900 hover:bg-red-50/50 transition-colors flex items-center justify-between group"
@@ -834,7 +782,6 @@ const Navbar = () => {
                         )}
                       </div>
 
-                      {/* Footer Link */}
                       <div className="bg-[#093A3E] p-3 text-center">
                         <Link
                           to="/properties"
@@ -853,10 +800,9 @@ const Navbar = () => {
         </div>
       </motion.header>
 
-      {/* Scroll spy to track scroll position - only needed on homepage */}
       {isHomePage && <ScrollSpy onScroll={setScrollY} />}
     </>
   );
 };
 
-export default Navbar;                                                                                                                                                                                                                 
+export default Navbar;

@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState, useEffect, useRef } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   FaHome, FaBuilding, FaCalendarAlt, FaUsers, FaEnvelope,
   FaSignOutAlt, FaPlus, FaTrash, FaEdit, FaSync, FaEye,
@@ -16,11 +16,9 @@ import ChatWindow from "../components/Chat/ChatWindow";
 import socketService from "../services/socketService";
 import AdminConsultations from '../pages/AdminConsultations';
 import AdminBookingsTab from '../pages/AdminBookingsTab';
-import AdminPropertiesTab from '../pages/AdminPropertiesTab'; // NEW IMPORT
+import AdminPropertiesTab from '../pages/AdminPropertiesTab';
 import AdminDateBlocks from '../pages/AdminDateBlocks';
 
-
-// ─── helpers ─────────────────────────────────────────────────────────────────
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 function fmtDate(raw) {
@@ -29,13 +27,26 @@ function fmtDate(raw) {
   return isNaN(d) ? raw : `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// MAIN DASHBOARD
-// ═══════════════════════════════════════════════════════════════════════════════
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { logout, user } = useAuth();
-  const [activeTab, setActiveTab] = useState("dashboard");
+  
+  const tabFromUrl = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState(tabFromUrl || "dashboard");
+  
+  useEffect(() => {
+    if (tabFromUrl && tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [tabFromUrl]);
+
+  const handleTabChange = (tabId) => {
+    setActiveTab(tabId);
+    setSearchParams({ tab: tabId });
+    if (tabId !== "messages") setSelectedChat(null);
+  };
+
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     total_properties: 0,
@@ -51,18 +62,16 @@ export default function AdminDashboard() {
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const [properties,    setProperties]    = useState([]);
-  const [bookings,      setBookings]      = useState([]);
-  const [customers,     setCustomers]     = useState([]);
-  const [messages,      setMessages]      = useState([]);
+  const [properties, setProperties] = useState([]);
+  const [bookings, setBookings] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [messages, setMessages] = useState([]);
 
-  // Chat states
   const [selectedChat, setSelectedChat] = useState(null);
   const [chatMessages, setChatMessages] = useState({});
   const [newMessage, setNewMessage] = useState({});
   const messagesEndRef = useRef(null);
 
-  // Consultation counts for the dashboard summary widget only
   const [consultSummary, setConsultSummary] = useState({
     total: 0, pending: 0, confirmed: 0, completed: 0,
   });
@@ -71,11 +80,11 @@ export default function AdminDashboard() {
   const [newUsersLast7Days, setNewUsersLast7Days] = useState(0);
   const [loadingMessages, setLoadingMessages] = useState(false);
 
-  const [unreadCount,     setUnreadCount]     = useState(0);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [socketConnected, setSocketConnected] = useState(false);
 
-  const [selectedClient,       setSelectedClient]       = useState(null);
-  const [deletingClient,       setDeletingClient]       = useState(false);
+  const [selectedClient, setSelectedClient] = useState(null);
+  const [deletingClient, setDeletingClient] = useState(false);
   const [loadingClientDetails, setLoadingClientDetails] = useState(false);
 
   const navItems = [
@@ -88,7 +97,6 @@ export default function AdminDashboard() {
     { id: "messages",      label: "Chat",          icon: FaEnvelope, badge: unreadCount > 0 ? unreadCount : null },
   ];
 
-  // ── Init ─────────────────────────────────────────────────────────────────────
   useEffect(() => {
     fetchStats(); fetchProperties(); fetchBookings(); fetchCustomers();
     fetchConsultSummary(); fetchAdminNotifications();
@@ -108,7 +116,6 @@ export default function AdminDashboard() {
     scrollToBottom();
   }, [chatMessages]);
 
-  // ── Socket ────────────────────────────────────────────────────────────────────
   const initializeSocket = () => {
     if (!socketService.isConnected) socketService.connect();
     socketService.on("socket_connected", () => {
@@ -123,10 +130,8 @@ export default function AdminDashboard() {
         new Notification("New Chat Message", { body: `${n.user_name}: ${n.message_preview}`, icon: "/favicon.ico" });
     });
     socketService.on("new_message", (message) => {
-      // Update messages keyed by the sender's user_id (or the chat's user)
       const senderId = message.sender_id;
       setChatMessages(prev => {
-        // Find which user_id key this message belongs to
         for (const key of Object.keys(prev)) {
           if (String(key) === String(senderId)) {
             return {
@@ -140,7 +145,6 @@ export default function AdminDashboard() {
     });
   };
 
-  // ── Fetchers ──────────────────────────────────────────────────────────────────
   const fetchStats = async () => {
     try {
       const [statsRes, bookingsRes, propertiesRes, chatsRes] = await Promise.all([
@@ -157,7 +161,7 @@ export default function AdminDashboard() {
 
       const totalUnreadChat = chatsData.reduce((sum, c) => sum + (c.unread_count || 0), 0);
       setUnreadCount(totalUnreadChat);      
-      // Calculate real stats
+
       const totalRevenue = bookingsData
         .filter(b => b.payment_status === 'completed')
         .reduce((sum, b) => sum + (b.total_amount || 0), 0);
@@ -172,7 +176,6 @@ export default function AdminDashboard() {
       const activeBookings = bookingsData
         .filter(b => ['pending', 'confirmed', 'upcoming', 'active'].includes(b.status)).length;
       
-      // Find most popular property
       const propertyBookings = {};
       bookingsData.forEach(b => {
         propertyBookings[b.property_id] = (propertyBookings[b.property_id] || 0) + 1;
@@ -236,12 +239,12 @@ export default function AdminDashboard() {
       console.error('Failed to load admin notifications:', e);
     }
   };
+  
   const fetchMessages = async () => {
     setLoadingMessages(true);
     try {
       const chats = (await api.chats.getAll()).data || [];
 
-      // Group chats by user so each user appears once
       const byUser = {};
       chats.forEach(c => {
         const uid = c.user_id;
@@ -282,7 +285,6 @@ export default function AdminDashboard() {
     } catch(e){ console.error('Failed to fetch chats:', e); } finally { setLoadingMessages(false); }
   };
 
-  // Lightweight summary for the dashboard widget only — doesn't need full list
   const fetchConsultSummary = async () => {
     try {
       const res = await api.consultations.adminList();
@@ -296,15 +298,12 @@ export default function AdminDashboard() {
     } catch(e){}
   };
 
-  // ── Chat Functions ────────────────────────────────────────────────────────────
   const handleSelectChat = async (chat) => {
     setSelectedChat(chat);
     
-    // Load ALL messages for this user across all their chats
     const userId = chat.user_id;
     if (!chatMessages[userId]) {
       try {
-        // Fetch messages from each of the user's chats and merge
         const chatIds = chat.chat_ids || [chat.primary_chat_id];
         const allMessages = [];
         for (const cid of chatIds) {
@@ -313,7 +312,6 @@ export default function AdminDashboard() {
             allMessages.push(...(res.data || []));
           } catch (_) {}
         }
-        // Sort by timestamp
         allMessages.sort((a, b) => new Date(a.timestamp || a.created_at || 0) - new Date(b.timestamp || b.created_at || 0));
 
         setChatMessages(prev => ({
@@ -321,12 +319,10 @@ export default function AdminDashboard() {
           [userId]: allMessages
         }));
         
-        // Mark all user chats as read
         for (const cid of chatIds) {
           try { await api.chats.markRead(cid); } catch (_) {}
         }
         
-        // Update unread count in grouped list
         setMessages(prev => prev.map(g => 
           g.user_id === userId ? { ...g, unread_count: 0 } : g
         ));
@@ -337,7 +333,6 @@ export default function AdminDashboard() {
       }
     }
     
-    // Scroll to bottom after loading
     setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
@@ -347,7 +342,6 @@ export default function AdminDashboard() {
     const messageContent = newMessage[userId]?.trim();
     if (!messageContent || !selectedChat) return;
 
-    // Send to the user's primary (most recent) chat
     const chatId = selectedChat.primary_chat_id;
     if (!chatId) return;
 
@@ -363,7 +357,6 @@ export default function AdminDashboard() {
       is_temp: true
     };
 
-    // Optimistic update keyed by user_id
     setChatMessages(prev => ({
       ...prev,
       [userId]: [...(prev[userId] || []), optimisticMessage]
@@ -378,7 +371,6 @@ export default function AdminDashboard() {
         is_host: true
       });
 
-      // Replace optimistic message with real one
       setChatMessages(prev => ({
         ...prev,
         [userId]: prev[userId].map(msg => 
@@ -388,7 +380,6 @@ export default function AdminDashboard() {
       
     } catch (error) {
       console.error('Failed to send message:', error);
-      // Remove optimistic message on error
       setChatMessages(prev => ({
         ...prev,
         [userId]: prev[userId].filter(msg => msg.id !== tempId)
@@ -413,7 +404,6 @@ export default function AdminDashboard() {
     }, 100);
   };
 
-  // ── Logout ────────────────────────────────────────────────────────────────────
   const handleLogout = () => {
     socketService.disconnect();
     logout();
@@ -421,7 +411,6 @@ export default function AdminDashboard() {
     setMobileMenuOpen(false);
   };
 
-  // ── Client handlers ───────────────────────────────────────────────────────────
   const handleViewClient = async (client) => {
     setLoadingClientDetails(true);
     try {
@@ -439,7 +428,7 @@ export default function AdminDashboard() {
   const handleMessageClient = async (client) => {
     try {
       const chat = (await api.chats.startChat(client.id, null, null)).data.chat;
-      setActiveTab("messages"); 
+      handleTabChange("messages"); 
       setSelectedChat(chat);
       handleSelectChat(chat);
     } catch { alert("Could not start chat."); }
@@ -453,7 +442,6 @@ export default function AdminDashboard() {
     finally { setDeletingClient(false); }
   };
 
-  // ── Mobile menu ───────────────────────────────────────────────────────────────
   const MobileMenu = () => (
     <AnimatePresence>
       {mobileMenuOpen && (
@@ -476,7 +464,7 @@ export default function AdminDashboard() {
             <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
               {navItems.map(item => (
                 <button key={item.id}
-                  onClick={() => { setActiveTab(item.id); if(item.id!=="messages") setSelectedChat(null); setMobileMenuOpen(false); }}
+                  onClick={() => { handleTabChange(item.id); setMobileMenuOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 transition-all duration-300 relative ${
                     activeTab===item.id ? "bg-white/10 text-white border-r-2 border-[#ED9B40]" : "text-white/60 hover:text-white hover:bg-white/5"}`}
                 >
@@ -518,7 +506,6 @@ export default function AdminDashboard() {
   return (
     <div className="flex flex-col md:flex-row h-screen bg-[#F9F8F6] font-sans text-stone-800 overflow-hidden">
 
-      {/* Mobile menu button */}
       <button onClick={() => setMobileMenuOpen(true)}
         className="md:hidden fixed top-4 left-4 z-30 bg-[#093A3E] text-white p-3 rounded-lg shadow-lg">
         <FaBars size={20}/>
@@ -526,7 +513,6 @@ export default function AdminDashboard() {
 
       <MobileMenu />
 
-      {/* ── Desktop Sidebar - Updated to match client dashboard green ── */}
       <aside className="hidden md:flex md:w-72 bg-[#093A3E] text-white flex-col shadow-2xl z-20 flex-shrink-0">
         <div className="p-10 border-b border-white/10">
           <h1 className="text-2xl font-serif tracking-wider text-white">HOMES BY MWEMA<span className="text-[#ED9B40]">.</span></h1>
@@ -535,7 +521,7 @@ export default function AdminDashboard() {
         <nav className="flex-1 py-8 px-4 space-y-2 overflow-y-auto">
           {navItems.map(item => (
             <button key={item.id}
-              onClick={() => { setActiveTab(item.id); if(item.id!=="messages") setSelectedChat(null); }}
+              onClick={() => handleTabChange(item.id)}
               className={`w-full flex items-center gap-4 px-6 py-4 transition-all duration-300 group relative ${
                 activeTab===item.id ? "bg-white/10 text-white border-r-2 border-[#ED9B40]" : "text-white/60 hover:text-white hover:bg-white/5"}`}
             >
@@ -561,7 +547,6 @@ export default function AdminDashboard() {
         </div>
       </aside>
 
-      {/* ── Main ── */}
       <main className="flex-1 overflow-y-auto p-4 md:p-12 relative pt-16 md:pt-12">
         <header className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 md:mb-12 border-b border-stone-200 pb-4 md:pb-6">
           <div className="ml-12 md:ml-0">
@@ -582,11 +567,10 @@ export default function AdminDashboard() {
           </div>
         </header>
 
-        {/* Mobile secondary nav */}
         <div className="md:hidden mb-6 -mx-4 px-4 pb-4 border-b border-stone-200 overflow-x-auto">
           <div className="flex gap-2 min-w-min">
             {navItems.map(item => (
-              <button key={item.id} onClick={() => setActiveTab(item.id)}
+              <button key={item.id} onClick={() => handleTabChange(item.id)}
                 className={`px-3 py-2 rounded text-xs whitespace-nowrap transition-all relative ${
                   activeTab===item.id?"bg-[#093A3E] text-white":"bg-stone-100 text-stone-600 border border-stone-200"}`}>
                 {item.label}
@@ -596,7 +580,6 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* ══ DASHBOARD - Updated with real stats ══ */}
         {activeTab === "dashboard" && (
           <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} transition={{duration:0.6}} className="space-y-8 md:space-y-12">
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-8">
@@ -665,7 +648,6 @@ export default function AdminDashboard() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8">
-              {/* Consultation summary widget */}
               <div className="bg-white p-6 md:p-8 border border-stone-100 shadow-sm">
                 <h3 className="font-serif text-xl text-[#1C2321] mb-6 border-b border-stone-100 pb-4">Consultations</h3>
                 <div className="space-y-4">
@@ -680,14 +662,13 @@ export default function AdminDashboard() {
                       <span className={`text-lg font-serif ${item.color}`}>{item.value}</span>
                     </div>
                   ))}
-                  <button onClick={() => setActiveTab("consultations")}
+                  <button onClick={() => handleTabChange("consultations")}
                     className="w-full mt-2 text-[10px] uppercase tracking-widest text-stone-400 hover:text-[#093A3E] border-b border-stone-200 pb-1 transition-colors text-left">
                     View all →
                   </button>
                 </div>
               </div>
               
-              {/* Recent Activity Placeholder */}
               <div className="md:col-span-2 bg-white p-6 md:p-8 border border-stone-100 shadow-sm">
                 <h3 className="font-serif text-xl text-[#1C2321] mb-6 border-b border-stone-100 pb-4">Recent Activity</h3>
                 <div className="space-y-4">
@@ -724,14 +705,12 @@ export default function AdminDashboard() {
           </motion.div>
         )}
 
-        {/* ══ PROPERTIES - Using dedicated component ══ */}
         {activeTab === "properties" && (
           <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} transition={{duration:0.4}}>
             <AdminPropertiesTab onRefreshStats={fetchStats} />
           </motion.div>
         )}
 
-        {/* ══ BOOKINGS ══ */}
         {activeTab === "bookings" && (
           <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} transition={{duration:0.4}}>
             <AdminBookingsTab />
@@ -744,7 +723,6 @@ export default function AdminDashboard() {
           </motion.div>
         )}
 
-        {/* ══ CLIENTS ══ */}
         {activeTab === "customers" && (
           <div className="bg-white border border-stone-100 p-4 md:p-8">
             <AnimatePresence>
@@ -840,13 +818,10 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ══ CONSULTATIONS — delegated entirely to AdminConsultations ══ */}
         {activeTab === "consultations" && <AdminConsultations />}
 
-        {/* ══ MESSAGES - UPDATED CHAT SECTION ══ */}
         {activeTab === "messages" && (
           <div className="h-full flex flex-col">
-            {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
               <div>
                 <h2 className="text-xl md:text-2xl font-serif text-[#1C2321]">Chat</h2>
@@ -863,14 +838,11 @@ export default function AdminDashboard() {
               </button>
             </div>
 
-            {/* Main Chat Area - Two column on desktop, stack on mobile */}
             <div className="flex-1 flex flex-col md:flex-row gap-6 min-h-0">
-              {/* Chat List - Left Column (hidden on mobile when chat is open) */}
               <div className={`${
                 selectedChat ? 'hidden md:block md:w-80' : 'block w-full md:w-80'
               } flex-shrink-0`}>
                 {loadingMessages ? (
-                  // Loading skeletons for chat list
                   <div className="bg-white border border-stone-100 rounded-lg overflow-hidden">
                     <div className="bg-[#093A3E] p-4">
                       <div className="h-6 bg-white/20 animate-pulse rounded w-32"></div>
@@ -897,7 +869,6 @@ export default function AdminDashboard() {
                   </div>
                 ) : (
                   <div className="bg-white border border-stone-100 rounded-lg overflow-hidden">
-                    {/* List Header */}
                     <div className="bg-[#093A3E] text-white p-4">
                       <div className="flex justify-between items-center">
                         <h3 className="font-serif">Active Chats</h3>
@@ -907,7 +878,6 @@ export default function AdminDashboard() {
                       </div>
                     </div>
                     
-                    {/* Scrollable Chat List */}
                     <div className="max-h-[600px] overflow-y-auto">
                       {messages.map(chat => (
                         <button
@@ -918,7 +888,6 @@ export default function AdminDashboard() {
                           }`}
                           style={{ minHeight: '72px' }}
                         >
-                          {/* Avatar with status */}
                           <div className="relative flex-shrink-0">
                             <div className="w-10 h-10 rounded-full bg-[#093A3E] text-white flex items-center justify-center">
                               <FaUser />
@@ -930,7 +899,6 @@ export default function AdminDashboard() {
                             )}
                           </div>
 
-                          {/* Chat Info */}
                           <div className="flex-1 min-w-0">
                             <div className="flex justify-between items-baseline mb-1">
                               <h4 className="font-medium text-stone-900 truncate">
@@ -951,13 +919,11 @@ export default function AdminDashboard() {
                 )}
               </div>
 
-              {/* Chat Window - Right Column */}
               <div className={`${
                 selectedChat ? 'block' : 'hidden md:block'
               } flex-1 bg-white border border-stone-100 rounded-lg overflow-hidden`}>
                 {selectedChat ? (
                   <div className="h-full flex flex-col">
-                    {/* Chat Header with Back Button */}
                     <div className="bg-[#093A3E] text-white p-4 flex items-center gap-3">
                       <button
                         onClick={() => setSelectedChat(null)}
@@ -979,7 +945,6 @@ export default function AdminDashboard() {
                       </div>
                     </div>
 
-                    {/* Messages Area */}
                     <div className="flex-1 overflow-y-auto p-4 bg-stone-50">
                       {!chatMessages[selectedChat.user_id] || chatMessages[selectedChat.user_id].length === 0 ? (
                         <div className="h-full flex items-center justify-center">
@@ -988,7 +953,6 @@ export default function AdminDashboard() {
                       ) : (
                         <div className="space-y-6">
                           {(() => {
-                            // Group messages by date
                             const messages = chatMessages[selectedChat.user_id] || [];
                             const groups = {};
                             
@@ -1016,17 +980,14 @@ export default function AdminDashboard() {
                               groups[dateKey].push(msg);
                             });
                             
-                            // Render grouped messages
                             return Object.entries(groups).map(([date, dateMessages]) => (
                               <div key={date}>
-                                {/* Date Separator */}
                                 <div className="flex justify-center mb-4">
                                   <span className="text-xs bg-white px-3 py-1 rounded-full text-stone-500 shadow-sm">
                                     {date}
                                   </span>
                                 </div>
                                 
-                                {/* Messages for this date */}
                                 <div className="space-y-4">
                                   {dateMessages.map((msg, idx) => {
                                     const isOwn = msg.sender_id === user?.id;
@@ -1072,7 +1033,6 @@ export default function AdminDashboard() {
                       )}
                     </div>
 
-                    {/* Input Area */}
                     <div className="p-4 border-t border-stone-200">
                       <form 
                         onSubmit={(e) => {

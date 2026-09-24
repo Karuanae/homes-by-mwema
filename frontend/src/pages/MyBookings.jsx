@@ -42,6 +42,19 @@ const formatDate = (d) => {
   });
 };
 
+const deriveDisplayStatus = (booking) => {
+  if (booking.status === "cancelled") return "cancelled";
+  if (booking.payment_status !== "completed") return "pending";
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const checkOut = booking.check_out ? new Date(booking.check_out) : null;
+  const checkIn = booking.check_in ? new Date(booking.check_in) : null;
+  if (checkOut && checkOut < today) return "completed";
+  if (checkIn && checkIn <= today) return "active";
+  return "confirmed";
+};
+
 export default function MyBookings() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -92,10 +105,10 @@ export default function MyBookings() {
         guests:            b.guests || { adults: 1, children: 0 },
         totalAmount:       b.total_amount  || 0,
         baseAmount:        b.base_amount   || 0,
-        pendingAmount:     b.status === "pending" ? (b.pending_amount || 0) : 0,
-        paidAmount:        b.status !== "pending" ? (b.total_amount || 0) : 0,
-        status:            b.status        || "pending",
         paymentStatus:     b.payment_status || "pending",
+        pendingAmount:     b.payment_status !== "completed" ? (b.pending_amount || 0) : 0,
+        paidAmount:        b.payment_status === "completed" ? (b.total_amount || 0) : 0,
+        status:            deriveDisplayStatus(b),
         createdAt:         b.created_at,
         expiresAt:         b.expires_at,
         canCancel:         b.can_cancel,

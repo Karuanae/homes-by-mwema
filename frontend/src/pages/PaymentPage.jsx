@@ -386,19 +386,17 @@ export default function PaymentPage() {
         }
       }
 
-      // 6. Also reject if the booking is already not pending
-      if (bookingData.status && bookingData.status !== "pending") {
-        if (bookingData.status === "expired") {
-          setIsExpired(true);
-          setLoading(false);
-          return;
-        }
-        if (bookingData.status === "confirmed" || bookingData.payment_status === "completed") {
-          setErrorMessage("This booking has already been paid. Redirecting to your bookings…");
-          setTimeout(() => navigate("/dashboard?tab=bookings"), 2500);
-          setLoading(false);
-          return;
-        }
+      // 6. Payment completion is authoritative; booking status alone is not.
+      if (bookingData.status === "expired") {
+        setIsExpired(true);
+        setLoading(false);
+        return;
+      }
+      if (bookingData.payment_status === "completed") {
+        setErrorMessage("This booking has already been paid. Redirecting to your bookings…");
+        setTimeout(() => navigate("/dashboard?tab=bookings"), 2500);
+        setLoading(false);
+        return;
       }
 
       setBooking(bookingData);
@@ -415,6 +413,7 @@ export default function PaymentPage() {
 
   // ── M-PESA ──────────────────────────────────────────────────────────────────
   const completeMpesaPayment = (payment, confirmedBooking) => {
+    if (confirmedBooking?.payment_status !== "completed") return;
     const house = confirmedBooking?.house_details;
     setPaymentStatus("success");
     setSuccessMessage("Payment received and booking confirmed!");
@@ -463,7 +462,7 @@ export default function PaymentPage() {
         try {
           const bookingStatus = await api.bookings.getStatus(booking.id);
           if (bookingStatus.data?.payment_status === "completed") {
-            completeMpesaPayment(data.payment, { id: booking.id });
+            completeMpesaPayment(data.payment, bookingStatus.data);
           }
         } catch (bookingError) {
           console.debug("Booking confirmation fallback is still pending", bookingError);

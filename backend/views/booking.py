@@ -103,10 +103,10 @@ def derive_display_status(booking, today):
     raw = booking.status
     pay = booking.payment_status
 
+    if pay != 'completed':
+        return 'pending'
     if raw == 'cancelled':
         return 'cancelled'
-    if raw == 'pending':
-        return 'pending'
     if pay == 'completed':
         if booking.check_out < today:
             return 'completed'

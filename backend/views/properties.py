@@ -20,7 +20,6 @@ def _cover_url(property_id):
     if row:
         return f"/api/admin/property-image/{row[0]}"
     
-    # Fall back to the first image if no cover is flagged
     first = db.session.execute(
         select(PropertyImage.id)
         .where(PropertyImage.property_id == property_id)
@@ -31,11 +30,6 @@ def _cover_url(property_id):
 
 
 def _all_image_dicts(property_id):
-    """
-    Return list of image dicts including category.
-    Cover image is first (is_cover=True).
-    No binary data loaded.
-    """
     rows = db.session.execute(
         select(PropertyImage.id, PropertyImage.is_cover, PropertyImage.category)
         .where(PropertyImage.property_id == property_id)
@@ -66,7 +60,6 @@ def _host_dict(host):
 
 
 def _prop_list_dict(prop):
-    """Lightweight serialiser for list views (homepage / properties page)."""
     cover = _cover_url(prop.id)
     return {
         'id': prop.id,
@@ -81,7 +74,6 @@ def _prop_list_dict(prop):
         'max_guests': prop.max_guests,
         'amenities': prop.amenities or [],
         'cover_image': cover,
-        # images list for cards: just the cover, as an object for shape consistency
         'images': [{'id': None, 'url': cover, 'is_cover': True, 'category': None}] if cover else [],
         'tags': prop.tags or [],
         'status': prop.status,
@@ -90,7 +82,6 @@ def _prop_list_dict(prop):
         'bookings_count': prop.bookings_count,
         'is_featured': prop.is_featured,
         'created_at': prop.created_at.isoformat() if prop.created_at else None,
-        # NEW: Add coordinates to list view
         'coordinates': {
             'lat': float(prop.latitude) if prop.latitude else None,
             'lng': float(prop.longitude) if prop.longitude else None,
@@ -99,11 +90,9 @@ def _prop_list_dict(prop):
 
 
 def _prop_detail_dict(prop):
-    """Full serialiser for single-property detail view with categories."""
     image_dicts = _all_image_dicts(prop.id)
     cover = image_dicts[0]['url'] if image_dicts else None
 
-    # Include categories so the frontend can build tabs without a second request
     cats = (
         ImageCategory.query
         .filter_by(property_id=prop.id)
@@ -130,9 +119,9 @@ def _prop_detail_dict(prop):
             'bathrooms': prop.bathrooms,
         },
         'amenities': prop.amenities or [],
-        'images': image_dicts,   # now objects with {id, url, is_cover, category}
+        'images': image_dicts,
         'cover_image': cover,
-        'image_categories': [c.to_dict() for c in cats],  # bundled for convenience
+        'image_categories': [c.to_dict() for c in cats],
         'tags': prop.tags or [],
         'status': prop.status,
         'rating': float(prop.rating) if prop.rating else 0,
@@ -141,7 +130,6 @@ def _prop_detail_dict(prop):
         'is_featured': prop.is_featured,
         'host': _host_dict(prop.host),
         'created_at': prop.created_at.isoformat() if prop.created_at else None,
-        # NEW: Add Google Maps coordinates
         'coordinates': {
             'lat': float(prop.latitude) if prop.latitude else None,
             'lng': float(prop.longitude) if prop.longitude else None,
@@ -155,7 +143,6 @@ def _prop_detail_dict(prop):
 
 @properties_bp.route('', methods=['GET'])
 def get_all_properties():
-    """Get all active properties (public) — list view, cover image only."""
     try:
         properties = (
             Property.query
@@ -172,7 +159,6 @@ def get_all_properties():
 
 @properties_bp.route('/<int:property_id>', methods=['GET'])
 def get_property(property_id):
-    """Get single property by ID (public) — full detail with all images and categories."""
     try:
         prop = Property.query.get(property_id)
         if not prop or prop.status != 'active':
@@ -186,7 +172,6 @@ def get_property(property_id):
 
 @properties_bp.route('/featured', methods=['GET'])
 def get_featured_properties():
-    """Get featured properties (public) — cover image only."""
     properties = (
         Property.query
         .filter_by(status='active', is_featured=True)
@@ -198,7 +183,6 @@ def get_featured_properties():
 
 @properties_bp.route('/search', methods=['POST'])
 def search_properties():
-    """Search properties by criteria — cover image only."""
     data = request.json or {}
     query = Property.query.filter_by(status='active')
 
@@ -221,7 +205,10 @@ def search_properties():
 
 @properties_bp.route('/<int:property_id>/availability', methods=['GET'])
 def check_availability(property_id):
-    """Check if property is available for given dates."""
+    """
+    Check if property is available for given dates.
+    FIX: Only confirmed, completed, active, or upcoming paid bookings block dates.
+    """
     prop = Property.query.get(property_id)
     if not prop or prop.status != 'active':
         return jsonify({'error': 'Property not found'}), 404
@@ -242,16 +229,16 @@ def check_availability(property_id):
         Booking.property_id == property_id,
         Booking.check_in < check_out_date,
         Booking.check_out > check_in_date,
-        or_(
-            Booking.status.in_(['confirmed', 'upcoming']),
-            and_(Booking.status == 'pending', Booking.payment_status == 'completed')
-        )
+        Booking.status.in_(['confirmed', 'upcoming', 'active', 'completed']),
+        Booking.payment_status == 'completed'
     ).first()
+    
     block = DateBlock.query.filter(
         DateBlock.property_id == property_id,
         DateBlock.check_in < check_out_date,
         DateBlock.check_out > check_in_date
     ).first()
+    
     available = not conflict and not block
     return jsonify({
         'available': available,
@@ -262,11 +249,8 @@ def check_availability(property_id):
     })
 
 
-# ── PUBLIC CATEGORIES ENDPOINT (no auth required) ────────────────────────────
-
 @properties_bp.route('/<int:property_id>/categories', methods=['GET'])
 def get_property_categories(property_id):
-    """Public endpoint to get categories for a property (no auth required)"""
     try:
         prop = Property.query.get(property_id)
         if not prop or prop.status != 'active':
