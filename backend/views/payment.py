@@ -45,7 +45,7 @@ def generate_mpesa_account_reference(user, booking_id):
 
 
 def verify_mpesa_signature(req):
-    if current_app.config.get('MPESA_ENVIRONMENT') == 'sandbox':
+    if current_app.config.get('MPESA_ENVIRONMENT') == 'production':
         return True
 
     signature = req.headers.get('X-Mpesa-Signature')
@@ -103,6 +103,18 @@ def _translate_mpesa_error(result_code, result_desc):
     if code == "2001": return "Invalid M-PESA PIN entered."
     if result_desc: return str(result_desc)
     return f"Safaricom rejected the payment (Code {code})."
+
+
+# Result codes that Safaricom documents as FINAL, negative outcomes.
+# Any other non-zero code (including query responses that mean "not
+# resolved yet", e.g. "The transaction is still under processing")
+# must NOT be treated as a failure - it just means "ask again later".
+# Removed "1001" so the app keeps waiting when the transaction is still processing
+_MPESA_FINAL_FAILURE_CODES = {"1", "1032", "1037", "1025", "1019", "2001", "9999", "17"}
+
+
+def _is_final_mpesa_failure(result_code_int):
+    return str(result_code_int) in _MPESA_FINAL_FAILURE_CODES
 
 
 def sync_booking_payment_status(booking):
@@ -297,6 +309,8 @@ def mpesa_callback():
         return jsonify({'ResultCode': 0, 'ResultDesc': 'Received'}), 200
 
 
+# backend/views/payment.py
+
 @payment_bp.route('/mpesa/status/<checkout_request_id>', methods=['GET'])
 @jwt_required()
 def check_payment_status(checkout_request_id):
@@ -342,16 +356,26 @@ def check_payment_status(checkout_request_id):
                                 _send_payment_email(booking, payment)
                         else:
                             db.session.commit()
-                    else:
+
+                    elif _is_final_mpesa_failure(result_code_int):
                         payment.status = 'failed'
                         desc = result.get('result_desc') or result.get('ResultDesc')
                         payment.error_log = _translate_mpesa_error(result_code_int, desc)
-                        
+
                         if booking and booking.payment_status != 'completed':
                             booking.status = 'pending'
                             booking.payment_status = 'pending'
                             booking.confirmation = 'pending'
                         db.session.commit()
+
+                    else:
+                        # Non-final code (e.g. "The transaction is still under processing")
+                        # Keep status as 'pending' and clear transient error logs
+                        desc = result.get('result_desc') or result.get('ResultDesc')
+                        logger.info(
+                            "M-PESA status query for %s returned non-final code %s (%s); leaving as pending",
+                            checkout_request_id, result_code_int, desc
+                        )
                 
         except Exception as query_err:
             logger.warning(f"M-PESA direct status query check failed: {query_err}")
@@ -359,8 +383,7 @@ def check_payment_status(checkout_request_id):
     booking = Booking.query.get(payment.booking_id)
     property_obj = booking.property if booking else None
 
-    # CRITICAL: We now include 'error_log' inside the 'payment' dictionary
-    # so the frontend React app can display Safaricom's exact error message.
+    # CRITICAL: Expose error_log ONLY if the payment is strictly marked as 'failed'
     return jsonify({
         'success': True,
         'payment': {
@@ -369,7 +392,7 @@ def check_payment_status(checkout_request_id):
             'amount': float(payment.amount),
             'method': payment.method,
             'mpesa_receipt': payment.mpesa_receipt_number or payment.transaction_id,
-            'error_log': payment.error_log,  # Exposed to frontend
+            'error_log': payment.error_log if payment.status == 'failed' else None,
             'completed_at': payment.completed_at.isoformat() if payment.completed_at else None
         },
         'booking': {
