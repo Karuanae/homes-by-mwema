@@ -16,12 +16,13 @@ function parseUTCDate(dateStr) {
   return new Date(dateStr.endsWith("Z") ? dateStr : dateStr + "Z");
 }
 
+
 function ChatDrawer({ isOpen, onClose, user }) {
-  const [messages,    setMessages]    = useState([]);
-  const [newMessage,  setNewMessage]  = useState("");
-  const [loading,     setLoading]     = useState(false);
-  const [chat,        setChat]        = useState(null);
-  const [sending,     setSending]     = useState(false);
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [chat, setChat] = useState(null);
+  const [sending, setSending] = useState(false);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -129,11 +130,10 @@ function ChatDrawer({ isOpen, onClose, user }) {
                     return (
                       <div key={msg.id} className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
                         <div className={`max-w-[80%] ${isOwn ? "order-2" : "order-1"}`}>
-                          <div className={`relative px-4 py-2 rounded-2xl ${
-                            isOwn
-                              ? "bg-[#093A3E] text-white rounded-br-none"
-                              : "bg-white text-stone-900 rounded-bl-none shadow-sm"
-                          }`}>
+                          <div className={`relative px-4 py-2 rounded-2xl ${isOwn
+                            ? "bg-[#093A3E] text-white rounded-br-none"
+                            : "bg-white text-stone-900 rounded-bl-none shadow-sm"
+                            }`}>
                             <p className="text-sm pr-12">{msg.content}</p>
                             <div className={`absolute bottom-1 right-2 flex items-center gap-1 text-[10px] ${isOwn ? "text-white/60" : "text-stone-400"}`}>
                               <span>{fmtTime(msg.timestamp)}</span>
@@ -174,28 +174,40 @@ function ChatDrawer({ isOpen, onClose, user }) {
 
 export default function PaymentPage() {
   const { id } = useParams();
-  const navigate  = useNavigate();
-  const location  = useLocation();
+  const navigate = useNavigate();
+  const location = useLocation();
   const { isAuthenticated, user } = useAuth();
 
-  const [loading,          setLoading]          = useState(true);
-  const [processing,       setProcessing]       = useState(false);
-  const [property,         setProperty]         = useState(null);
-  const [booking,          setBooking]          = useState(null);
-  const [showChat,         setShowChat]         = useState(false);
-  const [selectedMethod,   setSelectedMethod]   = useState("mpesa");
-  const [phoneNumber,      setPhoneNumber]      = useState("");
-  const [phoneError,       setPhoneError]       = useState("");
-  const [paymentStatus,    setPaymentStatus]    = useState("pending");
-  const [checkoutRequestId,setCheckoutRequestId]= useState(null);
-  const [paymentId,        setPaymentId]        = useState(null);
-  const [errorMessage,     setErrorMessage]     = useState("");
-  const [successMessage,   setSuccessMessage]   = useState("");
+  const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState(false);
+  const [property, setProperty] = useState(null);
+  const [booking, setBooking] = useState(null);
+  const [showChat, setShowChat] = useState(false);
+  const [selectedMethod, setSelectedMethod] = useState("mpesa");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [phoneError, setPhoneError] = useState("");
+  const [showPhoneHelp, setShowPhoneHelp] = useState(false);
+  const [paypalLoading, setPaypalLoading] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState("pending");
+  const [checkoutRequestId, setCheckoutRequestId] = useState(null);
+  const [paymentId, setPaymentId] = useState(null);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const [completedPayment, setCompletedPayment] = useState(null);
-  const [timeLeft,         setTimeLeft]         = useState(null);
+  const [timeLeft, setTimeLeft] = useState(null);
   const [showTimerWarning, setShowTimerWarning] = useState(false);
-  const [isExpired,        setIsExpired]        = useState(false);
-  const [checkingStatus,   setCheckingStatus]   = useState(false);
+  const [isExpired, setIsExpired] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [checkingStatus, setCheckingStatus] = useState(false);
+
+
+  const TRANSIENT_RE = /still under processing|being processed|already in process|under processing/i;
+  const MAX_POLL_MS = 120000;
+
+  const pollStartRef = useRef(null);
+  const pollInFlightRef = useRef(false);
+  const [pollTimedOut, setPollTimedOut] = useState(false);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -232,6 +244,17 @@ export default function PaymentPage() {
   }, [booking?.id, isExpired]);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paypalReturn = params.get("paypal");
+    const orderId = params.get("token");
+    if (paypalReturn === "success" && orderId) handlePaypalReturn(orderId);
+    else if (paypalReturn === "cancel") {
+      setErrorMessage("PayPal payment was cancelled. You can try again.");
+      setPaymentStatus("pending");
+    }
+  }, []);
+
+  useEffect(() => {
     if (!booking?.expires_at) return;
     const expiresAt = parseUTCDate(booking.expires_at);
     if (!expiresAt) return;
@@ -254,23 +277,23 @@ export default function PaymentPage() {
     return () => clearInterval(iv);
   }, [booking]);
 
-  // Robust Polling Logic with Initial Delay
   useEffect(() => {
-    let iv;
-    let timeout;
+    if (!checkoutRequestId || paymentStatus !== "processing") return;
 
-    if (checkoutRequestId && paymentStatus === "processing") {
-      // Delay initial poll by 4 seconds to give the user time to enter their M-PESA PIN
-      timeout = setTimeout(() => {
-        checkMpesaStatus();
-        iv = setInterval(checkMpesaStatus, 3500);
-      }, 4000);
-    }
+    pollStartRef.current = Date.now();
+    setPollTimedOut(false);
+    checkMpesaStatus();
 
-    return () => {
-      if (timeout) clearTimeout(timeout);
-      if (iv) clearInterval(iv);
-    };
+    const iv = setInterval(() => {
+      if (Date.now() - pollStartRef.current > MAX_POLL_MS) {
+        setPollTimedOut(true);   // keep "processing", just tell the user it's slow
+        clearInterval(iv);
+        return;
+      }
+      checkMpesaStatus();
+    }, 4000);
+
+    return () => clearInterval(iv);
   }, [checkoutRequestId, paymentStatus]);
 
   const initializePayment = async () => {
@@ -288,10 +311,10 @@ export default function PaymentPage() {
                 Authorization: `Bearer ${localStorage.getItem("token")}`,
               },
               body: JSON.stringify({
-                property_id:  formData.propertyId,
-                check_in:     formData.checkInDate,
-                check_out:    formData.checkOutDate,
-                guests:       formData.guests,
+                property_id: formData.propertyId,
+                check_in: formData.checkInDate,
+                check_out: formData.checkOutDate,
+                guests: formData.guests,
                 payment_type: "full",
               }),
             });
@@ -422,36 +445,29 @@ export default function PaymentPage() {
   };
 
   const checkMpesaStatus = async () => {
-    if (!checkoutRequestId) return;
+    if (!checkoutRequestId || pollInFlightRef.current) return;
+    pollInFlightRef.current = true;
     setCheckingStatus(true);
     try {
       const res = await fetch(`${API_BASE_URL}/payments/mpesa/status/${checkoutRequestId}`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
       const data = await res.json();
-      
-      if (!res.ok || !data.success) {
-        // Unresolved response: keep polling
-        return;
-      } 
 
-      if (data.payment?.status === "completed" || data.booking?.payment_status === "completed") {
+      if (!res.ok || !data.success) {
+        // not resolved yet, wait for next poll
+      } else if (data.payment?.status === "completed" || data.booking?.payment_status === "completed") {
         completeMpesaPayment(data.payment, data.booking);
         return;
-      } 
-
-      if (data.payment?.status === "failed") {
-        const errorMsg = data.payment?.error_log || "";
-        
-        // Prevent setting failure state if description indicates processing is still active
-        if (errorMsg.toLowerCase().includes("processing") || errorMsg.toLowerCase().includes("under processing")) {
+      } else if (data.payment?.status === "failed") {
+        const msg = data.payment?.error_log || "";
+        if (!TRANSIENT_RE.test(msg)) {          // only genuinely final failures stop the flow
+          setPaymentStatus("failed");
+          setProcessing(false);
+          setErrorMessage(msg || "Safaricom rejected the payment. Please check your balance and try again.");
           return;
         }
-
-        setPaymentStatus("failed");
-        setProcessing(false);
-        setErrorMessage(errorMsg || "Safaricom rejected the payment. Please check your balance and try again.");
-        return;
+        // transient text: keep waiting
       }
 
       if (booking?.id) {
@@ -467,6 +483,7 @@ export default function PaymentPage() {
     } catch (e) {
       console.error("Status check error:", e);
     } finally {
+      pollInFlightRef.current = false;
       setCheckingStatus(false);
     }
   };
@@ -497,7 +514,7 @@ export default function PaymentPage() {
   const initiateMpesa = async () => {
     const validation = validatePhone(phoneNumber);
     if (!validation.valid) { setPhoneError("Please enter a valid M-PESA number"); return; }
-    if (!booking)          { setErrorMessage("Booking information missing"); return; }
+    if (!booking) { setErrorMessage("Booking information missing"); return; }
 
     setProcessing(true);
     setPaymentStatus("processing");
@@ -508,9 +525,9 @@ export default function PaymentPage() {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` },
         body: JSON.stringify({
-          booking_id:   booking.id,
+          booking_id: booking.id,
           phone_number: validation.formatted,
-          amount:       Math.round(booking.total_amount),
+          amount: Math.round(booking.total_amount),
         }),
       });
       const data = await res.json();
@@ -525,9 +542,16 @@ export default function PaymentPage() {
       setPaymentId(data.payment_id);
       setSuccessMessage("STK Push sent! Check your phone and enter your PIN.");
     } catch (e) {
-      setPaymentStatus("failed");
+      const msg = e.message || "";
       setProcessing(false);
-      setErrorMessage(e.message || "Failed to initiate payment. Please try again.");
+      if (TRANSIENT_RE.test(msg)) {
+        // A prompt is likely already on the phone; don't show "Payment Failed"
+        setPaymentStatus("pending");
+        setErrorMessage("A payment request is already active on your phone. Enter your PIN, or wait a minute and try again.");
+      } else {
+        setPaymentStatus("failed");
+        setErrorMessage(msg || "Failed to initiate payment. Please try again.");
+      }
     }
   };
 
@@ -540,8 +564,14 @@ export default function PaymentPage() {
   };
 
   const handleStartOver = () => navigate(`/booking/${id}`);
-  const formatCurrency  = (n) => `KSh ${Number(n || 0).toLocaleString()}`;
-  const getImageSrc     = (url) => (!url ? "/default-property.jpg" : url.startsWith("http") ? url : `${IMAGE_BASE_URL}${url}`);
+  const formatCurrency = (n) => `KSh ${Number(n || 0).toLocaleString()}`;
+  const getImageSrc = (url) => (!url ? "/default-property.jpg" : url.startsWith("http") ? url : `${IMAGE_BASE_URL}${url}`);
+
+  const copyPhone = () => {
+    navigator.clipboard.writeText("0712345678");
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   if (loading) {
     return (
@@ -589,11 +619,7 @@ export default function PaymentPage() {
           <div className="p-6 space-y-4">
             <div className="flex gap-4 items-center bg-stone-50 p-4 rounded-xl">
               <img src={getImageSrc(property?.cover_image || property?.images?.[0])} alt={property?.name || "Booked property"} className="w-24 h-20 object-cover rounded-lg" />
-              <div>
-                <p className="text-xs uppercase tracking-widest text-amber-600">Booked home</p>
-                <h3 className="font-serif text-lg font-semibold">{property?.name || booking?.property_name}</h3>
-                <p className="text-xs text-stone-500 flex gap-1 items-center"><MapPin size={13} />{property?.location || booking?.property_location}</p>
-              </div>
+              <div><p className="text-xs uppercase tracking-widest text-amber-600">Booked home</p><h3 className="font-serif text-lg font-semibold">{property?.name || booking?.property_name}</h3><p className="text-xs text-stone-500 flex gap-1 items-center"><MapPin size={13} />{property?.location || booking?.property_location}</p></div>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div className="bg-stone-50 p-3 rounded-lg"><p className="text-xs text-stone-500 flex gap-1 items-center"><Calendar size={13} /> Check-in</p><strong>{booking?.check_in_display || booking?.check_in}</strong></div>
@@ -601,14 +627,8 @@ export default function PaymentPage() {
               <div className="bg-stone-50 p-3 rounded-lg"><p className="text-xs text-stone-500 flex gap-1 items-center"><Users size={13} /> Nights</p><strong>{booking?.nights}</strong></div>
               <div className="bg-stone-50 p-3 rounded-lg"><p className="text-xs text-stone-500">Amount paid</p><strong className="text-emerald-600">{formatCurrency(completedPayment?.amount || booking?.total_amount)}</strong></div>
             </div>
-            {completedPayment?.mpesa_receipt && (
-              <p className="bg-emerald-50 text-emerald-800 rounded-lg p-3 text-xs font-mono">
-                M-PESA receipt: <strong>{completedPayment.mpesa_receipt}</strong>
-              </p>
-            )}
-            <button onClick={() => navigate("/dashboard?tab=bookings")} className="w-full py-3 bg-[#093A3E] text-white rounded-lg text-sm font-medium">
-              View My Bookings
-            </button>
+            {completedPayment?.mpesa_receipt && <p className="bg-emerald-50 text-emerald-800 rounded-lg p-3 text-xs font-mono">M-PESA receipt: <strong>{completedPayment.mpesa_receipt}</strong></p>}
+            <button onClick={() => navigate("/dashboard?tab=bookings")} className="w-full py-3 bg-[#093A3E] text-white rounded-lg text-sm font-medium">View My Bookings</button>
           </div>
         </motion.div>
       </div>
@@ -627,8 +647,8 @@ export default function PaymentPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div className="md:col-span-2 space-y-6">
-            
-            {/* Show DARAJA error message if status is explicitly failed */}
+
+            {/* Show explicit DARAJA Error message prominently if it failed */}
             <AnimatePresence>
               {paymentStatus === "failed" && errorMessage && (
                 <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
@@ -647,11 +667,10 @@ export default function PaymentPage() {
               <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-6">
                 <h2 className="font-serif text-xl mb-4 text-[#1C2321]">Select Payment Method</h2>
                 <div className="flex gap-4 mb-6">
-                  <button 
+                  <button
                     onClick={() => setSelectedMethod("mpesa")}
-                    className={`flex-1 p-4 rounded-xl border-2 text-left transition-all ${
-                      selectedMethod === "mpesa" ? "border-emerald-600 bg-emerald-50/30" : "border-stone-200"
-                    }`}
+                    className={`flex-1 p-4 rounded-xl border-2 text-left transition-all ${selectedMethod === "mpesa" ? "border-emerald-600 bg-emerald-50/30" : "border-stone-200"
+                      }`}
                   >
                     <Smartphone className="w-5 h-5 text-emerald-600 mb-2" />
                     <p className="font-semibold text-sm">M-PESA</p>
@@ -663,7 +682,7 @@ export default function PaymentPage() {
                   <div className="space-y-4">
                     <div>
                       <label className="block text-xs uppercase tracking-wider text-stone-500 mb-2">M-PESA Phone Number</label>
-                      <input 
+                      <input
                         type="tel"
                         value={phoneNumber}
                         onChange={handlePhoneChange}
@@ -677,11 +696,16 @@ export default function PaymentPage() {
                     {paymentStatus === "processing" ? (
                       <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center space-y-3">
                         <div className="w-10 h-10 border-3 border-amber-600 border-t-transparent rounded-full animate-spin mx-auto" />
+                        {pollTimedOut && (
+                          <p className="text-xs text-amber-800">
+                            This is taking longer than usual. Keep this page open, or check My Bookings. We'll confirm as soon as Safaricom responds.
+                          </p>
+                        )}
                         <div>
                           <p className="font-semibold text-amber-900 text-sm">STK Push Sent to Your Phone!</p>
                           <p className="text-xs text-amber-700 mt-1">Check your phone screen, enter your M-PESA PIN, and press Send.</p>
                         </div>
-                        <button 
+                        <button
                           onClick={checkMpesaStatus}
                           disabled={checkingStatus}
                           className="mt-2 text-xs text-[#093A3E] font-bold underline hover:text-emerald-700"
@@ -699,6 +723,7 @@ export default function PaymentPage() {
                       </button>
                     )}
 
+                    {/* Fallback inline error if something else sets errorMessage while not in failed state */}
                     {errorMessage && paymentStatus !== "failed" && (
                       <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg flex items-center gap-2 mt-4">
                         <AlertCircle className="w-4 h-4 shrink-0" />
@@ -709,7 +734,7 @@ export default function PaymentPage() {
                 )}
               </div>
             )}
-            
+
             <div className="p-4 md:p-6 bg-stone-50 border border-stone-200 rounded-2xl">
               <div className="flex items-start gap-2">
                 <Lock className="w-4 h-4 text-stone-500 flex-shrink-0 mt-0.5" />
@@ -727,9 +752,9 @@ export default function PaymentPage() {
             <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-6 space-y-4 sticky top-20">
               <h3 className="font-serif text-lg text-[#1C2321]">Reservation Summary</h3>
               <div className="flex gap-3 items-center pb-4 border-b border-stone-100">
-                <img 
-                  src={getImageSrc(property?.cover_image || property?.images?.[0])} 
-                  alt={property?.name} 
+                <img
+                  src={getImageSrc(property?.cover_image || property?.images?.[0])}
+                  alt={property?.name}
                   className="w-16 h-16 object-cover rounded-lg"
                 />
                 <div>
@@ -764,7 +789,7 @@ export default function PaymentPage() {
                   <p className="font-mono text-sm font-bold text-amber-900">{timeLeft.minutes}:{String(timeLeft.seconds).padStart(2, "0")}</p>
                 </div>
               )}
-              
+
               <button onClick={() => setShowChat(true)} className="w-full mt-4 flex items-center justify-center gap-2 border border-stone-300 py-2.5 rounded-lg text-xs font-medium hover:bg-stone-50 transition-colors">
                 <MessageCircle size={14} /> Contact Concierge
               </button>
@@ -772,8 +797,6 @@ export default function PaymentPage() {
           </div>
         </div>
       </div>
-
-      <ChatDrawer isOpen={showChat} onClose={() => setShowChat(false)} user={user} />
     </div>
   );
 }
