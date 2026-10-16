@@ -113,6 +113,12 @@ def google_login():
     if not email:
         logger.error("Email not provided by Google")
         return jsonify({'error': 'Email not provided by Google'}), 400
+    email = email.strip().lower()
+
+    google_sub = idinfo.get('sub')
+    if not google_sub:
+        logger.error("Subject identifier not provided by Google")
+        return jsonify({'error': 'Google account identifier not provided'}), 400
 
     if not idinfo.get('email_verified'):
         logger.warning(f"Unverified email attempt: {email}")
@@ -124,7 +130,6 @@ def google_login():
     # ── Find or create the user ───────────────────────────────────────────────
     try:
         user = User.query.filter_by(email=email).first()
-        google_sub = idinfo.get('sub')
 
         if not user:
             logger.info(f"Creating new user for email: {email}")

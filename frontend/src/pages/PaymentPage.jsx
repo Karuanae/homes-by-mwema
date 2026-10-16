@@ -186,8 +186,6 @@ export default function PaymentPage() {
   const [selectedMethod,   setSelectedMethod]   = useState("mpesa");
   const [phoneNumber,      setPhoneNumber]      = useState("");
   const [phoneError,       setPhoneError]       = useState("");
-  const [showPhoneHelp,    setShowPhoneHelp]    = useState(false);
-  const [paypalLoading,    setPaypalLoading]    = useState(false);
   const [paymentStatus,    setPaymentStatus]    = useState("pending");
   const [checkoutRequestId,setCheckoutRequestId]= useState(null);
   const [paymentId,        setPaymentId]        = useState(null);
@@ -197,8 +195,6 @@ export default function PaymentPage() {
   const [timeLeft,         setTimeLeft]         = useState(null);
   const [showTimerWarning, setShowTimerWarning] = useState(false);
   const [isExpired,        setIsExpired]        = useState(false);
-  const [showSummary,      setShowSummary]      = useState(false);
-  const [copied,           setCopied]           = useState(false);
   const [checkingStatus,   setCheckingStatus]   = useState(false);
 
   useEffect(() => {
@@ -236,17 +232,6 @@ export default function PaymentPage() {
   }, [booking?.id, isExpired]);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const paypalReturn = params.get("paypal");
-    const orderId = params.get("token");
-    if (paypalReturn === "success" && orderId) handlePaypalReturn(orderId);
-    else if (paypalReturn === "cancel") {
-      setErrorMessage("PayPal payment was cancelled. You can try again.");
-      setPaymentStatus("pending");
-    }
-  }, []);
-
-  useEffect(() => {
     if (!booking?.expires_at) return;
     const expiresAt = parseUTCDate(booking.expires_at);
     if (!expiresAt) return;
@@ -269,13 +254,23 @@ export default function PaymentPage() {
     return () => clearInterval(iv);
   }, [booking]);
 
+  // Robust Polling Logic with Initial Delay
   useEffect(() => {
     let iv;
+    let timeout;
+
     if (checkoutRequestId && paymentStatus === "processing") {
-      checkMpesaStatus();
-      iv = setInterval(checkMpesaStatus, 3000);
+      // Delay initial poll by 4 seconds to give the user time to enter their M-PESA PIN
+      timeout = setTimeout(() => {
+        checkMpesaStatus();
+        iv = setInterval(checkMpesaStatus, 3500);
+      }, 4000);
     }
-    return () => { if (iv) clearInterval(iv); };
+
+    return () => {
+      if (timeout) clearTimeout(timeout);
+      if (iv) clearInterval(iv);
+    };
   }, [checkoutRequestId, paymentStatus]);
 
   const initializePayment = async () => {
@@ -436,15 +431,26 @@ export default function PaymentPage() {
       const data = await res.json();
       
       if (!res.ok || !data.success) {
-        // Backend didn't get a definitive result yet, just wait for next poll
-      } else if (data.payment?.status === "completed" || data.booking?.payment_status === "completed") {
+        // Unresolved response: keep polling
+        return;
+      } 
+
+      if (data.payment?.status === "completed" || data.booking?.payment_status === "completed") {
         completeMpesaPayment(data.payment, data.booking);
         return;
-      } else if (data.payment?.status === "failed") {
+      } 
+
+      if (data.payment?.status === "failed") {
+        const errorMsg = data.payment?.error_log || "";
+        
+        // Prevent setting failure state if description indicates processing is still active
+        if (errorMsg.toLowerCase().includes("processing") || errorMsg.toLowerCase().includes("under processing")) {
+          return;
+        }
+
         setPaymentStatus("failed");
         setProcessing(false);
-        const exactError = data.payment?.error_log || "Safaricom rejected the payment. Please check your balance and try again.";
-        setErrorMessage(exactError);
+        setErrorMessage(errorMsg || "Safaricom rejected the payment. Please check your balance and try again.");
         return;
       }
 
@@ -537,12 +543,6 @@ export default function PaymentPage() {
   const formatCurrency  = (n) => `KSh ${Number(n || 0).toLocaleString()}`;
   const getImageSrc     = (url) => (!url ? "/default-property.jpg" : url.startsWith("http") ? url : `${IMAGE_BASE_URL}${url}`);
 
-  const copyPhone = () => {
-    navigator.clipboard.writeText("0712345678");
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-[#f5f2ee] flex items-center justify-center p-4">
@@ -581,7 +581,7 @@ export default function PaymentPage() {
           className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden">
           <div className="bg-emerald-600 p-6 text-center text-white">
             <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
-            <CheckCircle className="w-8 h-8 text-white" />
+              <CheckCircle className="w-8 h-8 text-white" />
             </div>
             <h2 className="font-serif text-xl md:text-2xl">Payment Received & Confirmed</h2>
             <p className="text-emerald-100 text-sm mt-1">Your reservation is secured.</p>
@@ -589,7 +589,11 @@ export default function PaymentPage() {
           <div className="p-6 space-y-4">
             <div className="flex gap-4 items-center bg-stone-50 p-4 rounded-xl">
               <img src={getImageSrc(property?.cover_image || property?.images?.[0])} alt={property?.name || "Booked property"} className="w-24 h-20 object-cover rounded-lg" />
-              <div><p className="text-xs uppercase tracking-widest text-amber-600">Booked home</p><h3 className="font-serif text-lg font-semibold">{property?.name || booking?.property_name}</h3><p className="text-xs text-stone-500 flex gap-1 items-center"><MapPin size={13} />{property?.location || booking?.property_location}</p></div>
+              <div>
+                <p className="text-xs uppercase tracking-widest text-amber-600">Booked home</p>
+                <h3 className="font-serif text-lg font-semibold">{property?.name || booking?.property_name}</h3>
+                <p className="text-xs text-stone-500 flex gap-1 items-center"><MapPin size={13} />{property?.location || booking?.property_location}</p>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div className="bg-stone-50 p-3 rounded-lg"><p className="text-xs text-stone-500 flex gap-1 items-center"><Calendar size={13} /> Check-in</p><strong>{booking?.check_in_display || booking?.check_in}</strong></div>
@@ -597,8 +601,14 @@ export default function PaymentPage() {
               <div className="bg-stone-50 p-3 rounded-lg"><p className="text-xs text-stone-500 flex gap-1 items-center"><Users size={13} /> Nights</p><strong>{booking?.nights}</strong></div>
               <div className="bg-stone-50 p-3 rounded-lg"><p className="text-xs text-stone-500">Amount paid</p><strong className="text-emerald-600">{formatCurrency(completedPayment?.amount || booking?.total_amount)}</strong></div>
             </div>
-            {completedPayment?.mpesa_receipt && <p className="bg-emerald-50 text-emerald-800 rounded-lg p-3 text-xs font-mono">M-PESA receipt: <strong>{completedPayment.mpesa_receipt}</strong></p>}
-            <button onClick={() => navigate("/dashboard?tab=bookings")} className="w-full py-3 bg-[#093A3E] text-white rounded-lg text-sm font-medium">View My Bookings</button>
+            {completedPayment?.mpesa_receipt && (
+              <p className="bg-emerald-50 text-emerald-800 rounded-lg p-3 text-xs font-mono">
+                M-PESA receipt: <strong>{completedPayment.mpesa_receipt}</strong>
+              </p>
+            )}
+            <button onClick={() => navigate("/dashboard?tab=bookings")} className="w-full py-3 bg-[#093A3E] text-white rounded-lg text-sm font-medium">
+              View My Bookings
+            </button>
           </div>
         </motion.div>
       </div>
@@ -618,7 +628,7 @@ export default function PaymentPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div className="md:col-span-2 space-y-6">
             
-            {/* Show explicit DARAJA Error message prominently if it failed */}
+            {/* Show DARAJA error message if status is explicitly failed */}
             <AnimatePresence>
               {paymentStatus === "failed" && errorMessage && (
                 <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
@@ -689,7 +699,6 @@ export default function PaymentPage() {
                       </button>
                     )}
 
-                    {/* Fallback inline error if something else sets errorMessage while not in failed state */}
                     {errorMessage && paymentStatus !== "failed" && (
                       <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg flex items-center gap-2 mt-4">
                         <AlertCircle className="w-4 h-4 shrink-0" />
@@ -763,6 +772,8 @@ export default function PaymentPage() {
           </div>
         </div>
       </div>
+
+      <ChatDrawer isOpen={showChat} onClose={() => setShowChat(false)} user={user} />
     </div>
   );
 }

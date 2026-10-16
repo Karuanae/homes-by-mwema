@@ -2,9 +2,8 @@ import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-do
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { FaEye, FaEyeSlash, FaSpinner } from 'react-icons/fa';
-import { FcGoogle } from 'react-icons/fc';
 import { useAuth } from '../context/AuthContext';
-import { socialAuth } from '../services/socialAuth';
+import GoogleSignInButton from '../components/GoogleSignInButton';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://flask-app-production-c760.up.railway.app/api';
 
@@ -272,14 +271,9 @@ export default function Login() {
     setError(err.message || 'Google authentication failed. Please try again.');
   };
 
-  const handleGoogleClick = async () => {
-    setError('');
-    setIsLoading(true);
-    try {
-      await socialAuth.triggerGoogleSignIn(handleGoogleSuccess, handleGoogleError);
-    } catch (err) {
-      handleGoogleError(err);
-    }
+  const handleGoogleLoadingChange = (loading) => {
+    if (loading) setError('');
+    setIsLoading(loading);
   };
 
   // Verification Modal Component
@@ -437,14 +431,12 @@ export default function Login() {
           </form>
 
           <div className="mt-12 pt-8 border-t border-stone-100 text-center space-y-6">
-            <button
-              type="button"
-              onClick={handleGoogleClick}
+            <GoogleSignInButton
+              onSuccess={handleGoogleSuccess}
+              onError={handleGoogleError}
+              onLoadingChange={handleGoogleLoadingChange}
               disabled={isLoading}
-              className="w-full py-3 border border-stone-200 text-[10px] uppercase tracking-widest hover:bg-stone-50 transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
-            >
-              <FcGoogle className="text-lg" /> Sign in with Google
-            </button>
+            />
 
             <p className="text-stone-500 font-serif text-sm">
               Not a member?{' '}

@@ -11,6 +11,8 @@ from flask_socketio import SocketIO, emit, join_room, leave_room
 import eventlet
 from flask_mail import Mail
 import logging
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 # Load environment variables from .env file
 load_dotenv()
@@ -260,10 +262,21 @@ def uploaded_file(filename):
 # Health check endpoint for Railway
 @app.route('/health')
 def health_check():
+    try:
+        db.session.execute(text('SELECT 1'))
+    except SQLAlchemyError:
+        db.session.rollback()
+        logger.exception("Health check database connection failed")
+        return jsonify({
+            'status': 'unhealthy',
+            'timestamp': datetime.utcnow().isoformat(),
+            'database': 'disconnected'
+        }), 503
+
     return jsonify({
         'status': 'healthy',
         'timestamp': datetime.utcnow().isoformat(),
-        'database': 'connected' if db.engine else 'disconnected'
+        'database': 'connected'
     })
 
 # Root endpoint
