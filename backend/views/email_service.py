@@ -6,7 +6,7 @@ Unified email service for Homes by Mwema.
 Provider priority:
   1. Resend  (if RESEND_API_KEY is set)
   2. Flask-Mail  (if MAIL_USERNAME + MAIL_PASSWORD are set)
-  3. Log-only fallback (dev / misconfigured environments)
+  3. Explicit delivery failure when no provider is available
 
 Public API — callers only ever use these four methods:
   email_service.send_booking_confirmation(booking, user)
@@ -21,6 +21,7 @@ import os
 import re
 import logging
 import traceback
+import html as html_lib
 from datetime import datetime
 from typing import Dict, Any, Optional
 
@@ -43,7 +44,7 @@ def _base(title: str, body_html: str, booking_id: int = None) -> str:
         "<meta name='viewport' content='width=device-width,initial-scale=1.0'>"
         "<style>"
         "body{margin:0;padding:0;background:#f5f2ee;font-family:Georgia,serif;color:#1c1917}"
-        ".wrap{max-width:600px;margin:0 auto;padding:24px}"
+        ".wrap{width:100%;max-width:600px;box-sizing:border-box;margin:0 auto;padding:16px}"
         ".hdr{background:#093A3E;padding:28px 32px}"
         ".hdr-brand{color:#ED9B40;font-size:10px;text-transform:uppercase;letter-spacing:.2em;margin:0 0 6px}"
         ".hdr-title{color:#fff;font-size:22px;font-weight:normal;margin:0}"
@@ -57,6 +58,7 @@ def _base(title: str, body_html: str, booking_id: int = None) -> str:
         "h2{font-size:20px;font-weight:normal;color:#1c1917;margin-top:0}"
         "strong{color:#1c1917}"
         "a{color:#093A3E}"
+        "@media only screen and (max-width:480px){.hdr{padding:22px 20px}.body{padding:22px 18px}.hdr-title{font-size:20px}}"
         "</style></head><body>"
         "<div class='wrap'>"
         "<div class='hdr'>"
@@ -78,6 +80,150 @@ def _base(title: str, body_html: str, booking_id: int = None) -> str:
 
 def _fmt_kes(amount) -> str:
     return f"KES {float(amount or 0):,.0f}"
+
+
+def _guest_count(guests) -> str:
+    if isinstance(guests, dict):
+        counts = []
+        for key in ("adults", "children", "infants"):
+            try:
+                counts.append(max(0, int(guests.get(key, 0) or 0)))
+            except (TypeError, ValueError):
+                continue
+        total = sum(counts)
+        if total:
+            return str(total)
+        for key in ("count", "total"):
+            try:
+                if guests.get(key) is not None:
+                    return str(max(0, int(guests[key])))
+            except (TypeError, ValueError):
+                continue
+        return "Not specified"
+    if isinstance(guests, (list, tuple, set)):
+        return str(len(guests))
+    try:
+        return str(max(0, int(guests))) if guests is not None else "Not specified"
+    except (TypeError, ValueError):
+        return "Not specified"
+
+
+def _property_email_info(prop) -> Dict[str, Any]:
+    specs = prop.specs if prop and isinstance(prop.specs, dict) else {}
+    amenities = prop.amenities if prop and isinstance(prop.amenities, (list, tuple)) else []
+
+    rules = specs.get("house_rules") or specs.get("rules")
+    wifi = (
+        specs.get("wifi_details")
+        or specs.get("wifi")
+        or specs.get("wi_fi")
+        or specs.get("internet")
+    )
+    if not wifi and any("wifi" in str(item).lower() or "wi-fi" in str(item).lower() for item in amenities):
+        wifi = "Wi-Fi is available; connection details will be provided at check-in."
+
+    host = prop.host if prop else None
+    host_contact = []
+    if host and getattr(host, "name", None):
+        host_contact.append(f"Host: {host.name}")
+    if host and getattr(host, "phone", None):
+        host_contact.append(f"Phone: {host.phone}")
+    if host and getattr(host, "email", None):
+        host_contact.append(f"Email: {host.email}")
+
+    return {
+        "rules": rules or "Please follow the house rules provided in the property listing and any arrival instructions from your host.",
+        "wifi": wifi,
+        "contact": " · ".join(host_contact) if host_contact else "Contact our concierge team at info@homesbymwema.com.",
+    }
+
+
+def _confirmation_email_html(booking, user, payment=None, email_type="confirmation") -> str:
+    prop = booking.property
+    property_name = prop.name if prop else "Your property"
+    location = (
+        (getattr(prop, "formatted_address", None) or getattr(prop, "location", None))
+        if prop else None
+    ) or "Address details will be provided by your host."
+    check_in = booking.check_in.strftime("%B %d, %Y") if booking.check_in else "To be confirmed"
+    check_out = booking.check_out.strftime("%B %d, %Y") if booking.check_out else "To be confirmed"
+    details = _property_email_info(prop)
+    payment_method = (payment.method or "").strip().lower() if payment else ""
+    payment_method = {"mpesa": "M-PESA", "paypal": "PayPal"}.get(
+        payment_method, payment.method if payment else "Not specified"
+    )
+    reference = (
+        (getattr(payment, "mpesa_receipt_number", None) or getattr(payment, "transaction_id", None))
+        if payment else None
+    ) or "Not provided by payment provider"
+    total_paid = booking.total_amount
+    guest_name = getattr(user, "name", None) or "there"
+
+    def value(text):
+        return html_lib.escape(str(text))
+
+    rows = (
+        ("Property", property_name),
+        ("Location", location),
+        ("Check-in", f"{check_in} · 3:00 PM"),
+        ("Check-out", f"{check_out} · 11:00 AM"),
+        ("Length of stay", f"{booking.nights} {'night' if booking.nights == 1 else 'nights'}"),
+        ("Guests", _guest_count(booking.guests)),
+        ("Total amount paid", _fmt_kes(total_paid)),
+        ("Payment method", payment_method),
+        ("Receipt / transaction reference", reference),
+    )
+    details_rows = "".join(
+        "<tr>"
+        "<td style='padding:11px 8px 11px 0;border-bottom:1px solid #eee9e3;color:#78716c;font-size:13px;vertical-align:top;width:42%'>"
+        f"{value(label)}</td>"
+        "<td style='padding:11px 0;border-bottom:1px solid #eee9e3;color:#1c1917;font-size:14px;font-weight:600;vertical-align:top'>"
+        f"{value(content)}</td></tr>"
+        for label, content in rows
+    )
+
+    rules = details["rules"]
+    if isinstance(rules, (list, tuple)):
+        rules_html = "".join(f"<li style='margin:5px 0'>{value(rule)}</li>" for rule in rules)
+        rules_html = f"<ul style='padding-left:20px;margin:8px 0'>{rules_html}</ul>"
+    else:
+        rules_html = f"<p style='margin:6px 0 0'>{value(rules)}</p>"
+    wifi_html = (
+        f"<p style='margin:12px 0 0'><strong>Wi-Fi:</strong> {value(details['wifi'])}</p>"
+        if details["wifi"] else ""
+    )
+    intro = (
+        "Your payment has been received and your stay is confirmed. "
+        "Here are your payment and reservation details."
+        if email_type == "payment"
+        else "Your stay is confirmed and ready. Here are the payment and reservation details for your visit."
+    )
+
+    body = (
+        f"<p style='font-size:16px;margin:0 0 12px'>Dear {value(guest_name)},</p>"
+        f"<p style='margin:0 0 22px'>{value(intro)}</p>"
+        "<h2 style='font-size:17px;color:#093A3E;margin:24px 0 8px'>Your reservation</h2>"
+        "<table role='presentation' width='100%' cellspacing='0' cellpadding='0' "
+        "style='border-collapse:collapse'>"
+        f"{details_rows}</table>"
+        "<div style='background:#f7f5f1;border-left:4px solid #ed9b40;padding:18px 20px;margin:24px 0'>"
+        "<h2 style='font-size:17px;margin:0 0 8px;color:#1c1917'>What's Next</h2>"
+        "<p style='margin:6px 0 0'><strong>House rules:</strong></p>"
+        f"{rules_html}"
+        f"{wifi_html}"
+        "<p style='margin:12px 0 0'><strong>Concierge / host:</strong> "
+        f"{value(details['contact'])}</p>"
+        "<p style='margin:12px 0 0'>Please keep this confirmation handy. If you need help before arrival, "
+        "<a href='mailto:info@homesbymwema.com' style='color:#093A3E'>contact Homes by Mwema</a>.</p>"
+        "</div>"
+        "<p style='margin:22px 0;text-align:center'>"
+        "<a href='https://homesbymwema.com/my-bookings' "
+        "style='display:inline-block;background:#093A3E;color:#fff;padding:12px 22px;"
+        "text-decoration:none;border-radius:4px'>View your booking</a></p>"
+        "<p style='margin:22px 0 0'>We look forward to welcoming you!</p>"
+        "<p style='margin:8px 0 0'>Warm regards,<br><strong>The Homes by Mwema Team</strong></p>"
+    )
+    return _base("Payment Successful &amp; Booking Confirmed", body, booking_id=booking.id)
 
 
 # ─── service class ─────────────────────────────────────────────────────────────
@@ -115,13 +261,13 @@ class EmailService:
         if self._flaskmail_ok and mail_instance:
             logger.info("✅ Email provider: Flask-Mail (fallback)")
         elif not self._resend_key:
-            logger.warning("⚠️  No email provider configured — emails will be logged only")
+            logger.warning("⚠️  No email provider configured — email delivery is unavailable")
 
     # ── internal dispatcher ───────────────────────────────────────────────────
 
     def _send(self, to: str, subject: str, html: str) -> Dict[str, Any]:
         """
-        Internal send dispatcher.  Tries Resend → Flask-Mail → log-only.
+        Internal send dispatcher. Tries Resend, then Flask-Mail if configured.
         Returns {"success": bool, "message": str, ...}
         """
         if not to:
@@ -138,9 +284,11 @@ class EmailService:
                     "to":      [to],
                     "subject": subject,
                     "html":    html,
+                    "text":    html_lib.unescape(re.sub(r"<[^>]+>", " ", html)).strip(),
                 })
-                logger.info(f"✅ Sent via Resend (id={result.get('id')})")
-                return {"success": True, "provider": "resend", "id": result.get("id")}
+                result_id = result.get("id") if isinstance(result, dict) else getattr(result, "id", None)
+                logger.info(f"✅ Sent via Resend (id={result_id})")
+                return {"success": True, "provider": "resend", "id": result_id}
             except Exception as e:
                 logger.warning(f"⚠️  Resend failed ({e}), trying Flask-Mail…")
 
@@ -163,42 +311,22 @@ class EmailService:
                 logger.error(traceback.format_exc())
                 return {"success": False, "provider": "flask_mail", "error": str(e)}
 
-        # 3. Log-only fallback
-        logger.info(f"📋 Email logged (no provider): subject='{subject}' to='{to}'")
-        return {"success": True, "provider": "log_only", "simulated": True}
+        logger.error("Email was not sent: no configured provider succeeded (subject=%r, to=%r)", subject, to)
+        return {"success": False, "error": "No configured email provider succeeded"}
 
     # ── public transactional methods ──────────────────────────────────────────
 
-    def send_booking_confirmation(self, booking, user) -> Dict[str, Any]:
+    def send_booking_confirmation(self, booking, user, payment=None) -> Dict[str, Any]:
         """
         Send when booking.status becomes 'confirmed' after payment.
         booking: Booking ORM object
         user:    User ORM object
+        payment: Optional completed Payment ORM object
         """
-        prop        = booking.property.name if booking.property else "your property"
-        check_in    = booking.check_in.strftime("%B %d, %Y")
-        check_out   = booking.check_out.strftime("%B %d, %Y")
-
-        body = (
-            f"<h2>Your booking is confirmed</h2>"
-            f"<p>Dear {user.name},</p>"
-            f"<p>Great news — your stay at <strong>{prop}</strong> is confirmed and ready.</p>"
-            f"<div class='detail-box'>"
-            f"<p><strong>Property:</strong> {prop}</p>"
-            f"<p><strong>Check-in:</strong>  {check_in}</p>"
-            f"<p><strong>Check-out:</strong> {check_out}</p>"
-            f"<p><strong>Nights:</strong>    {booking.nights}</p>"
-            f"<p><strong>Total paid:</strong> {_fmt_kes(booking.total_amount)}</p>"
-            f"</div>"
-            f"<p>You can view your booking details in your <a href='https://homesbymwema.com/my-bookings'>dashboard</a>.</p>"
-            f"<p>We look forward to hosting you!</p>"
-            f"<p>Warm regards,<br><strong>The Homes by Mwema Team</strong></p>"
-        )
-
         return self._send(
-            to      = user.email,
-            subject = f"Booking Confirmed — {prop}",
-            html    = _base("Booking Confirmed", body, booking_id=booking.id),
+            to=user.email,
+            subject=f"Booking Confirmed — Booking #{booking.id}",
+            html=_confirmation_email_html(booking, user, payment, "confirmation"),
         )
 
     def send_payment_received(self, booking, user, payment) -> Dict[str, Any]:
@@ -206,31 +334,10 @@ class EmailService:
         Send when a payment row is completed (M-PESA or PayPal).
         payment: Payment ORM object
         """
-        prop     = booking.property.name if booking.property else "your property"
-        method   = (payment.method or "").upper()
-        receipt  = payment.mpesa_receipt_number or payment.transaction_id or "—"
-
-        body = (
-            f"<h2>Payment received</h2>"
-            f"<p>Dear {user.name},</p>"
-            f"<p>We've received your payment for <strong>{prop}</strong>.</p>"
-            f"<div class='detail-box'>"
-            f"<p><strong>Check-in:</strong>      {booking.check_in.strftime('%B %d, %Y')}</p>"
-            f"<p><strong>Check-out:</strong>     {booking.check_out.strftime('%B %d, %Y')}</p>"
-            f"<p><strong>Nights:</strong>        {booking.nights}</p>"
-            f"<p><strong>Amount:</strong>      {_fmt_kes(payment.amount)}</p>"
-            f"<p><strong>Method:</strong>      {method}</p>"
-            f"<p><strong>Reference:</strong>   {receipt}</p>"
-            f"<p><strong>Date:</strong>        {(payment.completed_at or datetime.utcnow()).strftime('%B %d, %Y %H:%M UTC')}</p>"
-            f"</div>"
-            f"<p>Your booking is now confirmed. See you soon!</p>"
-            f"<p>Warm regards,<br><strong>The Homes by Mwema Team</strong></p>"
-        )
-
         return self._send(
-            to      = user.email,
-            subject = f"Payment Received — {_fmt_kes(payment.amount)}",
-            html    = _base("Payment Received", body, booking_id=booking.id),
+            to=user.email,
+            subject=f"Payment Successful — Booking #{booking.id}",
+            html=_confirmation_email_html(booking, user, payment, "payment"),
         )
 
     def send_cancellation(self, booking, refund_amount) -> Dict[str, Any]:

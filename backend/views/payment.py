@@ -184,8 +184,15 @@ def _send_payment_email(booking, payment):
 
         booking_user = User.query.get(payment.user_id)
         if booking and booking_user:
-            email_service.send_payment_received(booking, booking_user, payment)
-            email_service.send_booking_confirmation(booking, booking_user)
+            payment_result = email_service.send_payment_received(booking, booking_user, payment)
+            confirmation_result = email_service.send_booking_confirmation(
+                booking, booking_user, payment
+            )
+            if not payment_result.get("success") or not confirmation_result.get("success"):
+                logger.warning(
+                    "One or more booking confirmation emails were not sent for booking %s",
+                    booking.id,
+                )
     except Exception as email_err:
         logger.warning(f"Payment email failed (non-fatal): {email_err}")
 
@@ -563,4 +570,3 @@ def process_payment():
     _send_payment_email(booking, payment)
 
     return jsonify({"id": payment.id, "status": payment.status}), 201
-
