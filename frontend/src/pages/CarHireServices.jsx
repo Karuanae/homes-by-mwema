@@ -329,7 +329,7 @@ const CarHireServices = () => {
       <section className="py-16 px-6 bg-[#f5f2ee]">
         <div className="max-w-[1000px] mx-auto">
           <div className="text-center mb-10">
-            <h2 className="text-3xl md:text-4xl text-[#0F4C55] mb-4 font-serif">What Our Clients Say</h2>
+            <h2 className="text-3xl md:text-4xl text-[#0F4C55] mb-4 font-serif">What Our Regular Clients Say</h2>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
