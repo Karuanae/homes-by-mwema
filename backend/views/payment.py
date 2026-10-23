@@ -182,19 +182,43 @@ def _send_payment_email(booking, payment):
     try:
         from views.email_service import email_service
 
-        booking_user = User.query.get(payment.user_id)
-        if booking and booking_user:
-            payment_result = email_service.send_payment_received(booking, booking_user, payment)
-            confirmation_result = email_service.send_booking_confirmation(
-                booking, booking_user, payment
+        if not booking or booking.payment_status != "completed":
+            logger.error(
+                "Skipping booking confirmation email: booking %s is not confirmed paid",
+                getattr(booking, "id", None),
             )
-            if not payment_result.get("success") or not confirmation_result.get("success"):
-                logger.warning(
-                    "One or more booking confirmation emails were not sent for booking %s",
-                    booking.id,
-                )
+            return
+
+        booking_user = User.query.get(booking.user_id)
+        if not booking_user or not booking_user.email:
+            logger.error(
+                "Cannot send booking confirmation email for booking %s: booking owner or email is missing",
+                booking.id,
+            )
+            return
+
+        result = email_service.send_booking_confirmation(booking, booking_user, payment)
+        if not result.get("success"):
+            logger.error(
+                "Booking confirmation email failed for booking %s to %s (provider=%s): %s",
+                booking.id,
+                booking_user.email,
+                result.get("provider", "unknown"),
+                result.get("error", "no error detail returned"),
+            )
+        else:
+            logger.info(
+                "Booking confirmation email accepted for booking %s to %s via %s",
+                booking.id,
+                booking_user.email,
+                result.get("provider", "unknown"),
+            )
     except Exception as email_err:
-        logger.warning(f"Payment email failed (non-fatal): {email_err}")
+        logger.exception(
+            "Payment confirmation email raised an exception for booking %s",
+            getattr(booking, "id", None),
+            exc_info=email_err,
+        )
 
 
 @payment_bp.route("/mpesa/initiate", methods=["POST"])

@@ -400,8 +400,7 @@ export default function PaymentPage() {
         return;
       }
       if (bookingData.payment_status === "completed") {
-        setErrorMessage("This booking has already been paid. Redirecting to your bookings…");
-        setTimeout(() => navigate("/dashboard?tab=bookings"), 2500);
+        navigate(`/dashboard?tab=bookings&booking=${bookingData.id}`, { replace: true });
         setLoading(false);
         return;
       }
@@ -442,6 +441,7 @@ export default function PaymentPage() {
     localStorage.removeItem("pendingBooking");
     sessionStorage.setItem("refreshBookings", "true");
     window.dispatchEvent(new Event("bookingStatusChanged"));
+    navigate(`/dashboard?tab=bookings&booking=${confirmedBooking.id}`, { replace: true });
   };
 
   const checkMpesaStatus = async () => {
