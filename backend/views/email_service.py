@@ -460,7 +460,7 @@ class EmailService:
             f"<p>Thank you for your interest in consulting with us. Unfortunately we're unable to "
             f"accommodate your request at this time.</p>"
             + reason_block
-            + f"<p>We encourage you to schedule again with a different date or time, or reach out "
+            + f"<p>We encourage you to schedule again with a different date or time, or reach out. "
             f"directly at <a href='mailto:info@homesbymwema.com'>info@homesbymwema.com</a>.</p>"
             f"<p>We value your interest and hope to assist you soon.</p>"
             f"<p>Best regards,<br><strong>The Homes by Mwema Team</strong></p>"
