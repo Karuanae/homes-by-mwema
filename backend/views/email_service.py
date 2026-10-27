@@ -265,7 +265,13 @@ class EmailService:
 
     # ── internal dispatcher ───────────────────────────────────────────────────
 
-    def _send(self, to: str, subject: str, html: str) -> Dict[str, Any]:
+    def _send(
+        self,
+        to: str,
+        subject: str,
+        html: str,
+        sender: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Internal send dispatcher. Tries Resend, then Flask-Mail if configured.
         Returns {"success": bool, "message": str, ...}
@@ -274,13 +280,14 @@ class EmailService:
             logger.warning("Email skipped — no recipient address")
             return {"success": False, "error": "No recipient address"}
 
+        from_header = sender or self._from_header
         logger.info(f"📧 Sending '{subject}' → {to}")
 
         # 1. Resend
         if self._resend:
             try:
                 result = self._resend.Emails.send({
-                    "from":    self._from_header,
+                    "from":    from_header,
                     "to":      [to],
                     "subject": subject,
                     "html":    html,
@@ -301,7 +308,7 @@ class EmailService:
                     recipients=[to],
                     html=html,
                     body=re.sub("<.*?>", "", html),
-                    sender=self._from_header,
+                    sender=from_header,
                 )
                 self._mail.send(msg)
                 logger.info(f"✅ Sent via Flask-Mail")
@@ -327,6 +334,7 @@ class EmailService:
             to=user.email,
             subject=f"Booking Confirmed — Booking #{booking.id}",
             html=_confirmation_email_html(booking, user, payment, "confirmation"),
+            sender=f"{self._from_name} <info@homesbymwema.com>",
         )
 
     def send_payment_received(self, booking, user, payment) -> Dict[str, Any]:
