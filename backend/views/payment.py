@@ -197,7 +197,14 @@ def _send_payment_email(booking, payment):
             )
             return
 
-        result = email_service.send_booking_confirmation(booking, booking_user, payment)
+        amount_paid = db.session.query(db.func.sum(Payment.amount)).filter(
+            Payment.booking_id == booking.id,
+            Payment.status == "completed",
+            Payment.method != "refund",
+        ).scalar() or Decimal("0")
+        result = email_service.send_booking_confirmation(
+            booking, booking_user, payment, amount_paid=amount_paid
+        )
         if not result.get("success"):
             logger.error(
                 "Booking confirmation email failed for booking %s to %s (provider=%s): %s",

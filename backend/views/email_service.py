@@ -138,7 +138,9 @@ def _property_email_info(prop) -> Dict[str, Any]:
     }
 
 
-def _confirmation_email_html(booking, user, payment=None, email_type="confirmation") -> str:
+def _confirmation_email_html(
+    booking, user, payment=None, email_type="confirmation", amount_paid=None
+) -> str:
     prop = booking.property
     property_name = prop.name if prop else "Your property"
     location = (
@@ -156,7 +158,10 @@ def _confirmation_email_html(booking, user, payment=None, email_type="confirmati
         (getattr(payment, "mpesa_receipt_number", None) or getattr(payment, "transaction_id", None))
         if payment else None
     ) or "Not provided by payment provider"
-    total_paid = booking.total_amount
+    if amount_paid is None:
+        amount_paid = getattr(payment, "amount", None) if payment else None
+    if amount_paid is None:
+        amount_paid = booking.total_amount
     guest_name = getattr(user, "name", None) or "there"
 
     def value(text):
@@ -169,7 +174,10 @@ def _confirmation_email_html(booking, user, payment=None, email_type="confirmati
         ("Check-out", f"{check_out} · 11:00 AM"),
         ("Length of stay", f"{booking.nights} {'night' if booking.nights == 1 else 'nights'}"),
         ("Guests", _guest_count(booking.guests)),
-        ("Total amount paid", _fmt_kes(total_paid)),
+        ("Rooms / bedrooms", getattr(prop, "rooms", None) or "Not specified"),
+        ("Bathrooms", getattr(prop, "bathrooms", None) or "Not specified"),
+        ("Amount paid", _fmt_kes(amount_paid)),
+        ("Booking total", _fmt_kes(booking.total_amount)),
         ("Payment method", payment_method),
         ("Receipt / transaction reference", reference),
     )
@@ -323,7 +331,9 @@ class EmailService:
 
     # ── public transactional methods ──────────────────────────────────────────
 
-    def send_booking_confirmation(self, booking, user, payment=None) -> Dict[str, Any]:
+    def send_booking_confirmation(
+        self, booking, user, payment=None, amount_paid=None
+    ) -> Dict[str, Any]:
         """
         Send when booking.status becomes 'confirmed' after payment.
         booking: Booking ORM object
@@ -333,11 +343,14 @@ class EmailService:
         return self._send(
             to=user.email,
             subject=f"Booking Confirmed — Booking #{booking.id}",
-            html=_confirmation_email_html(booking, user, payment, "confirmation"),
-            sender=f"{self._from_name} <info@homesbymwema.com>",
+            html=_confirmation_email_html(
+                booking, user, payment, "confirmation", amount_paid
+            ),
         )
 
-    def send_payment_received(self, booking, user, payment) -> Dict[str, Any]:
+    def send_payment_received(
+        self, booking, user, payment, amount_paid=None
+    ) -> Dict[str, Any]:
         """
         Send when a payment row is completed (M-PESA or PayPal).
         payment: Payment ORM object
@@ -345,7 +358,9 @@ class EmailService:
         return self._send(
             to=user.email,
             subject=f"Payment Successful — Booking #{booking.id}",
-            html=_confirmation_email_html(booking, user, payment, "payment"),
+            html=_confirmation_email_html(
+                booking, user, payment, "payment", amount_paid
+            ),
         )
 
     def send_cancellation(self, booking, refund_amount) -> Dict[str, Any]:
