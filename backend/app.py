@@ -1,4 +1,6 @@
 # app.py 
+import eventlet
+eventlet.monkey_patch()
 from flask import Flask, jsonify, send_from_directory, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
@@ -78,69 +80,61 @@ railway_domain = os.environ.get('RAILWAY_PUBLIC_DOMAIN')
 if railway_domain:
     allowed_origins.extend([f'https://{railway_domain}', f'https://www.{railway_domain}'])
 
-# Combine all domains and remove duplicates/empty strings
 all_domains = list({d for d in allowed_origins + vercel_domains + custom_domains if d and d.strip()})
 
-CORS(app, 
-     resources={
-         r"/api/*": {
-             "origins": all_domains,
-             "methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-             "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "idempotency-key"],
-             "expose_headers": ["Content-Type", "Authorization", "X-Total-Count"],
-             "supports_credentials": True,
-             "max_age": 3600,
-             "send_wildcard": False,
-             "vary_header": True
-         },
-         r"/socket.io/*": {
-             "origins": all_domains,
-             "supports_credentials": True
-         }
-     },
-     expose_headers=['Content-Type', 'Authorization', 'X-Total-Count'],
-     max_age=3600
+# Initialize CORS cleanly on app
+CORS(
+    app,
+    resources={
+        r"/*": {
+            "origins": all_domains,
+            "methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+            "allow_headers": ["*"],
+            "expose_headers": ["Content-Type", "Authorization", "X-Total-Count"],
+            "supports_credentials": True,
+            "max_age": 3600,
+        }
+    }
 )
 
-print("=" * 60)
-print("🌐 CORS Configuration Active")
-print(f"   Environment ALLOWED_ORIGINS: {os.environ.get('ALLOWED_ORIGINS', 'NOT SET')}")
-print(f"   Railway Public Domain: {railway_domain or 'NOT SET'}")
-print(f"   Total allowed origins: {len(all_domains)}")
-for origin in sorted(all_domains):
-    print(f"     ✓ {origin}")
-print("=" * 60)
+# ===== CORS HEADERS HANDLER & PREFLIGHT INTERCEPTOR =====
+@app.before_request
+def handle_preflight():
+    """Immediately return 200 OK with correct CORS headers for preflight requests"""
+    if request.method == "OPTIONS":
+        origin = request.headers.get("Origin")
+        response = app.make_default_options_response()
+        if origin in all_domains:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+        elif origin:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+        else:
+            response.headers["Access-Control-Allow-Origin"] = "*"
 
-# ===== JWT CONFIGURATION =====
-app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'akerywaeiyff\jk632423746')
-app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=24)
-app.config['JWT_VERIFY_SUB'] = False
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = request.headers.get("Access-Control-Request-Headers", "*")
+        response.headers["Access-Control-Max-Age"] = "3600"
+        return response
 
-# ===== CORS HEADERS HANDLER =====
 @app.after_request
 def after_request(response):
-    """Ensure CORS headers are set on all responses"""
+    """Ensure CORS headers are attached to actual response bodies"""
     origin = request.headers.get('Origin')
-    
-    # Check if origin is in our allowed list
     if origin in all_domains:
         response.headers['Access-Control-Allow-Origin'] = origin
         response.headers['Access-Control-Allow-Credentials'] = 'true'
-    elif origin and origin.replace('https://', '').replace('http://', '') in [d.replace('https://', '').replace('http://', '') for d in all_domains]:
+    elif origin:
         response.headers['Access-Control-Allow-Origin'] = origin
         response.headers['Access-Control-Allow-Credentials'] = 'true'
     else:
-        # Fallback to the requested origin, or wildcard if none provided
-        response.headers['Access-Control-Allow-Origin'] = origin if origin else '*'
-    
-    # Ensure these headers are always present
-    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, PATCH, OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, idempotency-key'
-    response.headers['Access-Control-Expose-Headers'] = 'Content-Type, Authorization, X-Total-Count'
-    response.headers['Access-Control-Max-Age'] = '3600'
-    
-    return response
+        response.headers['Access-Control-Allow-Origin'] = '*'
 
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, PATCH, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = request.headers.get("Access-Control-Request-Headers", "*")
+    response.headers['Access-Control-Expose-Headers'] = 'Content-Type, Authorization, X-Total-Count'
+    return response
 # ===== BOOKING & PAYMENT CONFIGURATION =====
 # All values come from environment variables with sensible fallbacks
 app.config['BOOKING_TIMEOUT_MINUTES'] = int(os.environ.get('BOOKING_TIMEOUT_MINUTES', 15))
@@ -445,15 +439,25 @@ with app.app_context():
         print(f"⚠️  Database initialization warning: {e}")
         print("This is normal if migrations haven't been applied yet.")
 
-# Error handlers
+# Error handlers with explicit CORS handling
 @app.errorhandler(404)
 def not_found(error):
-    return jsonify({'error': 'Resource not found'}), 404
+    response = jsonify({'error': 'Resource not found'})
+    origin = request.headers.get('Origin')
+    if origin:
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+    return response, 404
 
 @app.errorhandler(500)
 def internal_error(error):
     db.session.rollback()
-    return jsonify({'error': 'Internal server error'}), 500
+    response = jsonify({'error': 'Internal server error'})
+    origin = request.headers.get('Origin')
+    if origin:
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+    return response, 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
