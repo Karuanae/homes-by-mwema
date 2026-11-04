@@ -1,6 +1,6 @@
-# app.py 
 import eventlet
 eventlet.monkey_patch()
+
 from flask import Flask, jsonify, send_from_directory, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
@@ -10,7 +10,6 @@ from datetime import datetime, timedelta
 from flask_migrate import Migrate
 from dotenv import load_dotenv
 from flask_socketio import SocketIO, emit, join_room, leave_room
-import eventlet
 from flask_mail import Mail
 import logging
 from sqlalchemy import text
@@ -21,6 +20,24 @@ load_dotenv()
 
 # Create the Flask application
 app = Flask(__name__)
+secret_key = (
+    os.environ.get('SECRET_KEY')
+    or os.environ.get('JWT_SECRET_KEY')
+    or os.environ.get('FLASK_SECRET_KEY')
+)
+if not secret_key:
+    if os.environ.get('FLASK_ENV') == 'development':
+        secret_key = 'development-only-secret-key'
+    else:
+        raise RuntimeError(
+            'Set SECRET_KEY or JWT_SECRET_KEY in the production environment'
+        )
+app.config['SECRET_KEY'] = secret_key
+app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY') or secret_key
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=24)
+app.config['JWT_VERIFY_SUB'] = False
+jwt = JWTManager(app)
+
 app.url_map.strict_slashes = False
 
 # Configure logging
@@ -138,6 +155,7 @@ def after_request(response):
 # ===== BOOKING & PAYMENT CONFIGURATION =====
 # All values come from environment variables with sensible fallbacks
 app.config['BOOKING_TIMEOUT_MINUTES'] = int(os.environ.get('BOOKING_TIMEOUT_MINUTES', 15))
+app.config['PAYMENT_TIMEOUT_MINUTES'] = int(os.environ.get('PAYMENT_TIMEOUT_MINUTES', 30))
 app.config['MAX_GUESTS_PER_BOOKING'] = int(os.environ.get('MAX_GUESTS_PER_BOOKING', 10))
 app.config['MIN_NIGHTS_BOOKING'] = int(os.environ.get('MIN_NIGHTS_BOOKING', 1))
 app.config['MAX_NIGHTS_BOOKING'] = int(os.environ.get('MAX_NIGHTS_BOOKING', 30))
@@ -209,10 +227,6 @@ mail = Mail(app)
 app.mail = mail
 from views.email_service import init_email_service
 init_email_service(mail)
-
-# Initialize extensions
-jwt = JWTManager(app)
-jwt.init_app(app)
 
 # Initialize SocketIO with production settings
 socketio = SocketIO(
