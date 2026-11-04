@@ -628,7 +628,12 @@ export default function PaymentPage() {
               <div className="bg-stone-50 p-3 rounded-lg"><p className="text-xs text-stone-500">Amount paid</p><strong className="text-emerald-600">{formatCurrency(completedPayment?.amount || booking?.total_amount)}</strong></div>
             </div>
             {completedPayment?.mpesa_receipt && <p className="bg-emerald-50 text-emerald-800 rounded-lg p-3 text-xs font-mono">M-PESA receipt: <strong>{completedPayment.mpesa_receipt}</strong></p>}
-            <button onClick={() => navigate("/dashboard?tab=bookings")} className="w-full py-3 bg-[#093A3E] text-white rounded-lg text-sm font-medium">View My Bookings</button>
+            <button
+              onClick={() => navigate(`/dashboard?tab=bookings&booking=${booking?.id}`, { replace: true })}
+              className="w-full py-3 bg-[#093A3E] text-white rounded-lg text-sm font-medium"
+            >
+              View This Booking
+            </button>
           </div>
         </motion.div>
       </div>

@@ -18,6 +18,7 @@ _confirmation_email_html = email_service_module._confirmation_email_html
 def _booking_and_user():
     prop = SimpleNamespace(
         name="Mwema Apartment",
+        type="Apartment",
         formatted_address="Nairobi, Kenya",
         location="Nairobi",
         rooms=2,
@@ -72,6 +73,7 @@ def test_confirmation_contains_paid_amount_and_room_details():
     )
 
     assert "Mwema Apartment" in html
+    assert "Apartment" in html
     assert "Nairobi, Kenya" in html
     assert "Rooms / bedrooms" in html
     assert "Bathrooms" in html

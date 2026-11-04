@@ -169,6 +169,7 @@ def _confirmation_email_html(
 
     rows = (
         ("Property", property_name),
+        ("Residence type", getattr(prop, "type", None) or "Not specified"),
         ("Location", location),
         ("Check-in", f"{check_in} · 3:00 PM"),
         ("Check-out", f"{check_out} · 11:00 AM"),
