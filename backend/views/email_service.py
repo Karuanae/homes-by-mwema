@@ -251,9 +251,9 @@ class EmailService:
 
         # Detect available providers once at startup
         self._resend_key    = os.environ.get("RESEND_API_KEY", "")
-        self._flaskmail_ok  = bool(
-            os.environ.get("MAIL_USERNAME") and os.environ.get("MAIL_PASSWORD")
-        )
+    @property
+    def _flaskmail_ok(self) -> bool:
+        return bool(os.environ.get("MAIL_USERNAME") and os.environ.get("MAIL_PASSWORD"))
 
         if self._resend_key:
             try:
@@ -291,6 +291,7 @@ class EmailService:
 
         from_header = sender or self._from_header
         logger.info(f"📧 Sending '{subject}' → {to}")
+        logger.info(f"🔍 Provider check: Resend={bool(self._resend)}, Flask-Mail OK={self._flaskmail_ok}, Mail Instance={bool(self._mail)}")
 
         # 1. Resend
         if self._resend:
@@ -320,15 +321,20 @@ class EmailService:
                     sender=from_header,
                 )
                 self._mail.send(msg)
-                logger.info(f"✅ Sent via Flask-Mail")
+                logger.info(f"✅ Sent via Flask-Mail to {to}")
                 return {"success": True, "provider": "flask_mail"}
             except Exception as e:
                 logger.error(f"❌ Flask-Mail failed: {e}")
                 logger.error(traceback.format_exc())
                 return {"success": False, "provider": "flask_mail", "error": str(e)}
 
-        logger.error("Email was not sent: no configured provider succeeded (subject=%r, to=%r)", subject, to)
-        return {"success": False, "error": "No configured email provider succeeded"}
+        reason = []
+        if not self._flaskmail_ok:
+            reason.append("MAIL_USERNAME or MAIL_PASSWORD missing in env")
+        if not self._mail:
+            reason.append("Mail extension instance not attached")
+        logger.error(f"❌ Email not sent for '{subject}' → {to}. Reason: {', '.join(reason)}")
+        return {"success": False, "error": f"No configured email provider succeeded: {', '.join(reason)}"}
 
     # ── public transactional methods ──────────────────────────────────────────
 
