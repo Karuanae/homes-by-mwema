@@ -228,6 +228,56 @@ def _send_payment_email(booking, payment):
         )
 
 
+def cleanup_old_payments():
+    """Fail stale pending payments and expire their unpaid bookings."""
+    timeout_minutes = current_app.config.get("PAYMENT_TIMEOUT_MINUTES", 30)
+    cutoff = datetime.utcnow() - timedelta(minutes=timeout_minutes)
+    now = datetime.utcnow()
+
+    try:
+        stale_payments = Payment.query.filter(
+            Payment.status == "pending",
+            Payment.created_at < cutoff,
+        ).with_for_update().all()
+        if not stale_payments:
+            return 0
+
+        booking_ids = {payment.booking_id for payment in stale_payments}
+        for payment in stale_payments:
+            payment.status = "failed"
+            payment.error_log = payment.error_log or (
+                "Payment attempt expired before confirmation."
+            )
+
+        bookings = Booking.query.filter(
+            Booking.id.in_(booking_ids),
+            Booking.payment_status != "completed",
+        ).with_for_update().all()
+        for booking in bookings:
+            has_pending_payment = Payment.query.filter_by(
+                booking_id=booking.id,
+                status="pending",
+            ).first()
+            booking_expired = (
+                booking.expires_at is not None and booking.expires_at <= now
+            ) or (
+                booking.expires_at is None
+                and booking.created_at is not None
+                and booking.created_at <= cutoff
+            )
+            if not has_pending_payment and booking_expired:
+                booking.status = "expired"
+                booking.payment_status = "failed"
+                booking.confirmation = "failed"
+
+        db.session.commit()
+        return len(stale_payments)
+    except Exception:
+        db.session.rollback()
+        logger.exception("Failed to clean up stale pending payments")
+        return 0
+
+
 @payment_bp.route("/mpesa/initiate", methods=["POST"])
 @jwt_required()
 def initiate_mpesa_payment():
