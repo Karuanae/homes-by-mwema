@@ -239,38 +239,20 @@ def _confirmation_email_html(
 
 class EmailService:
     """
-    Single entry point for all transactional emails.
-    Automatically picks the best available provider.
+    Dedicated email service for Homes by Mwema using Truehost cPanel SMTP (Flask-Mail).
     """
 
     def __init__(self, mail_instance=None):
         self._mail        = mail_instance
-        self._from_addr   = os.environ.get("MAIL_DEFAULT_SENDER", "noreply@homesbymwema.com")
+        self._from_addr   = os.environ.get("MAIL_DEFAULT_SENDER", "info@homesbymwema.com")
         self._from_name   = os.environ.get("MAIL_FROM_NAME",      "Homes by Mwema")
         self._from_header = f"{self._from_name} <{self._from_addr}>"
 
-        # Detect available providers once at startup
-        self._resend_key    = os.environ.get("RESEND_API_KEY", "")
     @property
     def _flaskmail_ok(self) -> bool:
-        return bool(os.environ.get("MAIL_USERNAME") and os.environ.get("MAIL_PASSWORD"))
-
-        if self._resend_key:
-            try:
-                import resend as _resend_mod
-                self._resend = _resend_mod
-                self._resend.api_key = self._resend_key
-                logger.info("✅ Email provider: Resend")
-            except ImportError:
-                self._resend = None
-                logger.warning("⚠️  resend package not installed — pip install resend")
-        else:
-            self._resend = None
-
-        if self._flaskmail_ok and mail_instance:
-            logger.info("✅ Email provider: Flask-Mail (fallback)")
-        elif not self._resend_key:
-            logger.warning("⚠️  No email provider configured — email delivery is unavailable")
+        username = os.environ.get("MAIL_USERNAME")
+        password = os.environ.get("MAIL_PASSWORD")
+        return bool(username and password)
 
     # ── internal dispatcher ───────────────────────────────────────────────────
 
@@ -282,7 +264,7 @@ class EmailService:
         sender: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Internal send dispatcher. Tries Resend, then Flask-Mail if configured.
+        Internal send dispatcher using Flask-Mail.
         Returns {"success": bool, "message": str, ...}
         """
         if not to:
@@ -291,50 +273,34 @@ class EmailService:
 
         from_header = sender or self._from_header
         logger.info(f"📧 Sending '{subject}' → {to}")
-        logger.info(f"🔍 Provider check: Resend={bool(self._resend)}, Flask-Mail OK={self._flaskmail_ok}, Mail Instance={bool(self._mail)}")
+        logger.info(f"🔍 Flask-Mail Check: Credentials OK={self._flaskmail_ok}, Mail Instance={bool(self._mail)}")
 
-        # 1. Resend
-        if self._resend:
-            try:
-                result = self._resend.Emails.send({
-                    "from":    from_header,
-                    "to":      [to],
-                    "subject": subject,
-                    "html":    html,
-                    "text":    html_lib.unescape(re.sub(r"<[^>]+>", " ", html)).strip(),
-                })
-                result_id = result.get("id") if isinstance(result, dict) else getattr(result, "id", None)
-                logger.info(f"✅ Sent via Resend (id={result_id})")
-                return {"success": True, "provider": "resend", "id": result_id}
-            except Exception as e:
-                logger.warning(f"⚠️  Resend failed ({e}), trying Flask-Mail…")
-
-        # 2. Flask-Mail
-        if self._flaskmail_ok and self._mail:
-            try:
-                from flask_mail import Message
-                msg = Message(
-                    subject=subject,
-                    recipients=[to],
-                    html=html,
-                    body=re.sub("<.*?>", "", html),
-                    sender=from_header,
-                )
-                self._mail.send(msg)
-                logger.info(f"✅ Sent via Flask-Mail to {to}")
-                return {"success": True, "provider": "flask_mail"}
-            except Exception as e:
-                logger.error(f"❌ Flask-Mail failed: {e}")
-                logger.error(traceback.format_exc())
-                return {"success": False, "provider": "flask_mail", "error": str(e)}
-
-        reason = []
         if not self._flaskmail_ok:
-            reason.append("MAIL_USERNAME or MAIL_PASSWORD missing in env")
+            err = "MAIL_USERNAME or MAIL_PASSWORD missing in environment variables"
+            logger.error(f"❌ Email not sent: {err}")
+            return {"success": False, "provider": "flask_mail", "error": err}
+
         if not self._mail:
-            reason.append("Mail extension instance not attached")
-        logger.error(f"❌ Email not sent for '{subject}' → {to}. Reason: {', '.join(reason)}")
-        return {"success": False, "error": f"No configured email provider succeeded: {', '.join(reason)}"}
+            err = "Flask-Mail extension not initialized or attached"
+            logger.error(f"❌ Email not sent: {err}")
+            return {"success": False, "provider": "flask_mail", "error": err}
+
+        try:
+            from flask_mail import Message
+            msg = Message(
+                subject=subject,
+                recipients=[to],
+                html=html,
+                body=re.sub("<.*?>", "", html),
+                sender=from_header,
+            )
+            self._mail.send(msg)
+            logger.info(f"✅ Sent successfully via Flask-Mail to {to}")
+            return {"success": True, "provider": "flask_mail"}
+        except Exception as e:
+            logger.error(f"❌ Flask-Mail failed: {e}")
+            logger.error(traceback.format_exc())
+            return {"success": False, "provider": "flask_mail", "error": str(e)}
 
     # ── public transactional methods ──────────────────────────────────────────
 
