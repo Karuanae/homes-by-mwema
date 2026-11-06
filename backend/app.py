@@ -193,13 +193,13 @@ app.config['PAYPAL_WEBHOOK_ID'] = os.environ.get('PAYPAL_WEBHOOK_ID', '')
 app.config['KES_TO_USD_RATE'] = float(os.environ.get('KES_TO_USD_RATE', '129.0'))
 
 # ===== MAIL CONFIGURATION =====
-app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
-app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
+app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'das105.truehost.cloud')
+app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 465))
 app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'false').lower() == 'true'
-app.config['MAIL_USE_SSL'] = os.environ.get('MAIL_USE_SSL', 'false').lower() == 'true'
-app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', '')
+app.config['MAIL_USE_SSL'] = os.environ.get('MAIL_USE_SSL', 'true').lower() == 'true'
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'info@homesbymwema.com')
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', '')
-app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', 'noreply@homesbymwema.com')
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', 'info@homesbymwema.com')
 app.config['MAIL_FROM_NAME'] = os.environ.get('MAIL_FROM_NAME', 'Homes by Mwema')
 
 # Print configuration on startup
